@@ -1,4 +1,4 @@
-# Silver Muller Seals — Website
+# Silver Muller Seals — SOFTWARE
 
 ## Tech stack
 
