@@ -34,21 +34,21 @@ export function ERPDashboard() {
     settings:"Settings",
   };
 
-  const pages={
-    dashboard:<DashboardHome dark={dark} setPage={setPage}/>,
-    "entry-forms":<CompanyMasterFormPage cm={cm} page={page} setPage={setPage}/>,
-    "company-master-form":<CompanyMasterFormPage cm={cm} page={page} setPage={setPage}/>,
-    "company-master-list":<CompanyMasterListPage cm={cm} page={page} setPage={setPage}/>,
-    "entry-forms-list":<CompanyMasterListPage cm={cm} page={page} setPage={setPage}/>,
-    inventory:<InventoryTransactionPage defaultTab="form"/>,
-    "inventory-history":<InventoryTransactionPage defaultTab="history"/>,
-    reports:<ComingSoon title="Reports & Analytics" dark={dark}/>,
-    users:<ComingSoon title="Users & Roles" dark={dark}/>,
-    settings:<ComingSoon title="Settings" dark={dark}/>,
+  const pages = {
+    dashboard: <DashboardHome dark={dark} setPage={setPage} />,
+    "entry-forms": <CompanyMasterFormPage cm={cm} page={page} setPage={setPage} dark={dark} />,
+    "company-master-form": <CompanyMasterFormPage cm={cm} page={page} setPage={setPage} dark={dark} />,
+    "company-master-list": <CompanyMasterListPage cm={cm} page={page} setPage={setPage} dark={dark} />,
+    "entry-forms-list": <CompanyMasterListPage cm={cm} page={page} setPage={setPage} dark={dark} />,
+    inventory: <InventoryTransactionPage defaultTab="form" dark={dark} />,
+    "inventory-history": <InventoryTransactionPage defaultTab="history" dark={dark} />,
+    reports: <ComingSoon title="Reports & Analytics" dark={dark} />,
+    users: <ComingSoon title="Users & Roles" dark={dark} />,
+    settings: <ComingSoon title="Settings" dark={dark} />,
   };
-  const sb={position:"sticky",top:0,height:"100vh"};
-  return(
-    <div style={{display:"flex",minHeight:"100vh",fontFamily:"'Inter','Segoe UI',sans-serif",background:bg,transition:"background 0.3s"}}>
+  const sb = { position: "sticky", top: 0, height: "100vh" };
+  return (
+    <div className={dark ? "dark" : ""} style={{ display: "flex", minHeight: "100vh", fontFamily: "'Inter','Segoe UI',sans-serif", background: bg, transition: "background 0.3s" }}>
       <aside style={{width:col?64:228,minWidth:col?64:228,background:sbg,borderRight:`1px solid ${bdr}`,display:"flex",flexDirection:"column",transition:"width 0.25s,min-width 0.25s",...sb,overflow:"hidden",boxShadow:dark?"4px 0 24px rgba(0,0,0,0.25)":"4px 0 16px rgba(0,0,0,0.05)",zIndex:50}}>
         <div style={{padding:col?"18px 0":"18px 18px",display:"flex",alignItems:"center",gap:10,borderBottom:`1px solid ${bdr}`,minHeight:68,justifyContent:col?"center":"space-between"}}>
           {!col && (

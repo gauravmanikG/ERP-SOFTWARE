@@ -25,7 +25,7 @@ import {
   exportTransactionsToExcel,
 } from "../../../shared/utils/inventoryExcel";
 
-export function InventoryTransactionPage({ defaultTab = "form" }) {
+export function InventoryTransactionPage({ defaultTab = "form", dark = false }) {
   const inv = useInventoryTransactions();
   const [activeTab, setActiveTab] = useState(defaultTab); // 'form' | 'history'
 
