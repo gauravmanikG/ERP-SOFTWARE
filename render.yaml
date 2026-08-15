@@ -26,5 +26,8 @@ services:
         value: https://silver-muller-seals-backend.onrender.com
     routes:
       - type: rewrite
+        source: /api/*
+        destination: https://silver-muller-seals-backend.onrender.com/api/*
+      - type: rewrite
         source: /*
         destination: /index.html
