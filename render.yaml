@@ -14,12 +14,11 @@ services:
         value: "4000"
 
   # ----------------------------------------------------------------------------
-  # 2. Vite React Frontend (Free Tier Static Site)
+  # 2. Vite React Frontend (Static Site - Automatically Free on Render)
   # ----------------------------------------------------------------------------
   - type: web
     name: silver-muller-seals-frontend
     runtime: static
-    plan: free
     rootDir: frontend
     buildCommand: npm install && npm run build
     staticPublishPath: dist
