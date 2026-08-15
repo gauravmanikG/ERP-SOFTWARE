@@ -11,12 +11,20 @@ async function request(path, options) {
     headers: { "Content-Type": "application/json" },
     ...options,
   });
+  const contentType = res.headers.get("content-type") || "";
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `Request failed: ${res.status}`);
+    let msg = `Backend connection error (${res.status})`;
+    if (contentType.includes("application/json")) {
+      const body = await res.json().catch(() => ({}));
+      msg = body.message || body.error || msg;
+    }
+    throw new Error(msg);
   }
   if (res.status === 204) return null;
-  return res.json();
+  if (contentType.includes("application/json")) {
+    return res.json();
+  }
+  throw new Error("Backend API returned non-JSON response.");
 }
 
 export const api = {

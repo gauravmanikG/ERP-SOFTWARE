@@ -14,7 +14,8 @@ export function useInventoryTransactions() {
   const fetchDepartments = async () => {
     try {
       const res = await fetch(`${BASE}/api/inventory/departments`);
-      if (res.ok) {
+      const contentType = res.headers.get("content-type") || "";
+      if (res.ok && contentType.includes("application/json")) {
         const data = await res.json();
         setDepartments(data);
       }
@@ -26,7 +27,8 @@ export function useInventoryTransactions() {
   const fetchTransactionTypes = async () => {
     try {
       const res = await fetch(`${BASE}/api/inventory/transaction-types`);
-      if (res.ok) {
+      const contentType = res.headers.get("content-type") || "";
+      if (res.ok && contentType.includes("application/json")) {
         const data = await res.json();
         setTransactionTypes(data);
       }
@@ -38,7 +40,8 @@ export function useInventoryTransactions() {
   const fetchMasterItems = async () => {
     try {
       const res = await fetch(`${BASE}/api/inventory/master`);
-      if (res.ok) {
+      const contentType = res.headers.get("content-type") || "";
+      if (res.ok && contentType.includes("application/json")) {
         const data = await res.json();
         setMasterItems(data);
       }
@@ -50,7 +53,8 @@ export function useInventoryTransactions() {
   const fetchTransactions = async () => {
     try {
       const res = await fetch(`${BASE}/api/inventory/transactions`);
-      if (res.ok) {
+      const contentType = res.headers.get("content-type") || "";
+      if (res.ok && contentType.includes("application/json")) {
         const data = await res.json();
         setTransactions(data);
       }
@@ -62,7 +66,8 @@ export function useInventoryTransactions() {
   const fetchPreviewTransactionNumber = useCallback(async (typeName = "ISSUE") => {
     try {
       const res = await fetch(`${BASE}/api/inventory/transactions/preview-transaction-number?type=${encodeURIComponent(typeName)}`);
-      if (res.ok) {
+      const contentType = res.headers.get("content-type") || "";
+      if (res.ok && contentType.includes("application/json")) {
         const data = await res.json();
         const num = data.transactionNumber || data.slipNumber || "ISU-001";
         setPreviewTransactionNumber(num);
