@@ -4,7 +4,11 @@
 // production host also proxies /api to the backend, or you set
 // VITE_API_URL to the backend's full URL).
 
-const BASE = import.meta.env.VITE_API_URL || "";
+const BASE = import.meta.env.VITE_API_URL || (
+  typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
+    ? ""
+    : "https://silver-muller-seals-backend-deploy.onrender.com"
+);
 
 async function request(path, options) {
   const res = await fetch(`${BASE}/api${path}`, {
