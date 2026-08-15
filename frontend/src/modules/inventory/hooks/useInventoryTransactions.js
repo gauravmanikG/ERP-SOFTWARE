@@ -105,6 +105,16 @@ export function useInventoryTransactions() {
     reloadAll();
   }, [reloadAll]);
 
+  // Auto-retry once after 4s if server was sleeping during first page load
+  useEffect(() => {
+    if (departments.length === 0 || transactionTypes.length === 0 || masterItems.length === 0) {
+      const timer = setTimeout(() => {
+        reloadAll();
+      }, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [departments.length, transactionTypes.length, masterItems.length, reloadAll]);
+
   const submitBatchTransaction = async ({ transactionType, fromDepartmentId, toDepartmentId, slipNumber, items, remarks }) => {
     try {
       const payload = {
@@ -191,6 +201,67 @@ export function useInventoryTransactions() {
     }
   };
 
+  const submitExcelTransactions = async (records) => {
+    try {
+      // Group records by slipNumber or (type + fromDept + toDept) to batch them cleanly
+      const groups = {};
+      records.forEach((rec, idx) => {
+        const groupKey = rec.slipNumber && rec.slipNumber.trim()
+          ? `slip_${rec.slipNumber.trim()}`
+          : `grp_${rec.type}_${rec.fromDepartmentId}_${rec.toDepartmentId || 'null'}_${idx}`;
+
+        if (!groups[groupKey]) {
+          groups[groupKey] = {
+            transactionType: rec.type,
+            fromDepartmentId: rec.fromDepartmentId,
+            toDepartmentId: rec.toDepartmentId || null,
+            slipNumber: rec.slipNumber ? rec.slipNumber.trim() : null,
+            remarks: rec.remarks || "Bulk Excel Import",
+            items: [],
+          };
+        }
+        groups[groupKey].items.push({
+          masterId: rec.masterId,
+          quantity: rec.quantity,
+          remarks: rec.remarks || "",
+        });
+      });
+
+      let savedCount = 0;
+      const createdTxNumbers = [];
+
+      for (const group of Object.values(groups)) {
+        const res = await fetch(`${BASE}/api/inventory/transactions/batch`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(group),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.message || `Failed to process batch for ${group.transactionType}`);
+        }
+        savedCount += group.items.length;
+        if (Array.isArray(data) && data.length > 0) {
+          createdTxNumbers.push(data[0].transactionNumber || data[0].slipNumber);
+        }
+      }
+
+      await reloadAll();
+
+      return {
+        success: true,
+        count: savedCount,
+        transactionNumbers: createdTxNumbers,
+        message: `Successfully imported and saved ${savedCount} transaction item(s) to PostgreSQL database!`,
+      };
+    } catch (err) {
+      return {
+        success: false,
+        error: err.message || "Failed to save Excel transactions to database.",
+      };
+    }
+  };
+
   const getDeptBalance = (masterId, departmentId) => {
     const item = masterItems.find((m) => String(m.id) === String(masterId));
     if (!item || !item.deptBalances) return item ? item.currentBalance : 0;
@@ -220,5 +291,6 @@ export function useInventoryTransactions() {
     reloadAll,
     submitBatchTransaction,
     submitReverseTransaction,
+    submitExcelTransactions,
   };
 }

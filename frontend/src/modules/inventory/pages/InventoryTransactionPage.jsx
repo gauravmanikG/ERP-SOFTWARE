@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   FileText,
   ArrowRightLeft,
@@ -13,12 +13,28 @@ import {
   Download,
   Trash2,
   RefreshCw,
+  FileSpreadsheet,
+  Upload,
+  X,
+  FileCheck,
 } from "lucide-react";
 import { useInventoryTransactions } from "../hooks/useInventoryTransactions";
+import {
+  downloadInventorySampleExcel,
+  parseAndValidateInventoryExcel,
+  exportTransactionsToExcel,
+} from "../../../shared/utils/inventoryExcel";
 
 export function InventoryTransactionPage({ defaultTab = "form" }) {
   const inv = useInventoryTransactions();
   const [activeTab, setActiveTab] = useState(defaultTab); // 'form' | 'history'
+
+  // Excel Import State
+  const excelInputRef = useRef(null);
+  const [excelLoading, setExcelLoading] = useState(false);
+  const [showExcelModal, setShowExcelModal] = useState(false);
+  const [excelPreviewData, setExcelPreviewData] = useState(null);
+  const [isSavingExcel, setIsSavingExcel] = useState(false);
 
   // Format today's date e.g. "09-Aug-2026"
   const formattedToday = new Date().toLocaleDateString("en-GB", {
@@ -244,6 +260,75 @@ export function InventoryTransactionPage({ defaultTab = "form" }) {
     document.body.removeChild(link);
   };
 
+  // Excel Upload & Validation Handler
+  const handleExcelFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setExcelLoading(true);
+    try {
+      const result = await parseAndValidateInventoryExcel(file, {
+        departments: inv.departments,
+        masterItems: inv.masterItems,
+        getDeptBalance: inv.getDeptBalance,
+      });
+      setExcelPreviewData(result);
+      setShowExcelModal(true);
+    } catch (err) {
+      setAlert({
+        type: "error",
+        message: `Failed to process Excel file: ${err.message}`,
+      });
+    } finally {
+      setExcelLoading(false);
+      // Reset input value so same file can be uploaded again if needed
+      if (excelInputRef.current) excelInputRef.current.value = "";
+    }
+  };
+
+  const handleConfirmExcelImport = async () => {
+    if (!excelPreviewData || !excelPreviewData.records) return;
+
+    // Filter out rows that had validation errors
+    const validRecords = excelPreviewData.records.filter(
+      (r) => !r._errors || r._errors.length === 0
+    );
+
+    if (validRecords.length === 0) {
+      setAlert({
+        type: "error",
+        message: "No valid rows to import. Please resolve validation errors.",
+      });
+      return;
+    }
+
+    setIsSavingExcel(true);
+    try {
+      const res = await inv.submitExcelTransactions(validRecords);
+      if (res.success) {
+        setAlert({
+          type: "success",
+          message: res.message || `Successfully imported ${validRecords.length} transaction item(s)!`,
+        });
+        setShowExcelModal(false);
+        setExcelPreviewData(null);
+        setActiveTab("history"); // Switch to history tab to view imported transactions
+      } else {
+        setAlert({
+          type: "error",
+          message: res.error || "Failed to save Excel transactions to database.",
+        });
+      }
+    } catch (err) {
+      setAlert({
+        type: "error",
+        message: err.message || "An unexpected error occurred during Excel import.",
+      });
+    } finally {
+      setIsSavingExcel(false);
+    }
+  };
+
   // Filtered transactions for history table
   const filteredHistory = inv.transactions.filter((tx) => {
     const txNum = (tx.transactionNumber || tx.slipNumber || "").toLowerCase();
@@ -270,9 +355,18 @@ export function InventoryTransactionPage({ defaultTab = "form" }) {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans p-4 md:p-8">
+      {/* Hidden File Input for Excel Import */}
+      <input
+        type="file"
+        ref={excelInputRef}
+        onChange={handleExcelFileChange}
+        accept=".xlsx,.xls,.csv"
+        className="hidden"
+      />
+
       {/* Header Banner */}
       <div className="max-w-7xl mx-auto mb-8">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
           <div className="flex items-center space-x-4">
             <div className="w-14 h-14 rounded-xl bg-sky-500 flex items-center justify-center text-white font-bold shadow-md shadow-sky-500/20">
               <ArrowRightLeft className="w-7 h-7 text-white" />
@@ -295,18 +389,52 @@ export function InventoryTransactionPage({ defaultTab = "form" }) {
             </div>
           </div>
 
-          <div className="flex items-center space-x-3">
+          {/* Action Buttons */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* Download Sample Template */}
+            <button
+              onClick={() => downloadInventorySampleExcel(inv.departments, inv.masterItems)}
+              className="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs md:text-sm font-semibold transition border border-slate-300 shadow-2xs"
+              title="Download Sample Excel Template (.xlsx)"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+              <span>Sample Template</span>
+            </button>
+
+            {/* Upload Excel Button */}
+            <button
+              onClick={() => excelInputRef.current?.click()}
+              disabled={excelLoading}
+              className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-700 hover:text-sky-800 text-xs md:text-sm font-bold transition border border-sky-300 shadow-2xs"
+              title="Upload & Import Excel Transactions"
+            >
+              {excelLoading ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin text-sky-600" />
+                  <span>Reading Excel...</span>
+                </>
+              ) : (
+                <>
+                  <Upload className="w-4 h-4 text-sky-600" />
+                  <span>Import Excel</span>
+                </>
+              )}
+            </button>
+
+            {/* Refresh Data */}
             <button
               onClick={() => inv.reloadAll()}
-              className="flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium transition border border-slate-300"
+              className="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs md:text-sm font-semibold transition border border-slate-300"
               title="Refresh Data from PostgreSQL"
             >
               <RefreshCw className={`w-4 h-4 ${inv.loading ? "animate-spin" : ""}`} />
               <span>Refresh</span>
             </button>
-            <div className="bg-slate-100 border border-slate-300 rounded-xl px-4 py-2 text-right">
-              <span className="text-xs text-slate-500 block font-medium">Database System Date</span>
-              <span className="text-sm font-bold text-sky-700">{formattedToday}</span>
+
+            {/* Database System Date */}
+            <div className="bg-slate-100 border border-slate-300 rounded-xl px-3.5 py-1.5 text-right hidden sm:block">
+              <span className="text-[10px] text-slate-500 block font-medium">Database System Date</span>
+              <span className="text-xs md:text-sm font-bold text-sky-700">{formattedToday}</span>
             </div>
           </div>
         </div>
@@ -718,9 +846,18 @@ export function InventoryTransactionPage({ defaultTab = "form" }) {
 
               <div className="flex items-center space-x-3">
                 <button
+                  onClick={() => exportTransactionsToExcel(inv.transactions)}
+                  disabled={inv.transactions.length === 0}
+                  className="flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-700 font-semibold text-xs md:text-sm transition border border-sky-300 shadow-2xs disabled:opacity-50"
+                  title="Export full transaction history to Excel (.xlsx)"
+                >
+                  <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                  <span>Export Excel</span>
+                </button>
+                <button
                   onClick={handleExportCSV}
                   disabled={inv.transactions.length === 0}
-                  className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-sm transition border border-slate-300 disabled:opacity-50"
+                  className="flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs md:text-sm transition border border-slate-300 disabled:opacity-50"
                 >
                   <Download className="w-4 h-4" />
                   <span>Export CSV</span>
@@ -833,7 +970,7 @@ export function InventoryTransactionPage({ defaultTab = "form" }) {
                   })
                 ) : (
                     <tr>
-                      <td colSpan="10" className="py-8 text-center text-slate-500 text-sm">
+                      <td colSpan="11" className="py-8 text-center text-slate-500 text-sm">
                         No transaction records match the current filter.
                       </td>
                     </tr>
@@ -844,6 +981,215 @@ export function InventoryTransactionPage({ defaultTab = "form" }) {
           </div>
         )}
       </div>
+
+      {/* Excel Import & Validation Preview Modal */}
+      {showExcelModal && excelPreviewData && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="max-w-5xl w-full bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden max-h-[92vh] flex flex-col animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-sky-600 to-sky-700 px-6 py-4 flex items-center justify-between text-white shadow-md">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
+                  <FileSpreadsheet className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold">Bulk Excel Transactions Import & Validation</h3>
+                  <p className="text-xs text-sky-100">
+                    Verify row-by-row item codes, department routes, and real-time stock balances before saving.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowExcelModal(false);
+                  setExcelPreviewData(null);
+                }}
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto space-y-6 flex-1 bg-slate-50/50">
+              {/* Summary Stats Row */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-2xs">
+                  <span className="text-xs text-slate-500 font-semibold block">Total Rows In Sheet</span>
+                  <span className="text-xl font-extrabold text-slate-800">
+                    {excelPreviewData.records.length}
+                  </span>
+                </div>
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 shadow-2xs">
+                  <span className="text-xs text-emerald-700 font-semibold block">Valid Ready to Save</span>
+                  <span className="text-xl font-extrabold text-emerald-800">
+                    {excelPreviewData.validCount || 0}
+                  </span>
+                </div>
+                <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 shadow-2xs">
+                  <span className="text-xs text-rose-700 font-semibold block">Validation Errors</span>
+                  <span className="text-xl font-extrabold text-rose-800">
+                    {excelPreviewData.errorCount || 0}
+                  </span>
+                </div>
+                <div className="bg-sky-50 border border-sky-200 rounded-xl p-3 shadow-2xs">
+                  <span className="text-xs text-sky-700 font-semibold block">Auto-Numbering</span>
+                  <span className="text-xs font-bold text-sky-800 block mt-1">
+                    Auto-Generated on Save
+                  </span>
+                </div>
+              </div>
+
+              {/* Error Alert Box (if any errors found) */}
+              {excelPreviewData.errors && excelPreviewData.errors.length > 0 && (
+                <div className="p-4 rounded-xl bg-rose-50 border border-rose-300 text-rose-900 shadow-2xs space-y-2">
+                  <div className="flex items-center space-x-2 text-rose-800 font-bold text-sm">
+                    <AlertTriangle className="w-5 h-5 text-rose-600 flex-shrink-0" />
+                    <span>Please fix the following {excelPreviewData.errors.length} issue(s) before importing:</span>
+                  </div>
+                  <ul className="text-xs space-y-1 pl-6 list-disc text-rose-700 max-h-32 overflow-y-auto">
+                    {excelPreviewData.errors.map((err, idx) => (
+                      <li key={idx}>{err}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Preview Table */}
+              <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
+                <div className="px-4 py-3 bg-slate-100 border-b border-slate-200 flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">
+                    Excel Rows Preview ({excelPreviewData.records.length} items)
+                  </span>
+                  <span className="text-xs text-slate-500 font-medium">
+                    Green = Valid &amp; Stock Verified | Red = Needs Correction
+                  </span>
+                </div>
+                <div className="overflow-x-auto max-h-64 overflow-y-auto">
+                  <table className="w-full text-left text-xs text-slate-800">
+                    <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 sticky top-0">
+                      <tr>
+                        <th className="py-2.5 px-3">Status</th>
+                        <th className="py-2.5 px-3">Row</th>
+                        <th className="py-2.5 px-3">Slip No.</th>
+                        <th className="py-2.5 px-3">Type</th>
+                        <th className="py-2.5 px-3">From Dept</th>
+                        <th className="py-2.5 px-3">To Dept</th>
+                        <th className="py-2.5 px-3">Item Code</th>
+                        <th className="py-2.5 px-3">Category</th>
+                        <th className="py-2.5 px-3 text-right">Quantity</th>
+                        <th className="py-2.5 px-3">Validation Message</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {excelPreviewData.records.map((r, i) => {
+                        const hasErrors = r._errors && r._errors.length > 0;
+                        return (
+                          <tr
+                            key={i}
+                            className={`transition ${
+                              hasErrors ? "bg-rose-50/70 hover:bg-rose-50" : "hover:bg-slate-50"
+                            }`}
+                          >
+                            <td className="py-2.5 px-3">
+                              {hasErrors ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-100 text-rose-800 border border-rose-300">
+                                  Invalid
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                  Ready
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-2.5 px-3 font-semibold text-slate-500">#{r.rowNumber}</td>
+                            <td className="py-2.5 px-3 font-mono font-medium text-slate-700">
+                              {r.slipNumber || <span className="text-slate-400 italic">Auto</span>}
+                            </td>
+                            <td className="py-2.5 px-3">
+                              <span
+                                className={`px-2 py-0.5 rounded text-[10px] font-extrabold border ${
+                                  r.type === "ISSUE"
+                                    ? "bg-amber-50 text-amber-800 border-amber-300"
+                                    : r.type === "RECEIPT"
+                                    ? "bg-emerald-50 text-emerald-800 border-emerald-300"
+                                    : "bg-purple-50 text-purple-800 border-purple-300"
+                                }`}
+                              >
+                                {r.type}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 font-medium text-slate-800">{r.fromDepartmentName || r.fromDept}</td>
+                            <td className="py-2.5 px-3 text-slate-600">{r.toDepartmentName || r.toDept || "-"}</td>
+                            <td className="py-2.5 px-3 font-bold text-sky-700">{r.masterCode || r.itemCode}</td>
+                            <td className="py-2.5 px-3 text-slate-700">{r.category}</td>
+                            <td className="py-2.5 px-3 text-right font-extrabold text-slate-900">
+                              {r.quantity} {r.unitOfMeasurement || ""}
+                            </td>
+                            <td className="py-2.5 px-3">
+                              {hasErrors ? (
+                                <span className="text-rose-700 font-semibold">{r._errors.join(", ")}</span>
+                              ) : (
+                                <span className="text-emerald-700 font-semibold flex items-center space-x-1">
+                                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 inline" />
+                                  <span>Passed All Validations</span>
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="bg-white border-t border-slate-200 px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <button
+                onClick={() => downloadInventorySampleExcel(inv.departments, inv.masterItems)}
+                className="flex items-center space-x-1.5 text-xs text-sky-700 font-semibold hover:underline"
+              >
+                <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                <span>Need Excel format template? Download here (.xlsx)</span>
+              </button>
+
+              <div className="flex items-center space-x-3">
+                <button
+                  onClick={() => {
+                    setShowExcelModal(false);
+                    setExcelPreviewData(null);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs md:text-sm font-semibold transition border border-slate-300"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  onClick={handleConfirmExcelImport}
+                  disabled={isSavingExcel || (excelPreviewData.validCount || 0) === 0}
+                  className="px-6 py-2.5 rounded-xl bg-sky-500 hover:bg-sky-600 text-white text-xs md:text-sm font-bold shadow-md transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                >
+                  {isSavingExcel ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Saving Transactions to Database...</span>
+                    </>
+                  ) : (
+                    <>
+                      <FileCheck className="w-4 h-4" />
+                      <span>
+                        Import &amp; Save {excelPreviewData.validCount || 0} Valid Transaction(s)
+                      </span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
