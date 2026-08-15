@@ -120,7 +120,7 @@ export function CompanyMasterFormPage({ cm, page, setPage }) {
                 </button>
 
                 <label className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border bg-white cursor-pointer hover:bg-slate-50 transition shadow-xs" style={{ borderColor: C.line, color: C.ink }}>
-                  <Upload size={14} style={{ color: C.red }} />
+                  <Upload size={14} style={{ color: "#0EA5E9" }} />
                   {excelFile ? excelFile.name : "Select Excel File"}
                   <input
                     type="file"
@@ -169,19 +169,19 @@ export function CompanyMasterFormPage({ cm, page, setPage }) {
         {loading ? (
           <div className="text-center text-slate-400 py-16 text-sm">Loading…</div>
         ) : (
-          <div className="bg-white rounded-lg border overflow-hidden" style={{ borderColor: C.line }}>
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
             {/* Basic Company Information — static top section */}
-            <div className="p-5 border-b-2" style={{ borderColor: C.redSoft, backgroundColor: "#FCFBF9" }}>
+            <div className="p-5 border-b border-sky-100 bg-sky-50/40">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="font-black flex items-center gap-2" style={{ color: C.ink }}>
-                  <Building2 size={18} style={{ color: C.red }} /> Basic Company Information
+                <h3 className="font-extrabold flex items-center gap-2 text-slate-900">
+                  <Building2 size={18} style={{ color: "#0EA5E9" }} /> Basic Company Information
                 </h3>
                 <div className="flex items-center gap-3">
                   <span className="text-xs text-slate-400 font-normal">
                     (<span className="text-red-500 font-bold">*</span> indicates required field)
                   </span>
                   {editingId && (
-                    <span className="text-xs px-2.5 py-1 rounded-full font-medium flex items-center gap-1" style={{ backgroundColor: isReadOnly ? "#e2e8f0" : C.redSoft, color: isReadOnly ? "#475569" : C.red }}>
+                    <span className="text-xs px-2.5 py-1 rounded-full font-medium flex items-center gap-1" style={{ backgroundColor: isReadOnly ? "#e2e8f0" : "#E0F2FE", color: isReadOnly ? "#475569" : "#0369A1" }}>
                       {isReadOnly ? <Eye size={12} /> : <Pencil size={12} />}
                       {isReadOnly ? "Read-Only View" : "Editing existing record"}
                     </span>
@@ -197,7 +197,7 @@ export function CompanyMasterFormPage({ cm, page, setPage }) {
                 <div className="flex flex-col gap-1">
                   <label className="text-[11px] font-medium text-slate-500 uppercase tracking-wide">Company Logo</label>
                   <label className={`flex items-center gap-2 border rounded px-2.5 py-1.5 text-sm ${isReadOnly ? 'bg-slate-100 cursor-not-allowed text-slate-400' : 'bg-white cursor-pointer'}`} style={{ borderColor: C.line }}>
-                    <Upload size={14} style={{ color: isReadOnly ? '#94a3b8' : C.red }} />
+                    <Upload size={14} style={{ color: isReadOnly ? '#94a3b8' : '#0EA5E9' }} />
                     {form.logo ? (isReadOnly ? "Logo attached" : "Replace logo") : "Upload logo"}
                     <input type="file" accept="image/*" disabled={isReadOnly} className="hidden" onChange={handleLogo} />
                   </label>
@@ -225,13 +225,13 @@ export function CompanyMasterFormPage({ cm, page, setPage }) {
 
             {/* Legal Information / Address Details — dynamic tabs */}
             <div>
-              <div className="flex border-b overflow-x-auto" style={{ borderColor: C.line }}>
+              <div className="flex border-b overflow-x-auto border-slate-200">
                 {CM_TABS.map((t) => (
                   <button
                     key={t.id}
                     onClick={() => setActiveTab(t.id)}
-                    className="px-4 py-2.5 text-sm font-semibold whitespace-nowrap border-b-2 transition"
-                    style={activeTab === t.id ? { borderColor: C.red, color: C.red } : { borderColor: "transparent", color: "#64748b" }}
+                    className="px-4 py-2.5 text-sm font-bold whitespace-nowrap border-b-2 transition"
+                    style={activeTab === t.id ? { borderColor: "#0EA5E9", color: "#0EA5E9" } : { borderColor: "transparent", color: "#64748b" }}
                   >
                     {t.label}
                   </button>
@@ -279,11 +279,11 @@ export function CompanyMasterFormPage({ cm, page, setPage }) {
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2 px-5 py-3 border-t" style={{ borderColor: C.line, backgroundColor: "#FCFBF9" }}>
+            <div className="flex flex-wrap items-center gap-2 px-5 py-3 border-t border-slate-200 bg-slate-50/70">
               <button
                 onClick={handleNew}
-                className="flex items-center gap-1.5 px-3.5 py-1.5 text-sm font-medium rounded border bg-white hover:bg-slate-50 transition"
-                style={{ borderColor: C.line, color: C.ink }}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 text-sm font-medium rounded-lg border bg-white hover:bg-slate-50 transition shadow-xs text-slate-800"
+                style={{ borderColor: "#cbd5e1" }}
               >
                 <Plus size={15} /> New / Create New Record
               </button>
@@ -291,8 +291,7 @@ export function CompanyMasterFormPage({ cm, page, setPage }) {
               {!isReadOnly ? (
                 <button
                   onClick={onSave}
-                  className="flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium rounded text-white transition"
-                  style={{ backgroundColor: C.red }}
+                  className="flex items-center gap-1.5 px-6 py-2 text-sm font-bold rounded-lg text-white transition shadow-sm bg-[#0EA5E9] hover:bg-[#0284C7]"
                 >
                   <Save size={15} /> Save
                 </button>
@@ -300,7 +299,7 @@ export function CompanyMasterFormPage({ cm, page, setPage }) {
                 <>
                   <button
                     onClick={() => setIsReadOnly(false)}
-                    className="flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium rounded text-white bg-blue-600 hover:bg-blue-700 transition"
+                    className="flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium rounded text-white bg-[#0EA5E9] hover:bg-[#0284C7] transition"
                   >
                     <Pencil size={15} /> Edit Record
                   </button>

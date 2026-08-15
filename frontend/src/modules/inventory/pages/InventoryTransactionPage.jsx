@@ -1,117 +1,200 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   FileText,
   ArrowRightLeft,
   History,
-  Settings,
   AlertTriangle,
   CheckCircle2,
   Package,
   Layers,
   Building2,
-  Scale,
   PlusCircle,
   Search,
   Download,
-  Copy,
-  Check,
-  ShieldCheck,
+  Trash2,
+  RefreshCw,
 } from "lucide-react";
-import { C } from "../../../shared/constants/constants";
 import { useInventoryTransactions } from "../hooks/useInventoryTransactions";
 
-export function InventoryTransactionPage() {
+export function InventoryTransactionPage({ defaultTab = "form" }) {
   const inv = useInventoryTransactions();
-  const [activeTab, setActiveTab] = useState("form"); // 'form' | 'history' | 'master'
+  const [activeTab, setActiveTab] = useState(defaultTab); // 'form' | 'history'
+
+  // Format today's date e.g. "09-Aug-2026"
+  const formattedToday = new Date().toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).replace(/ /g, "-");
 
   // Form State
-  const [txType, setTxType] = useState("issue"); // 'issue' | 'receipt' | 'reverse'
-  const [fromDept, setFromDept] = useState("Store Department");
-  const [toDept, setToDept] = useState("Assembly Department");
-  const [selectedMainCode, setSelectedMainCode] = useState("MC-1001");
-  const [quantity, setQuantity] = useState("");
-  const [notes, setNotes] = useState("");
+  const [txType, setTxType] = useState("ISSUE");
+  const [manualSlipNumber, setManualSlipNumber] = useState("");
+  const [fromDeptId, setFromDeptId] = useState("");
+  const [toDeptId, setToDeptId] = useState("");
+  const [remarks, setRemarks] = useState("");
+
+  // Item Rows State for Multi-Item Slip
+  const [items, setItems] = useState([
+    { id: 1, category: "", masterId: "", quantity: "", remarks: "" }
+  ]);
 
   // Feedback State
   const [alert, setAlert] = useState(null); // { type: 'success' | 'error', message: string }
-  const [copied, setCopied] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // History Filter State
+  // Item-specific categories map for custom sub-categories per item code
+  const itemCategoryMap = {
+    "MAT-001": ["Raw Material - Prime Steel", "Raw Material - Coated Sheet", "Raw Material - Scrap Grade"],
+    "MAT-002": ["Raw Material - Stainless Rod 304", "Raw Material - Stainless Rod 316", "Raw Material - Alloy Rod"],
+    "MAT-003": ["Spare Parts - Deep Groove Bearing", "Spare Parts - Roller Bearing", "Spare Parts - Precision Seal Bearing"],
+    "MAT-004": ["Consumables - High Temp Oil", "Consumables - Hydraulic Fluid", "Consumables - Gearbox Lubricant"],
+    "MAT-005": ["Consumables - E6013 Electrode", "Consumables - E7018 Electrode", "Consumables - Stainless Electrode"]
+  };
+
+  // Helper to get categories available for a given item code / object
+  const getCategoriesForItem = (masterObj) => {
+    if (!masterObj) return ["Raw Material", "Spare Parts", "Consumables", "Finished Goods", "Sub-Assembly"];
+    const code = masterObj.code;
+    const customList = itemCategoryMap[code];
+    if (customList && customList.length > 0) {
+      return customList;
+    }
+    // Fallback: Primary category + variations
+    const primary = masterObj.category || "General";
+    return [primary, `${primary} - Standard`, `${primary} - Premium`, `${primary} - Grade B`];
+  };
+
+  // History Search & Filter State
   const [historySearch, setHistorySearch] = useState("");
   const [historyTypeFilter, setHistoryTypeFilter] = useState("all");
 
-  // Master Data Add Form State
-  const [newDeptName, setNewDeptName] = useState("");
-  const [newCatName, setNewCatName] = useState("");
-  const [newGrpName, setNewGrpName] = useState("");
-  const [newUomName, setNewUomName] = useState("");
+  // Automatically update preview transaction number when txType changes
+  useEffect(() => {
+    inv.fetchPreviewTransactionNumber(txType);
+  }, [txType, inv.fetchPreviewTransactionNumber]);
 
-  const [newMc, setNewMc] = useState({
-    code: "",
-    description: "",
-    category: inv.categories[0] || "",
-    group: inv.groups[0] || "",
-    uom: inv.uoms[0] || "",
-    initialDept: inv.departments[0] || "Store Department",
-    openingBalance: 100,
-  });
+  // Item Row Handlers
+  const handleAddItemRow = () => {
+    setItems((prev) => [
+      ...prev,
+      { id: Date.now(), category: "", masterId: "", quantity: "", remarks: "" },
+    ]);
+  };
 
-  // Selected Main Code Details & Dept Stock
-  const activeItem = inv.mainCodes.find((m) => m.code === selectedMainCode) || null;
-  const currentSlipNo = inv.getSlipNumber(txType);
+  const handleRemoveItemRow = (id) => {
+    if (items.length <= 1) return;
+    setItems((prev) => prev.filter((item) => item.id !== id));
+  };
 
-  const fromDeptStock = inv.getDeptStock(selectedMainCode, fromDept);
-  const toDeptStock = inv.getDeptStock(selectedMainCode, toDept);
-  const totalCompanyStock = inv.getTotalCompanyStock(selectedMainCode);
+  const handleItemChange = (id, field, value) => {
+    setItems((prev) =>
+      prev.map((item) => {
+        if (item.id !== id) return item;
 
-  // Transfer Quantity Calculation & Validation
-  const parsedQty = Number(quantity) || 0;
-  let isQtyValid = false;
-  let validationMessage = "";
+        if (field === "category") {
+          return {
+            ...item,
+            category: value,
+          };
+        }
 
-  if (activeItem) {
-    if (fromDept === toDept) {
-      validationMessage = "'From Department' and 'To Department' cannot be identical.";
-    } else if (fromDeptStock <= 0 && txType !== "receipt") {
-      validationMessage = `'${fromDept}' currently has 0 ${activeItem.uom} of ${activeItem.code}. Stock unavailable to transfer.`;
-    } else if (parsedQty <= 0) {
-      validationMessage = "Please enter a transfer quantity greater than 0.";
-    } else if (parsedQty > fromDeptStock && txType !== "receipt") {
-      validationMessage = `Entered quantity (${parsedQty} ${activeItem.uom}) exceeds available stock in '${fromDept}' (${fromDeptStock} ${activeItem.uom}).`;
-    } else {
-      isQtyValid = true;
-    }
-  }
+        if (field === "masterId") {
+          // When item is selected, pick the first specific category from its dedicated list
+          const selectedMaster = inv.masterItems.find((m) => String(m.id) === String(value));
+          const availableCats = getCategoriesForItem(selectedMaster);
+          return {
+            ...item,
+            masterId: value,
+            category: availableCats.length > 0 ? availableCats[0] : (selectedMaster ? selectedMaster.category : ""),
+          };
+        }
 
-  // Handle Form Submit
-  const handleSubmit = (e) => {
+        return { ...item, [field]: value };
+      })
+    );
+  };
+
+  // Find master item object by ID
+  const getMasterItem = (masterId) => {
+    if (!masterId) return null;
+    return inv.masterItems.find((m) => String(m.id) === String(masterId)) || null;
+  };
+
+  // Submit Handler
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setAlert(null);
 
-    const res = inv.submitTransaction({
-      type: txType,
-      fromDept,
-      toDept,
-      mainCode: selectedMainCode,
-      quantity,
-      notes,
+    if (!txType) {
+      setAlert({ type: "error", message: "Please select a Transaction Type." });
+      return;
+    }
+    if (!fromDeptId) {
+      setAlert({ type: "error", message: "Please select a From Department." });
+      return;
+    }
+
+    if (items.length === 0) {
+      setAlert({ type: "error", message: "Please add at least one item row." });
+      return;
+    }
+
+    // Validate item rows
+    for (let i = 0; i < items.length; i++) {
+      const row = items[i];
+      const sr = i + 1;
+      if (!row.masterId) {
+        setAlert({ type: "error", message: `Row ${sr}: Please select an Item Code.` });
+        return;
+      }
+      const qty = Number(row.quantity);
+      if (isNaN(qty) || qty <= 0) {
+        setAlert({ type: "error", message: `Row ${sr}: Please enter a valid quantity greater than 0.` });
+        return;
+      }
+
+      const masterObj = getMasterItem(row.masterId);
+      if (masterObj && txType === "ISSUE") {
+        const fromDeptBal = Number(inv.getDeptBalance(row.masterId, fromDeptId)) || 0;
+        const fromDeptObj = inv.departments.find((d) => String(d.id) === String(fromDeptId));
+        const fromDeptName = fromDeptObj ? fromDeptObj.name : "From Department";
+
+        if (qty > fromDeptBal) {
+          setAlert({
+            type: "error",
+            message: `Row ${sr} (${masterObj.code}): Transaction quantity (${qty} ${masterObj.unitOfMeasurement}) cannot be greater than closing balance in '${fromDeptName}' (${fromDeptBal} ${masterObj.unitOfMeasurement}).`,
+          });
+          return;
+        }
+      }
+    }
+
+    setIsSubmitting(true);
+    const res = await inv.submitBatchTransaction({
+      transactionType: txType,
+      fromDepartmentId: fromDeptId,
+      toDepartmentId: toDeptId || null,
+      slipNumber: manualSlipNumber,
+      items: items.map((it) => ({
+        masterId: it.masterId,
+        quantity: it.quantity,
+        remarks: it.remarks,
+      })),
+      remarks,
     });
+    setIsSubmitting(false);
 
     if (res.success) {
       setAlert({ type: "success", message: res.message });
-      setQuantity("");
-      setNotes("");
+      // Reset form state
+      setManualSlipNumber("");
+      setItems([{ id: Date.now(), masterId: "", quantity: "", remarks: "" }]);
+      setRemarks("");
       window.scrollTo({ top: 0, behavior: "smooth" });
     } else {
       setAlert({ type: "error", message: res.error });
     }
-  };
-
-  // Copy Slip No to Clipboard
-  const handleCopySlip = () => {
-    navigator.clipboard.writeText(currentSlipNo);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
   };
 
   // Export History to CSV
@@ -119,893 +202,644 @@ export function InventoryTransactionPage() {
     if (inv.transactions.length === 0) return;
 
     const headers = [
+      "Transaction No",
       "Slip No",
       "Type",
       "From Dept",
-      "From Stock Before",
-      "From Stock After",
       "To Dept",
-      "To Stock Before",
-      "To Stock After",
-      "Main Code",
+      "Item Code",
       "Description",
+      "Category",
       "Quantity",
       "UOM",
-      "Company Total Stock",
       "Timestamp",
+      "Remarks",
     ];
 
     const rows = inv.transactions.map((tx) => [
-      tx.slipNo,
-      tx.type.toUpperCase(),
-      `"${tx.fromDept}"`,
-      tx.fromDeptStockBefore,
-      tx.fromDeptStockAfter,
-      `"${tx.toDept}"`,
-      tx.toDeptStockBefore,
-      tx.toDeptStockAfter,
-      tx.mainCode,
-      `"${tx.description}"`,
+      tx.transactionNumber || tx.slipNumber,
+      `"${tx.slipNumber || '-'}"`,
+      tx.transactionType,
+      `"${tx.fromDepartmentName || '-'}"`,
+      `"${tx.toDepartmentName || '-'}"`,
+      tx.masterCode,
+      `"${tx.masterDescription}"`,
+      `"${tx.category || (getCategoriesForItem(getMasterItem(tx.masterId))[0]) || '-'}"`,
       tx.quantity,
-      tx.uom,
-      tx.totalCompanyStock,
-      `"${tx.timestamp}"`,
+      tx.unitOfMeasurement,
+      `"${tx.transactionDate}"`,
+      `"${tx.remarks || '-'}"`,
     ]);
 
-    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
+    const csvContent =
+      "data:text/csv;charset=utf-8," +
+      [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
+
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `Inventory_Transactions_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute("download", `ERP_Inventory_Transactions_${Date.now()}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
-  // Filtered Transactions
-  const filteredTransactions = inv.transactions.filter((tx) => {
-    const matchesType = historyTypeFilter === "all" || tx.type === historyTypeFilter;
-    const query = historySearch.toLowerCase();
-    const matchesSearch =
-      !query ||
-      tx.slipNo.toLowerCase().includes(query) ||
-      tx.mainCode.toLowerCase().includes(query) ||
-      tx.description.toLowerCase().includes(query) ||
-      tx.fromDept.toLowerCase().includes(query) ||
-      tx.toDept.toLowerCase().includes(query);
-    return matchesType && matchesSearch;
+  // Filtered transactions for history table
+  const filteredHistory = inv.transactions.filter((tx) => {
+    const txNum = (tx.transactionNumber || tx.slipNumber || "").toLowerCase();
+    const slipNum = (tx.slipNumber || "").toLowerCase();
+    const code = (tx.masterCode || "").toLowerCase();
+    const desc = (tx.masterDescription || "").toLowerCase();
+    const cat = (tx.category || "").toLowerCase();
+    const search = historySearch.toLowerCase();
+
+    const matchSearch =
+      historySearch === "" ||
+      txNum.includes(search) ||
+      slipNum.includes(search) ||
+      code.includes(search) ||
+      desc.includes(search) ||
+      cat.includes(search);
+
+    const matchType =
+      historyTypeFilter === "all" ||
+      tx.transactionType.toLowerCase() === historyTypeFilter.toLowerCase();
+
+    return matchSearch && matchType;
   });
 
   return (
-    <div className="min-h-screen py-8 px-4 sm:px-6 lg:px-8" style={{ backgroundColor: C.bg }}>
-      <div className="max-w-7xl mx-auto space-y-6">
-        {/* Page Header */}
-        <div className="bg-white rounded-2xl p-6 sm:p-8 shadow-sm border" style={{ borderColor: C.line }}>
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans p-4 md:p-8">
+      {/* Header Banner */}
+      <div className="max-w-7xl mx-auto mb-8">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+          <div className="flex items-center space-x-4">
+            <div className="w-14 h-14 rounded-xl bg-sky-500 flex items-center justify-center text-white font-bold shadow-md shadow-sky-500/20">
+              <ArrowRightLeft className="w-7 h-7 text-white" />
+            </div>
             <div>
-              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">
-                <Package size={16} style={{ color: C.red }} />
-                Inventory & Materials Management
+              <div className="flex items-center space-x-2">
+                <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200">
+                  PostgreSQL Driven
+                </span>
+                <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-cyan-50 text-cyan-700 border border-cyan-200">
+                  ERP Module
+                </span>
               </div>
-              <h1 className="text-2xl sm:text-3xl font-extrabold" style={{ color: C.ink }}>
-                Part Slip Transaction Master
+              <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 tracking-tight mt-1">
+                Material Inventory Transaction
               </h1>
-              <p className="text-sm text-slate-600 mt-1">
-                Transfer inventory between departments without losing total company stock. Department-wise balance updates automatically.
+              <p className="text-slate-600 text-sm">
+                Issue, Receipt & Stock Movement with Real-Time Database Validation
               </p>
             </div>
+          </div>
 
-            {/* Top Navigation Mode Tabs */}
-            <div className="flex bg-slate-100 p-1.5 rounded-xl gap-1 self-start sm:self-auto">
-              <button
-                onClick={() => setActiveTab("form")}
-                className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition ${
-                  activeTab === "form"
-                    ? "bg-white text-slate-900 shadow-sm"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                <FileText size={16} style={{ color: activeTab === "form" ? C.red : undefined }} />
-                New Slip Entry
-              </button>
-              <button
-                onClick={() => setActiveTab("history")}
-                className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition ${
-                  activeTab === "history"
-                    ? "bg-white text-slate-900 shadow-sm"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                <History size={16} style={{ color: activeTab === "history" ? C.red : undefined }} />
-                History ({inv.transactions.length})
-              </button>
-              <button
-                onClick={() => setActiveTab("master")}
-                className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition ${
-                  activeTab === "master"
-                    ? "bg-white text-slate-900 shadow-sm"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                <Settings size={16} style={{ color: activeTab === "master" ? C.red : undefined }} />
-                Master Setup
-              </button>
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={() => inv.reloadAll()}
+              className="flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium transition border border-slate-300"
+              title="Refresh Data from PostgreSQL"
+            >
+              <RefreshCw className={`w-4 h-4 ${inv.loading ? "animate-spin" : ""}`} />
+              <span>Refresh</span>
+            </button>
+            <div className="bg-slate-100 border border-slate-300 rounded-xl px-4 py-2 text-right">
+              <span className="text-xs text-slate-500 block font-medium">Database System Date</span>
+              <span className="text-sm font-bold text-sky-700">{formattedToday}</span>
             </div>
           </div>
         </div>
 
-        {/* Global Feedback Banner */}
+        {/* Tab Navigation */}
+        <div className="flex border-b border-slate-200 mt-6 space-x-2">
+          <button
+            onClick={() => setActiveTab("form")}
+            className={`flex items-center space-x-2 px-5 py-3 font-bold text-sm transition-all border-b-2 ${
+              activeTab === "form"
+                ? "border-sky-500 text-sky-600 bg-white rounded-t-lg shadow-xs"
+                : "border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-100/60"
+            }`}
+          >
+            <FileText className="w-4 h-4" />
+            <span>New Transaction Form</span>
+          </button>
+          <button
+            onClick={() => setActiveTab("history")}
+            className={`flex items-center space-x-2 px-5 py-3 font-bold text-sm transition-all border-b-2 ${
+              activeTab === "history"
+                ? "border-sky-500 text-sky-600 bg-white rounded-t-lg shadow-xs"
+                : "border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-100/60"
+            }`}
+          >
+            <History className="w-4 h-4" />
+            <span>Transaction History ({inv.transactions.length})</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Main Container */}
+      <div className="max-w-7xl mx-auto">
+        {/* Alert Notifications */}
         {alert && (
           <div
-            className={`p-4 rounded-xl flex items-start gap-3 border shadow-sm ${
+            className={`mb-6 p-4 rounded-xl border flex items-start space-x-3 shadow-sm ${
               alert.type === "success"
-                ? "bg-emerald-50 border-emerald-200 text-emerald-900"
-                : "bg-rose-50 border-rose-200 text-rose-900"
+                ? "bg-emerald-50 border-emerald-300 text-emerald-900"
+                : "bg-rose-50 border-rose-300 text-rose-900"
             }`}
           >
             {alert.type === "success" ? (
-              <CheckCircle2 size={20} className="text-emerald-600 shrink-0 mt-0.5" />
+              <CheckCircle2 className="w-6 h-6 text-emerald-600 flex-shrink-0 mt-0.5" />
             ) : (
-              <AlertTriangle size={20} className="text-rose-600 shrink-0 mt-0.5" />
+              <AlertTriangle className="w-6 h-6 text-rose-600 flex-shrink-0 mt-0.5" />
             )}
-            <div className="flex-1 text-sm font-medium">{alert.message}</div>
+            <div className="flex-1">
+              <h4 className="font-bold text-sm">
+                {alert.type === "success" ? "Transaction Saved" : "Validation / Error Warning"}
+              </h4>
+              <p className="text-sm mt-0.5 opacity-90">{alert.message}</p>
+            </div>
             <button
               onClick={() => setAlert(null)}
-              className="text-xs font-semibold opacity-70 hover:opacity-100"
+              className="text-xs font-semibold opacity-70 hover:opacity-100 text-slate-700"
             >
               Dismiss
             </button>
           </div>
         )}
 
-        {/* TAB 1: NEW SLIP TRANSACTION FORM */}
         {activeTab === "form" && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Left 2 Columns: Form Controls */}
-            <div className="lg:col-span-2 space-y-6">
-              <form onSubmit={handleSubmit} className="bg-white rounded-2xl p-6 sm:p-8 shadow-sm border space-y-6" style={{ borderColor: C.line }}>
-                
-                {/* Step 1: Select Transaction Type */}
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Top Section Card */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+              <div className="border-b border-slate-200 pb-4">
+                <h3 className="text-lg font-bold text-slate-900 flex items-center space-x-2">
+                  <Building2 className="w-5 h-5 text-sky-500" />
+                  <span>Transaction Header Details</span>
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  Select transaction type, departments, and optionally enter manual Slip Number.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                {/* A. DATE */}
                 <div>
-                  <label className="block text-sm font-bold uppercase tracking-wider mb-3 text-slate-700">
-                    1. Select Transaction Type
+                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                    Date
                   </label>
-                  <div className="grid grid-cols-3 gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setTxType("issue")}
-                      className={`p-4 rounded-xl border-2 text-left transition flex flex-col justify-between h-28 ${
-                        txType === "issue"
-                          ? "border-rose-600 bg-rose-50/50 shadow-sm"
-                          : "border-slate-200 hover:border-slate-300 bg-white"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-extrabold uppercase px-2 py-0.5 rounded bg-rose-100 text-rose-700">
-                          Issue
-                        </span>
-                        {txType === "issue" && <CheckCircle2 size={18} className="text-rose-600" />}
-                      </div>
-                      <div>
-                        <div className="font-bold text-slate-900 text-base">Issue Slip</div>
-                        <div className="text-xs text-slate-500">Format: ISSUE001</div>
-                      </div>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setTxType("receipt")}
-                      className={`p-4 rounded-xl border-2 text-left transition flex flex-col justify-between h-28 ${
-                        txType === "receipt"
-                          ? "border-emerald-600 bg-emerald-50/50 shadow-sm"
-                          : "border-slate-200 hover:border-slate-300 bg-white"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-extrabold uppercase px-2 py-0.5 rounded bg-emerald-100 text-emerald-700">
-                          Receipt
-                        </span>
-                        {txType === "receipt" && <CheckCircle2 size={18} className="text-emerald-600" />}
-                      </div>
-                      <div>
-                        <div className="font-bold text-slate-900 text-base">Receipt Slip</div>
-                        <div className="text-xs text-slate-500">Format: RECEIPT001</div>
-                      </div>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setTxType("reverse")}
-                      className={`p-4 rounded-xl border-2 text-left transition flex flex-col justify-between h-28 ${
-                        txType === "reverse"
-                          ? "border-purple-600 bg-purple-50/50 shadow-sm"
-                          : "border-slate-200 hover:border-slate-300 bg-white"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-extrabold uppercase px-2 py-0.5 rounded bg-purple-100 text-purple-700">
-                          Reverse
-                        </span>
-                        {txType === "reverse" && <CheckCircle2 size={18} className="text-purple-600" />}
-                      </div>
-                      <div>
-                        <div className="font-bold text-slate-900 text-base">Reverse Slip</div>
-                        <div className="text-xs text-slate-500">Format: REV001</div>
-                      </div>
-                    </button>
-                  </div>
+                  <input
+                    type="text"
+                    value={formattedToday}
+                    disabled
+                    readOnly
+                    className="w-full bg-slate-100 border border-slate-300 rounded-xl px-3.5 py-2.5 text-slate-700 text-sm font-semibold cursor-not-allowed"
+                  />
                 </div>
 
-                {/* Auto Generated Slip Number Badge */}
-                <div className="bg-slate-900 text-white p-4 rounded-xl flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-white/10 text-amber-400 font-mono font-bold text-lg">
-                      {currentSlipNo}
-                    </div>
-                    <div>
-                      <div className="text-xs text-slate-400 font-medium">Auto-Generated Slip Number</div>
-                      <div className="text-xs text-slate-300 font-semibold uppercase tracking-wider">
-                        {txType} Slip • Unique Identifier
-                      </div>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleCopySlip}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-semibold text-slate-200 transition"
-                  >
-                    {copied ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
-                    {copied ? "Copied" : "Copy"}
-                  </button>
-                </div>
-
-                {/* Step 2: From and To Department Selection */}
+                {/* B. TYPE OF TRANSACTION */}
                 <div>
-                  <label className="block text-sm font-bold uppercase tracking-wider mb-3 text-slate-700">
-                    2. Select Department Movement
-                  </label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-600 mb-1">
-                        From Department (Source) <span className="text-rose-600">*</span>
-                      </label>
-                      <select
-                        value={fromDept}
-                        onChange={(e) => setFromDept(e.target.value)}
-                        className="w-full rounded-xl border border-slate-300 p-3 text-sm font-semibold text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-rose-500"
-                      >
-                        {inv.departments.map((d) => (
-                          <option key={d} value={d}>
-                            {d} (Stock: {inv.getDeptStock(selectedMainCode, d)} {activeItem?.uom || "Pcs"})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-600 mb-1">
-                        To Department (Destination) <span className="text-rose-600">*</span>
-                      </label>
-                      <select
-                        value={toDept}
-                        onChange={(e) => setToDept(e.target.value)}
-                        className="w-full rounded-xl border border-slate-300 p-3 text-sm font-semibold text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-rose-500"
-                      >
-                        {inv.departments.map((d) => (
-                          <option key={d} value={d}>
-                            {d} (Stock: {inv.getDeptStock(selectedMainCode, d)} {activeItem?.uom || "Pcs"})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  {fromDept === toDept && (
-                    <div className="mt-2 text-xs font-semibold text-rose-600 flex items-center gap-1.5">
-                      <AlertTriangle size={14} />
-                      'From' and 'To' departments cannot be identical.
-                    </div>
-                  )}
-                </div>
-
-                {/* Step 3: Select Main Code */}
-                <div>
-                  <label className="block text-sm font-bold uppercase tracking-wider mb-3 text-slate-700">
-                    3. Select Main Code & Material
+                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                    Type of Transaction <span className="text-sky-500">*</span>
                   </label>
                   <select
-                    value={selectedMainCode}
-                    onChange={(e) => setSelectedMainCode(e.target.value)}
-                    className="w-full rounded-xl border border-slate-300 p-3 text-sm font-bold text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-rose-500"
+                    value={txType}
+                    onChange={(e) => setTxType(e.target.value)}
+                    className="w-full bg-white border border-slate-300 focus:border-sky-500 rounded-xl px-3.5 py-2.5 text-slate-900 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-sky-500/20"
                   >
-                    {inv.mainCodes.map((m) => (
-                      <option key={m.code} value={m.code}>
-                        {m.code} — {m.description} (Company Total: {inv.getTotalCompanyStock(m.code)} {m.uom})
+                    {inv.transactionTypes.map((tt) => (
+                      <option key={tt.id} value={tt.type}>
+                        {tt.type}
                       </option>
                     ))}
                   </select>
                 </div>
 
-                {/* Step 4: Transfer Quantity */}
+                {/* C. TRANSACTION NUMBER */}
                 <div>
-                  <label className="block text-sm font-bold uppercase tracking-wider mb-3 text-slate-700">
-                    4. Enter Shift / Transfer Quantity
+                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                    Transaction Number (Auto)
                   </label>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
-                    <div className="sm:col-span-2">
-                      <div className="relative">
-                        <input
-                          type="number"
-                          min="1"
-                          placeholder="e.g. 25"
-                          value={quantity}
-                          onChange={(e) => setQuantity(e.target.value)}
-                          className="w-full rounded-xl border border-slate-300 p-3 text-lg font-bold text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-rose-500 pr-16"
-                        />
-                        <span className="absolute right-4 top-3.5 text-sm font-bold text-slate-500">
-                          {activeItem?.uom || "Pcs"}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div>
-                      {activeItem && (
-                        <div className="p-3 rounded-xl bg-slate-100 border border-slate-200 text-center">
-                          <div className="text-xs text-slate-500 font-semibold">{toDept} After</div>
-                          <div className="text-base font-extrabold text-emerald-700">
-                            {toDeptStock + parsedQty} <span className="text-xs font-semibold">{activeItem.uom}</span>
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={inv.previewTransactionNumber}
+                      disabled
+                      readOnly
+                      className="w-full bg-sky-50 border border-sky-200 rounded-xl px-3.5 py-2.5 text-sky-800 text-sm font-bold tracking-wider cursor-not-allowed shadow-inner"
+                    />
                   </div>
-
-                  {/* Validation Feedback Message */}
-                  {validationMessage && (
-                    <div className="mt-2.5 p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs font-semibold text-rose-700 flex items-center gap-2">
-                      <AlertTriangle size={16} className="shrink-0" />
-                      {validationMessage}
-                    </div>
-                  )}
                 </div>
 
-                {/* Remarks / Notes */}
+                {/* D. SLIP NUMBER (OPTIONAL MANUAL INPUT) */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">
-                    Transaction Remarks / Purpose (Optional)
+                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                    Slip Number <span className="text-slate-400 font-normal">(Optional)</span>
                   </label>
                   <input
                     type="text"
-                    placeholder="e.g. Shifting 25 seals to Assembly line for batch #409"
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    className="w-full rounded-xl border border-slate-300 p-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-rose-500"
+                    placeholder="Enter Slip No..."
+                    value={manualSlipNumber}
+                    onChange={(e) => setManualSlipNumber(e.target.value)}
+                    className="w-full bg-white border border-slate-300 focus:border-sky-500 rounded-xl px-3.5 py-2.5 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20 font-medium"
                   />
                 </div>
 
-                {/* Submit Action */}
-                <div className="pt-2">
-                  <button
-                    type="submit"
-                    disabled={!isQtyValid || fromDept === toDept}
-                    className="w-full py-4 px-6 rounded-xl font-extrabold text-white shadow-lg transition flex items-center justify-center gap-2 text-base disabled:opacity-50 disabled:cursor-not-allowed"
-                    style={{ backgroundColor: C.red }}
+                {/* E. FROM DEPARTMENT */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                    From Department <span className="text-sky-500">*</span>
+                  </label>
+                  <select
+                    value={fromDeptId}
+                    onChange={(e) => setFromDeptId(e.target.value)}
+                    className="w-full bg-white border border-slate-300 focus:border-sky-500 rounded-xl px-3.5 py-2.5 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20 font-medium"
                   >
-                    <ArrowRightLeft size={20} />
-                    Confirm Transfer & Generate {currentSlipNo}
-                  </button>
+                    <option value="">-- Select From Department --</option>
+                    {inv.departments.map((dept) => (
+                      <option key={dept.id} value={dept.id}>
+                        {dept.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
-              </form>
-            </div>
 
-            {/* Right 1 Column: Department-Wise Stock Breakdown & Visual Movement Preview */}
-            <div className="space-y-6">
-              {activeItem ? (
-                <div className="bg-white rounded-2xl p-6 shadow-sm border space-y-5 sticky top-6" style={{ borderColor: C.line }}>
-                  <div className="flex items-center justify-between border-b pb-4" style={{ borderColor: C.line }}>
-                    <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-slate-500">
-                      <Package size={16} style={{ color: C.red }} />
-                      Material Specification
-                    </div>
-                    <span className="px-2.5 py-1 rounded-full text-xs font-extrabold bg-slate-100 text-slate-700 font-mono">
-                      {activeItem.code}
-                    </span>
-                  </div>
-
-                  <div>
-                    <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
-                      Part Description
-                    </div>
-                    <div className="font-extrabold text-slate-900 text-base leading-snug">
-                      {activeItem.description}
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3 text-xs">
-                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                      <div className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Category</div>
-                      <div className="font-extrabold text-slate-800 mt-0.5">{activeItem.category}</div>
-                    </div>
-                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                      <div className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Group</div>
-                      <div className="font-extrabold text-slate-800 mt-0.5">{activeItem.group}</div>
-                    </div>
-                  </div>
-
-                  {/* Live Department Stock Gauges */}
-                  <div className="space-y-3">
-                    <div className="text-xs font-extrabold uppercase tracking-wider text-slate-600 flex items-center justify-between">
-                      <span>Department Stock Status</span>
-                      <span className="text-[11px] font-bold text-slate-400 font-mono">UOM: {activeItem.uom}</span>
-                    </div>
-
-                    {/* From Dept Stock Card */}
-                    <div className="p-3.5 rounded-xl border bg-rose-50/60 border-rose-200 flex items-center justify-between">
-                      <div>
-                        <div className="text-xs font-bold text-rose-800">FROM: {fromDept}</div>
-                        <div className="text-[11px] text-rose-600 font-medium">Source Department</div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-lg font-black text-rose-700 font-mono">
-                          {fromDeptStock} <span className="text-xs">{activeItem.uom}</span>
-                        </div>
-                        {parsedQty > 0 && isQtyValid && (
-                          <div className="text-[11px] font-extrabold text-rose-800">
-                            ➔ {fromDeptStock - parsedQty} {activeItem.uom} after
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* To Dept Stock Card */}
-                    <div className="p-3.5 rounded-xl border bg-emerald-50/60 border-emerald-200 flex items-center justify-between">
-                      <div>
-                        <div className="text-xs font-bold text-emerald-800">TO: {toDept}</div>
-                        <div className="text-[11px] text-emerald-600 font-medium">Destination Department</div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-lg font-black text-emerald-700 font-mono">
-                          {toDeptStock} <span className="text-xs">{activeItem.uom}</span>
-                        </div>
-                        {parsedQty > 0 && isQtyValid && (
-                          <div className="text-[11px] font-extrabold text-emerald-800">
-                            ➔ {toDeptStock + parsedQty} {activeItem.uom} after
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Total Company Stock Preservation Card */}
-                    <div className="p-3.5 rounded-xl bg-slate-900 text-white flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <ShieldCheck size={18} className="text-amber-400 shrink-0" />
-                        <div>
-                          <div className="text-xs font-bold">Total Company Stock</div>
-                          <div className="text-[10px] text-slate-400">Preserved Across All Depts</div>
-                        </div>
-                      </div>
-                      <div className="text-xl font-black text-amber-400 font-mono">
-                        {totalCompanyStock} <span className="text-xs font-normal text-white">{activeItem.uom}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="bg-white rounded-2xl p-6 shadow-sm border text-center text-slate-400 text-sm">
-                  Select a Main Code to view department stock breakdown.
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* TAB 2: TRANSACTION HISTORY & LOGS */}
-        {activeTab === "history" && (
-          <div className="space-y-6">
-            {/* Top Summary Stats */}
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-              <div className="bg-white p-5 rounded-2xl border shadow-sm" style={{ borderColor: C.line }}>
-                <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Slips</div>
-                <div className="text-2xl font-black mt-1" style={{ color: C.ink }}>
-                  {inv.transactions.length}
-                </div>
-              </div>
-              <div className="bg-white p-5 rounded-2xl border shadow-sm" style={{ borderColor: C.line }}>
-                <div className="text-xs font-bold text-rose-600 uppercase tracking-wider">Issues Generated</div>
-                <div className="text-2xl font-black mt-1 text-rose-700">
-                  {inv.transactions.filter((t) => t.type === "issue").length}
-                </div>
-              </div>
-              <div className="bg-white p-5 rounded-2xl border shadow-sm" style={{ borderColor: C.line }}>
-                <div className="text-xs font-bold text-emerald-600 uppercase tracking-wider">Receipts Processed</div>
-                <div className="text-2xl font-black mt-1 text-emerald-700">
-                  {inv.transactions.filter((t) => t.type === "receipt").length}
-                </div>
-              </div>
-              <div className="bg-white p-5 rounded-2xl border shadow-sm" style={{ borderColor: C.line }}>
-                <div className="text-xs font-bold text-purple-600 uppercase tracking-wider">Reversals Recorded</div>
-                <div className="text-2xl font-black mt-1 text-purple-700">
-                  {inv.transactions.filter((t) => t.type === "reverse").length}
-                </div>
-              </div>
-            </div>
-
-            {/* Filter Controls & Search */}
-            <div className="bg-white rounded-2xl p-5 border shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4" style={{ borderColor: C.line }}>
-              <div className="relative w-full sm:w-80">
-                <Search size={18} className="absolute left-3.5 top-3 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Search Slip No, Main Code, Dept..."
-                  value={historySearch}
-                  onChange={(e) => setHistorySearch(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 text-sm rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-rose-500"
-                />
-              </div>
-
-              <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto">
-                {["all", "issue", "receipt", "reverse"].map((t) => (
-                  <button
-                    key={t}
-                    onClick={() => setHistoryTypeFilter(t)}
-                    className={`px-3.5 py-2 text-xs font-extrabold uppercase rounded-lg transition whitespace-nowrap ${
-                      historyTypeFilter === t
-                        ? "bg-slate-900 text-white"
-                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                    }`}
+                {/* F. TO DEPARTMENT */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                    To Department
+                  </label>
+                  <select
+                    value={toDeptId}
+                    onChange={(e) => setToDeptId(e.target.value)}
+                    className="w-full bg-white border border-slate-300 focus:border-sky-500 rounded-xl px-3.5 py-2.5 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20 font-medium"
                   >
-                    {t}
-                  </button>
-                ))}
+                    <option value="">-- Select To Department (Optional) --</option>
+                    {inv.departments.map((dept) => (
+                      <option key={dept.id} value={dept.id}>
+                        {dept.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Item Transaction Table Card */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+              <div className="flex items-center justify-between border-b border-slate-200 pb-4">
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900 flex items-center space-x-2">
+                    <Package className="w-5 h-5 text-sky-500" />
+                    <span>Item Transaction Details</span>
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Multiple items under Transaction Number <strong className="text-sky-600">{inv.previewTransactionNumber}</strong>
+                    {manualSlipNumber ? (
+                      <span> (Manual Slip No: <strong className="text-slate-800">{manualSlipNumber}</strong>)</span>
+                    ) : null}
+                  </p>
+                </div>
 
                 <button
-                  onClick={handleExportCSV}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold transition shrink-0 ml-auto sm:ml-2"
+                  type="button"
+                  onClick={handleAddItemRow}
+                  className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-sky-500 hover:bg-sky-600 text-white font-bold text-sm shadow-sm transition"
                 >
-                  <Download size={14} />
-                  Export CSV
+                  <PlusCircle className="w-4 h-4" />
+                  <span>+ Add Item</span>
+                </button>
+              </div>
+
+              {/* Table */}
+              <div className="overflow-x-auto rounded-xl border border-slate-200">
+                <table className="w-full text-left text-sm text-slate-800">
+                  <thead className="bg-slate-100 text-xs font-bold text-slate-700 uppercase tracking-wider border-b border-slate-200">
+                    <tr>
+                      <th className="py-3.5 px-4 w-16 text-center">SR No.</th>
+                      <th className="py-3.5 px-4 min-w-[160px]">Item Code</th>
+                      <th className="py-3.5 px-4 min-w-[200px]">Item Description</th>
+                      <th className="py-3.5 px-4 min-w-[140px]">Category of Item</th>
+                      <th className="py-3.5 px-4 min-w-[120px]">Unit & Measurement</th>
+                      <th className="py-3.5 px-4 min-w-[140px] text-right">Closing Balance</th>
+                      <th className="py-3.5 px-4 min-w-[160px]">Transaction Quantity</th>
+                      <th className="py-3.5 px-4 w-16 text-center">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 bg-white">
+                    {items.map((row, index) => {
+                      const masterObj = getMasterItem(row.masterId);
+
+                      return (
+                        <tr key={row.id} className="hover:bg-slate-50 transition">
+                          {/* 1. SR NO. */}
+                          <td className="py-3 px-4 text-center font-bold text-slate-500">
+                            {index + 1}
+                          </td>
+
+                          {/* 2. ITEM CODE */}
+                          <td className="py-3 px-4">
+                            <select
+                              value={row.masterId}
+                              onChange={(e) => handleItemChange(row.id, "masterId", e.target.value)}
+                              className="w-full bg-white border border-slate-300 focus:border-sky-500 rounded-lg px-3 py-2 text-slate-900 text-sm focus:outline-none font-medium"
+                            >
+                              <option value="">Select Item Code</option>
+                              {inv.masterItems.map((m) => (
+                                <option key={m.id} value={m.id}>
+                                  {m.code} ({m.description})
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+
+                          {/* 3. ITEM DESCRIPTION */}
+                          <td className="py-3 px-4 text-slate-800">
+                            {masterObj ? (
+                              <span className="font-semibold text-slate-900">{masterObj.description}</span>
+                            ) : (
+                              <span className="text-slate-400 italic">Select an item...</span>
+                            )}
+                          </td>
+
+                          {/* 4. CATEGORY OF ITEM */}
+                          <td className="py-3 px-4">
+                            {!masterObj ? (
+                              <select
+                                disabled
+                                value=""
+                                className="w-full bg-slate-100 border border-slate-300 rounded-lg px-3 py-2 text-slate-400 text-sm focus:outline-none cursor-not-allowed italic"
+                              >
+                                <option value="">Select an item code...</option>
+                              </select>
+                            ) : (
+                              (() => {
+                                const itemCategories = getCategoriesForItem(masterObj);
+                                return (
+                                  <select
+                                    value={row.category || (itemCategories[0] || "")}
+                                    onChange={(e) => handleItemChange(row.id, "category", e.target.value)}
+                                    className="w-full bg-white border border-slate-300 focus:border-sky-500 rounded-lg px-3 py-2 text-slate-900 text-sm focus:outline-none font-medium"
+                                  >
+                                    {itemCategories.map((cat) => (
+                                      <option key={cat} value={cat}>
+                                        {cat}
+                                      </option>
+                                    ))}
+                                  </select>
+                                );
+                              })()
+                            )}
+                          </td>
+
+                          {/* 5. UNIT & MEASUREMENT */}
+                          <td className="py-3 px-4 text-slate-800 font-semibold">
+                            {masterObj ? masterObj.unitOfMeasurement : "-"}
+                          </td>
+
+                          {/* 6. CLOSING BALANCE */}
+                          <td className="py-3 px-4 text-right font-bold">
+                            {masterObj ? (() => {
+                              const deptBal = Number(inv.getDeptBalance(row.masterId, fromDeptId)) || 0;
+                              const fromDeptObj = inv.departments.find((d) => String(d.id) === String(fromDeptId));
+                              const deptLabel = fromDeptObj ? fromDeptObj.name : "From Dept";
+                              return (
+                                <div>
+                                  <span
+                                    className={`inline-block px-2.5 py-1 rounded-md text-xs font-bold ${
+                                      deptBal > 0
+                                        ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                                        : "bg-rose-50 text-rose-800 border border-rose-200"
+                                    }`}
+                                  >
+                                    {deptBal.toLocaleString("en-IN", {
+                                      minimumFractionDigits: 2,
+                                    })}
+                                  </span>
+                                  <span className="block text-[10px] text-slate-500 font-normal mt-0.5">
+                                    in {deptLabel}
+                                  </span>
+                                </div>
+                              );
+                            })() : (
+                              <span className="text-slate-400 italic">-</span>
+                            )}
+                          </td>
+
+                          {/* 7. TRANSACTION QUANTITY */}
+                          <td className="py-3 px-4">
+                            <input
+                              type="number"
+                              min="1"
+                              step="any"
+                              placeholder="Enter quantity"
+                              value={row.quantity}
+                              onChange={(e) => handleItemChange(row.id, "quantity", e.target.value)}
+                              className="w-full bg-white border border-slate-300 focus:border-sky-500 rounded-lg px-3 py-2 text-slate-900 text-sm font-semibold focus:outline-none"
+                            />
+                          </td>
+
+                          {/* 8. ACTION (REMOVE ROW) */}
+                          <td className="py-3 px-4 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveItemRow(row.id)}
+                              disabled={items.length <= 1}
+                              className={`p-1.5 rounded-lg transition ${
+                                items.length > 1
+                                  ? "text-rose-600 hover:bg-rose-100"
+                                  : "text-slate-300 cursor-not-allowed"
+                              }`}
+                              title="Remove item row"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Remarks & Save Transaction Button */}
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pt-4 border-t border-slate-200">
+                <div className="flex-1 max-w-lg">
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Transaction Remarks / Notes
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Optional transaction reference or notes..."
+                    value={remarks}
+                    onChange={(e) => setRemarks(e.target.value)}
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2 text-slate-900 text-sm focus:outline-none focus:border-sky-500"
+                  />
+                </div>
+
+                <div className="flex items-center space-x-3">
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="px-8 py-3 rounded-xl bg-sky-500 hover:bg-sky-600 text-white font-extrabold text-base shadow-md transition transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <RefreshCw className="w-5 h-5 animate-spin" />
+                        <span>Processing Database Transaction...</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="w-5 h-5" />
+                        <span>Save Transaction</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </form>
+        )}
+
+        {/* History Tab */}
+        {activeTab === "history" && (
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-4">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900 flex items-center space-x-2">
+                  <Layers className="w-5 h-5 text-sky-500" />
+                  <span>PostgreSQL Transaction Audit Log</span>
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  Complete list of all persistent inventory movements and stock adjustments.
+                </p>
+              </div>
+
+              <div className="flex items-center space-x-3">
+                <button
+                  onClick={handleExportCSV}
+                  disabled={inv.transactions.length === 0}
+                  className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-sm transition border border-slate-300 disabled:opacity-50"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Export CSV</span>
                 </button>
               </div>
             </div>
 
-            {/* History Table */}
-            <div className="bg-white rounded-2xl shadow-sm border overflow-hidden" style={{ borderColor: C.line }}>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-slate-50 border-b text-xs uppercase font-extrabold text-slate-500 tracking-wider" style={{ borderColor: C.line }}>
-                    <tr>
-                      <th className="px-6 py-4">Slip No</th>
-                      <th className="px-6 py-4">Type</th>
-                      <th className="px-6 py-4">From ➔ To Department Shift</th>
-                      <th className="px-6 py-4">Main Code & Material</th>
-                      <th className="px-6 py-4 text-right">Transfer Qty</th>
-                      <th className="px-6 py-4 text-center font-mono">Company Total</th>
-                      <th className="px-6 py-4 text-center">Timestamp</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y" style={{ borderColor: C.line }}>
-                    {filteredTransactions.length > 0 ? (
-                      filteredTransactions.map((tx) => (
-                        <tr key={tx.id} className="hover:bg-slate-50/80 transition">
-                          <td className="px-6 py-4 font-mono font-extrabold text-slate-900">
-                            {tx.slipNo}
-                          </td>
-                          <td className="px-6 py-4">
-                            <span
-                              className={`px-2.5 py-1 rounded text-[11px] font-extrabold uppercase ${
-                                tx.type === "issue"
-                                  ? "bg-rose-100 text-rose-800"
-                                  : tx.type === "receipt"
-                                  ? "bg-emerald-100 text-emerald-800"
-                                  : "bg-purple-100 text-purple-800"
-                              }`}
-                            >
-                              {tx.type}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 font-medium text-slate-700">
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-slate-900 font-semibold">{tx.fromDept}</span>
-                              <span className="text-slate-400">➔</span>
-                              <span className="text-slate-900 font-semibold">{tx.toDept}</span>
-                            </div>
-                            <div className="text-[11px] text-slate-400 font-mono mt-0.5">
-                              {tx.fromDept}: {tx.fromDeptStockAfter} | {tx.toDept}: {tx.toDeptStockAfter}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="font-extrabold text-slate-900">{tx.mainCode}</div>
-                            <div className="text-xs text-slate-500 max-w-xs truncate">{tx.description}</div>
-                          </td>
-                          <td className="px-6 py-4 text-right font-extrabold text-slate-900 font-mono">
-                            {tx.quantity} <span className="text-xs text-slate-500 font-normal">{tx.uom}</span>
-                          </td>
-                          <td className="px-6 py-4 text-center font-extrabold text-slate-900 font-mono">
-                            {tx.totalCompanyStock} <span className="text-xs text-slate-500 font-normal">{tx.uom}</span>
-                          </td>
-                          <td className="px-6 py-4 text-center text-xs text-slate-500 font-medium">
-                            {tx.timestamp}
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={7} className="px-6 py-12 text-center text-slate-400 font-semibold">
-                          No transaction records found matching filter criteria.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 3: MASTER DATA CONFIGURATION */}
-        {activeTab === "master" && (
-          <div className="space-y-8">
-            {/* Intro */}
-            <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl text-xs text-amber-900 flex items-center gap-3">
-              <AlertTriangle size={18} className="text-amber-600 shrink-0" />
-              <div>
-                <strong>Master Configuration Mode:</strong> Manually add new Departments, Categories, Groups, Units of Measurement, or Main Code records with initial department stock.
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* 1. Manage Departments */}
-              <div className="bg-white p-6 rounded-2xl border shadow-sm space-y-4" style={{ borderColor: C.line }}>
-                <div className="flex items-center gap-2 font-bold text-slate-900 text-base">
-                  <Building2 size={18} style={{ color: C.red }} />
-                  Departments Master
-                </div>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="New Department Name"
-                    value={newDeptName}
-                    onChange={(e) => setNewDeptName(e.target.value)}
-                    className="flex-1 rounded-xl border border-slate-300 p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500"
-                  />
-                  <button
-                    onClick={() => {
-                      if (inv.addDepartment(newDeptName)) setNewDeptName("");
-                    }}
-                    className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-extrabold transition shrink-0"
-                  >
-                    Add Dept
-                  </button>
-                </div>
-                <div className="flex flex-wrap gap-2 pt-2">
-                  {inv.departments.map((d) => (
-                    <span key={d} className="px-3 py-1 bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold">
-                      {d}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              {/* 2. Manage Units of Measurement (UOM) */}
-              <div className="bg-white p-6 rounded-2xl border shadow-sm space-y-4" style={{ borderColor: C.line }}>
-                <div className="flex items-center gap-2 font-bold text-slate-900 text-base">
-                  <Scale size={18} style={{ color: C.red }} />
-                  Unit & Measurement (UOM)
-                </div>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="New Unit (e.g. Kg, Box)"
-                    value={newUomName}
-                    onChange={(e) => setNewUomName(e.target.value)}
-                    className="flex-1 rounded-xl border border-slate-300 p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500"
-                  />
-                  <button
-                    onClick={() => {
-                      if (inv.addUom(newUomName)) setNewUomName("");
-                    }}
-                    className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-extrabold transition shrink-0"
-                  >
-                    Add Unit
-                  </button>
-                </div>
-                <div className="flex flex-wrap gap-2 pt-2">
-                  {inv.uoms.map((u) => (
-                    <span key={u} className="px-3 py-1 bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold">
-                      {u}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              {/* 3. Manage Categories */}
-              <div className="bg-white p-6 rounded-2xl border shadow-sm space-y-4" style={{ borderColor: C.line }}>
-                <div className="flex items-center gap-2 font-bold text-slate-900 text-base">
-                  <Layers size={18} style={{ color: C.red }} />
-                  Part Categories
-                </div>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="New Category Name"
-                    value={newCatName}
-                    onChange={(e) => setNewCatName(e.target.value)}
-                    className="flex-1 rounded-xl border border-slate-300 p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500"
-                  />
-                  <button
-                    onClick={() => {
-                      if (inv.addCategory(newCatName)) setNewCatName("");
-                    }}
-                    className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-extrabold transition shrink-0"
-                  >
-                    Add Category
-                  </button>
-                </div>
-                <div className="flex flex-wrap gap-2 pt-2">
-                  {inv.categories.map((c) => (
-                    <span key={c} className="px-3 py-1 bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold">
-                      {c}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              {/* 4. Manage Groups */}
-              <div className="bg-white p-6 rounded-2xl border shadow-sm space-y-4" style={{ borderColor: C.line }}>
-                <div className="flex items-center gap-2 font-bold text-slate-900 text-base">
-                  <Package size={18} style={{ color: C.red }} />
-                  Part Groups
-                </div>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="New Group Name"
-                    value={newGrpName}
-                    onChange={(e) => setNewGrpName(e.target.value)}
-                    className="flex-1 rounded-xl border border-slate-300 p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500"
-                  />
-                  <button
-                    onClick={() => {
-                      if (inv.addGroup(newGrpName)) setNewGrpName("");
-                    }}
-                    className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-extrabold transition shrink-0"
-                  >
-                    Add Group
-                  </button>
-                </div>
-                <div className="flex flex-wrap gap-2 pt-2">
-                  {inv.groups.map((g) => (
-                    <span key={g} className="px-3 py-1 bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold">
-                      {g}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* 5. Main Code Master & Opening Balance Entry */}
-            <div className="bg-white p-6 rounded-2xl border shadow-sm space-y-6" style={{ borderColor: C.line }}>
-              <div className="flex items-center gap-2 font-bold text-slate-900 text-lg">
-                <PlusCircle size={20} style={{ color: C.red }} />
-                Add New Main Code Record & Department Stock
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">Main Code</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. MC-1007"
-                    value={newMc.code}
-                    onChange={(e) => setNewMc({ ...newMc, code: e.target.value })}
-                    className="w-full rounded-xl border border-slate-300 p-2.5 text-sm font-bold uppercase focus:ring-2 focus:ring-rose-500"
-                  />
-                </div>
-                <div className="sm:col-span-2">
-                  <label className="block text-xs font-bold text-slate-600 mb-1">Part Description</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Viton Shaft Seal 25x35x7"
-                    value={newMc.description}
-                    onChange={(e) => setNewMc({ ...newMc, description: e.target.value })}
-                    className="w-full rounded-xl border border-slate-300 p-2.5 text-sm focus:ring-2 focus:ring-rose-500"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">Category</label>
-                  <select
-                    value={newMc.category}
-                    onChange={(e) => setNewMc({ ...newMc, category: e.target.value })}
-                    className="w-full rounded-xl border border-slate-300 p-2.5 text-sm bg-white"
-                  >
-                    {inv.categories.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">Group</label>
-                  <select
-                    value={newMc.group}
-                    onChange={(e) => setNewMc({ ...newMc, group: e.target.value })}
-                    className="w-full rounded-xl border border-slate-300 p-2.5 text-sm bg-white"
-                  >
-                    {inv.groups.map((g) => (
-                      <option key={g} value={g}>
-                        {g}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">UOM</label>
-                  <select
-                    value={newMc.uom}
-                    onChange={(e) => setNewMc({ ...newMc, uom: e.target.value })}
-                    className="w-full rounded-xl border border-slate-300 p-2.5 text-sm bg-white"
-                  >
-                    {inv.uoms.map((u) => (
-                      <option key={u} value={u}>
-                        {u}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">Initial Department</label>
-                  <select
-                    value={newMc.initialDept}
-                    onChange={(e) => setNewMc({ ...newMc, initialDept: e.target.value })}
-                    className="w-full rounded-xl border border-slate-300 p-2.5 text-sm bg-white"
-                  >
-                    {inv.departments.map((d) => (
-                      <option key={d} value={d}>
-                        {d}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">Opening Stock in Initial Department</label>
+            {/* Filter Bar */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="relative">
+                <Search className="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400" />
                 <input
-                  type="number"
-                  min="0"
-                  value={newMc.openingBalance}
-                  onChange={(e) => setNewMc({ ...newMc, openingBalance: e.target.value })}
-                  className="w-full rounded-xl border border-slate-300 p-2.5 text-sm font-extrabold text-slate-900 max-w-xs"
+                  type="text"
+                  placeholder="Search by Transaction No, Slip No, Item Code, or Description..."
+                  value={historySearch}
+                  onChange={(e) => setHistorySearch(e.target.value)}
+                  className="w-full bg-white border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-slate-900 text-sm focus:outline-none focus:border-sky-500"
                 />
               </div>
 
-              <button
-                onClick={() => {
-                  if (inv.addMainCodeItem(newMc)) {
-                    setNewMc({
-                      code: "",
-                      description: "",
-                      category: inv.categories[0] || "",
-                      group: inv.groups[0] || "",
-                      uom: inv.uoms[0] || "",
-                      initialDept: inv.departments[0] || "Store Department",
-                      openingBalance: 100,
-                    });
-                  }
-                }}
-                className="w-full py-3 px-4 rounded-xl font-bold text-white transition flex items-center justify-center gap-2"
-                style={{ backgroundColor: C.red }}
-              >
-                <PlusCircle size={18} />
-                Save Main Code Record
-              </button>
+              <div>
+                <select
+                  value={historyTypeFilter}
+                  onChange={(e) => setHistoryTypeFilter(e.target.value)}
+                  className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-slate-900 text-sm focus:outline-none focus:border-sky-500 font-semibold"
+                >
+                  <option value="all">All Transaction Types</option>
+                  <option value="issue">ISSUE</option>
+                  <option value="receipt">RECEIPT</option>
+                  <option value="reverse">REVERSE</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Table */}
+            <div className="overflow-x-auto rounded-xl border border-slate-200">
+              <table className="w-full text-left text-sm text-slate-800">
+                <thead className="bg-slate-100 text-xs font-bold text-slate-700 uppercase tracking-wider border-b border-slate-200">
+                  <tr>
+                    <th className="py-3.5 px-4">Transaction No.</th>
+                    <th className="py-3.5 px-4">Slip No.</th>
+                    <th className="py-3.5 px-4">Type</th>
+                    <th className="py-3.5 px-4">From Dept</th>
+                    <th className="py-3.5 px-4">To Dept</th>
+                    <th className="py-3.5 px-4">Item Code</th>
+                    <th className="py-3.5 px-4">Description</th>
+                    <th className="py-3.5 px-4">Category</th>
+                    <th className="py-3.5 px-4 text-right">Quantity</th>
+                    <th className="py-3.5 px-4">Timestamp</th>
+                    <th className="py-3.5 px-4">Remarks</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 bg-white">
+                  {filteredHistory.length > 0 ? (
+                    filteredHistory.map((tx) => {
+                      const masterObj = inv.masterItems.find((m) => String(m.id) === String(tx.masterId));
+                      const itemCategory = masterObj ? masterObj.category : null;
+                      return (
+                        <tr key={tx.id} className="hover:bg-slate-50 transition">
+                          <td className="py-3 px-4 font-bold text-sky-700">
+                            {tx.transactionNumber || tx.slipNumber}
+                          </td>
+                          <td className="py-3 px-4 font-medium text-slate-700">
+                            {tx.slipNumber ? (
+                              <span className="inline-block px-2 py-0.5 rounded bg-slate-100 border border-slate-300 text-xs font-bold text-slate-800">
+                                {tx.slipNumber}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 italic text-xs">-</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4">
+                            <span
+                              className={`px-2.5 py-0.5 rounded-full text-xs font-extrabold border ${
+                                tx.transactionType === "ISSUE"
+                                  ? "bg-amber-50 text-amber-800 border-amber-300"
+                                  : tx.transactionType === "RECEIPT"
+                                  ? "bg-emerald-50 text-emerald-800 border-emerald-300"
+                                  : "bg-purple-50 text-purple-800 border-purple-300"
+                              }`}
+                            >
+                              {tx.transactionType}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-slate-700">{tx.fromDepartmentName || "-"}</td>
+                          <td className="py-3 px-4 text-slate-700">{tx.toDepartmentName || "-"}</td>
+                          <td className="py-3 px-4 font-semibold text-slate-900">{tx.masterCode}</td>
+                          <td className="py-3 px-4 text-slate-700">{tx.masterDescription}</td>
+                          <td className="py-3 px-4 text-slate-700">
+                            {(() => {
+                              const displayCat = tx.category || (itemCategory ? (getCategoriesForItem(masterObj)[0] || itemCategory) : null);
+                              return displayCat ? (
+                                <span className="inline-block px-2.5 py-1 rounded-md bg-sky-50 text-xs font-bold text-sky-800 border border-sky-200">
+                                  {displayCat}
+                                </span>
+                              ) : (
+                                <span className="text-slate-400 italic text-xs">-</span>
+                              );
+                            })()}
+                          </td>
+                        <td className="py-3 px-4 text-right font-bold text-slate-900">
+                          {tx.quantity} {tx.unitOfMeasurement}
+                        </td>
+                        <td className="py-3 px-4 text-xs text-slate-500">
+                          {new Date(tx.transactionDate).toLocaleString("en-IN")}
+                        </td>
+                        <td className="py-3 px-4 text-slate-500 text-xs">{tx.remarks || "-"}</td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                    <tr>
+                      <td colSpan="10" className="py-8 text-center text-slate-500 text-sm">
+                        No transaction records match the current filter.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         )}

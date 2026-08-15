@@ -186,8 +186,8 @@ export function CompanyMasterListPage({ cm, page, setPage }) {
                         {r.logo ? (
                           <img src={r.logo} alt="" className="w-9 h-9 rounded object-cover border" style={{ borderColor: C.line }} />
                         ) : (
-                          <div className="w-9 h-9 rounded flex items-center justify-center shrink-0" style={{ backgroundColor: C.redSoft }}>
-                            <Building2 size={16} style={{ color: C.red }} />
+                          <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 bg-sky-50 border border-sky-100 text-sky-600">
+                            <Building2 size={16} />
                           </div>
                         )}
 
@@ -450,7 +450,7 @@ export function CompanyMasterListPage({ cm, page, setPage }) {
           <div className="bg-white rounded-2xl max-w-md w-full border shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
             <div className="p-5 border-b flex items-center justify-between bg-slate-50" style={{ borderColor: C.line }}>
               <div className="flex items-center gap-2.5 font-bold text-slate-800 text-sm truncate">
-                <Building2 size={18} style={{ color: C.red }} className="shrink-0" />
+                <Building2 size={18} className="shrink-0 text-sky-600" />
                 <span className="truncate">{viewChoiceRecord.companyName} ({viewChoiceRecord.companyCode})</span>
               </div>
               <button onClick={() => setViewChoiceRecord(null)} className="p-1 rounded text-slate-400 hover:text-slate-600">
