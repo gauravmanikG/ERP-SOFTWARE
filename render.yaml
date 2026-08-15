@@ -6,7 +6,6 @@ services:
     name: silver-muller-seals-backend
     runtime: docker
     plan: free
-    rootDir: backend
     dockerfilePath: Dockerfile
     healthCheckPath: /
     envVars:
