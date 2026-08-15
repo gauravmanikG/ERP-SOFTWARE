@@ -1,10 +1,11 @@
 services:
   # ----------------------------------------------------------------------------
-  # 1. Spring Boot Java Backend (Docker)
+  # 1. Spring Boot Java Backend (Free Tier Web Service)
   # ----------------------------------------------------------------------------
   - type: web
     name: silver-muller-seals-backend
     runtime: docker
+    plan: free
     rootDir: backend
     dockerfilePath: Dockerfile
     healthCheckPath: /api/inventory/transaction-types
@@ -13,11 +14,12 @@ services:
         value: "4000"
 
   # ----------------------------------------------------------------------------
-  # 2. Vite React Frontend (Static Site)
+  # 2. Vite React Frontend (Free Tier Static Site)
   # ----------------------------------------------------------------------------
   - type: web
     name: silver-muller-seals-frontend
     runtime: static
+    plan: free
     rootDir: frontend
     buildCommand: npm install && npm run build
     staticPublishPath: dist
