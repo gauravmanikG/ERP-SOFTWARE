@@ -15,7 +15,7 @@ export function ERPDashboard() {
   const now = new Date();
   const dateStr = now.toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"});
   const timeStr = now.toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"});
-  const bg=dark?"#0f172a":"#f0f4f8", sbg=dark?"#1e293b":"#fff", bdr=dark?"rgba(148,163,184,0.1)":"rgba(148,163,184,0.2)";
+  const bg=dark?"#0f172a":"#f1f5f9", sbg=dark?"#1e293b":"#fff", bdr=dark?"rgba(148,163,184,0.1)":"rgba(148,163,184,0.2)";
   const navGroups=[
     {label:"OVERVIEW",items:[{id:"dashboard",label:"Dashboard",icon:<Ic.Dashboard/>},{id:"reports",label:"Reports & Analytics",icon:<Ic.Reports/>}]},
     {label:"OPERATIONS",items:[{id:"entry-forms",label:"Entry Forms",icon:<Ic.EntryForm/>},{id:"inventory",label:"Inventory Management",icon:<Ic.Inventory/>}]},
