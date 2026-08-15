@@ -38,7 +38,7 @@ public class InventoryTransaction {
     @Column(name = "quantity", nullable = false, precision = 15, scale = 2)
     private BigDecimal quantity;
 
-    @Column(name = "transaction_date", nullable = false, columnDefinition = "TIMESTAMPTZ DEFAULT now()")
+    @Column(name = "transaction_date", nullable = false)
     private OffsetDateTime transactionDate;
 
     @Column(name = "remarks", columnDefinition = "TEXT")
@@ -49,6 +49,14 @@ public class InventoryTransaction {
     private InventoryTransaction reversedTransaction;
 
     public InventoryTransaction() {
+        this.transactionDate = OffsetDateTime.now();
+    }
+
+    @PrePersist
+    public void prePersist() {
+        if (this.transactionDate == null) {
+            this.transactionDate = OffsetDateTime.now();
+        }
     }
 
     public Long getId() {

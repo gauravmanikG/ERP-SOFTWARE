@@ -59,8 +59,25 @@ public class DataInitializer {
                         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
                 """);
+
+                // 2. Ensure inventory_transaction table exists across all databases
+                jdbc.execute("""
+                    CREATE TABLE IF NOT EXISTS inventory_transaction (
+                        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                        transaction_number VARCHAR(50) NOT NULL,
+                        slip_number VARCHAR(100),
+                        transaction_type_id BIGINT NOT NULL,
+                        master_id BIGINT NOT NULL,
+                        from_department_id BIGINT NOT NULL,
+                        to_department_id BIGINT,
+                        quantity NUMERIC(15, 2) NOT NULL,
+                        transaction_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        remarks TEXT,
+                        reversed_transaction_id BIGINT
+                    )
+                """);
             } catch (Exception e) {
-                System.err.println("Note: Table companies check: " + e.getMessage());
+                System.err.println("Note: Table initialization: " + e.getMessage());
             }
 
             // 2. Seed Transaction Types if empty
