@@ -1,0 +1,30 @@
+services:
+  # ----------------------------------------------------------------------------
+  # 1. Spring Boot Java Backend Web Service
+  # ----------------------------------------------------------------------------
+  - type: web
+    name: silver-muller-seals-backend
+    env: java
+    rootDir: backend
+    buildCommand: mvn clean package -DskipTests
+    startCommand: java -jar target/seals-backend.jar
+    healthCheckPath: /api/inventory/transaction-types
+    envVars:
+      - key: JAVA_VERSION
+        value: "17"
+      - key: PORT
+        value: "4000"
+
+  # ----------------------------------------------------------------------------
+  # 2. Vite React Frontend Static Site
+  # ----------------------------------------------------------------------------
+  - type: web
+    name: silver-muller-seals-frontend
+    env: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

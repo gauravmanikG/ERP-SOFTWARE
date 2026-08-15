@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 
+const BASE = import.meta.env.VITE_API_URL || "";
+
 export function useInventoryTransactions() {
   const [departments, setDepartments] = useState([]);
   const [transactionTypes, setTransactionTypes] = useState([]);
@@ -11,7 +13,7 @@ export function useInventoryTransactions() {
 
   const fetchDepartments = async () => {
     try {
-      const res = await fetch("/api/inventory/departments");
+      const res = await fetch(`${BASE}/api/inventory/departments`);
       if (res.ok) {
         const data = await res.json();
         setDepartments(data);
@@ -23,7 +25,7 @@ export function useInventoryTransactions() {
 
   const fetchTransactionTypes = async () => {
     try {
-      const res = await fetch("/api/inventory/transaction-types");
+      const res = await fetch(`${BASE}/api/inventory/transaction-types`);
       if (res.ok) {
         const data = await res.json();
         setTransactionTypes(data);
@@ -35,7 +37,7 @@ export function useInventoryTransactions() {
 
   const fetchMasterItems = async () => {
     try {
-      const res = await fetch("/api/inventory/master");
+      const res = await fetch(`${BASE}/api/inventory/master`);
       if (res.ok) {
         const data = await res.json();
         setMasterItems(data);
@@ -47,7 +49,7 @@ export function useInventoryTransactions() {
 
   const fetchTransactions = async () => {
     try {
-      const res = await fetch("/api/inventory/transactions");
+      const res = await fetch(`${BASE}/api/inventory/transactions`);
       if (res.ok) {
         const data = await res.json();
         setTransactions(data);
@@ -59,7 +61,7 @@ export function useInventoryTransactions() {
 
   const fetchPreviewTransactionNumber = useCallback(async (typeName = "ISSUE") => {
     try {
-      const res = await fetch(`/api/inventory/transactions/preview-transaction-number?type=${encodeURIComponent(typeName)}`);
+      const res = await fetch(`${BASE}/api/inventory/transactions/preview-transaction-number?type=${encodeURIComponent(typeName)}`);
       if (res.ok) {
         const data = await res.json();
         const num = data.transactionNumber || data.slipNumber || "ISU-001";
@@ -109,7 +111,7 @@ export function useInventoryTransactions() {
         })),
       };
 
-      const res = await fetch("/api/inventory/transactions/batch", {
+      const res = await fetch(`${BASE}/api/inventory/transactions/batch`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -148,7 +150,7 @@ export function useInventoryTransactions() {
 
   const submitReverseTransaction = async ({ targetTransactionId, remarks }) => {
     try {
-      const res = await fetch("/api/inventory/transactions/reverse", {
+      const res = await fetch(`${BASE}/api/inventory/transactions/reverse`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ targetTransactionId, remarks }),
