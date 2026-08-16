@@ -24,6 +24,8 @@ services:
     envVars:
       - key: VITE_API_URL
         value: https://silver-muller-seals-backend-deploy.onrender.com
+      - key: VITE_GEMINI_API_KEY
+        sync: false
     routes:
       - type: rewrite
         source: /api/*

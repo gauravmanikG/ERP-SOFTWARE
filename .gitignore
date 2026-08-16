@@ -5,6 +5,7 @@ frontend/dist
 backend/target
 .vite
 .env
+frontend/.env
 backend/.env
 .DS_Store
 *.log
