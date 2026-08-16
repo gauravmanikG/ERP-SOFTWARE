@@ -5,24 +5,30 @@ import { CompanyMasterListPage } from "../../company-master/pages/CompanyMasterL
 import { useCompanyMaster } from "../../company-master/hooks/useCompanyMaster";
 import { Ic, ComingSoon } from "./erpComponents";
 import { DashboardHome } from "./DashboardHome";
+import { NotificationsPage } from "./NotificationsPage";
+import { DocumentationPage } from "./DocumentationPage";
+import { AiChatbotPage } from "./AiChatbotPage";
 
 export function ERPDashboard() {
   const [dark, setDark] = useState(false);
   const [page, setPage] = useState("dashboard");
   const [col, setCol] = useState(false);
-  const [search, setSearch] = useState("");
   const cm = useCompanyMaster();
   const now = new Date();
   const dateStr = now.toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"});
   const timeStr = now.toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"});
   const bg=dark?"#0f172a":"#f1f5f9", sbg=dark?"#1e293b":"#fff", bdr=dark?"rgba(148,163,184,0.1)":"rgba(148,163,184,0.2)";
   const navGroups=[
-    {label:"OVERVIEW",items:[{id:"dashboard",label:"Dashboard",icon:<Ic.Dashboard/>},{id:"reports",label:"Reports & Analytics",icon:<Ic.Reports/>}]},
+    {label:"OVERVIEW",items:[{id:"dashboard",label:"Dashboard",icon:<Ic.Dashboard/>},{id:"reports",label:"Reports & Analytics",icon:<Ic.Reports/>},{id:"notifications",label:"Notifications",icon:<Ic.Bell/>}]},
     {label:"OPERATIONS",items:[{id:"entry-forms",label:"Entry Forms",icon:<Ic.EntryForm/>},{id:"inventory",label:"Inventory Management",icon:<Ic.Inventory/>}]},
     {label:"ADMINISTRATION",items:[{id:"users",label:"Users & Roles",icon:<Ic.Users/>},{id:"settings",label:"Settings",icon:<Ic.Settings/>}]},
+    {label:"HELP & SUPPORT",items:[{id:"docs",label:"Documentation 📖",icon:<Ic.Docs/>},{id:"ai-chatbot",label:"AI Chatbot 🤖✨",icon:<Ic.Sparkles/>}]},
   ];
   const titles={
     dashboard:"Dashboard",
+    notifications:"Notifications & System Alerts",
+    docs:"Documentation & User Manual",
+    "ai-chatbot":"AI Assistant & Rule Guide 🤖✨",
     "entry-forms":"Entry Forms · Screen 1",
     "company-master-form":"Entry Forms · Screen 1",
     "company-master-list":"Entry Forms · Screen 2 (Records)",
@@ -36,6 +42,9 @@ export function ERPDashboard() {
 
   const pages = {
     dashboard: <DashboardHome dark={dark} setPage={setPage} />,
+    notifications: <NotificationsPage dark={dark} setPage={setPage} />,
+    docs: <DocumentationPage dark={dark} setPage={setPage} />,
+    "ai-chatbot": <AiChatbotPage dark={dark} setPage={setPage} />,
     "entry-forms": <CompanyMasterFormPage cm={cm} page={page} setPage={setPage} dark={dark} />,
     "company-master-form": <CompanyMasterFormPage cm={cm} page={page} setPage={setPage} dark={dark} />,
     "company-master-list": <CompanyMasterListPage cm={cm} page={page} setPage={setPage} dark={dark} />,
@@ -87,25 +96,26 @@ export function ERPDashboard() {
         {col&&<button onClick={()=>setCol(false)} style={{width:"100%",padding:"10px 0",display:"flex",alignItems:"center",justifyContent:"center",background:"none",border:"none",borderTop:`1px solid ${bdr}`,cursor:"pointer",color:dark?"#64748b":"#94a3b8"}}><Ic.ChevR/></button>}
       </aside>
       <div style={{flex:1,display:"flex",flexDirection:"column",minWidth:0,overflow:"hidden"}}>
-        <header style={{background:sbg,borderBottom:`1px solid ${bdr}`,padding:"0 24px",height:62,display:"flex",alignItems:"center",gap:14,position:"sticky",top:0,zIndex:40,boxShadow:dark?"0 2px 12px rgba(0,0,0,0.22)":"0 2px 8px rgba(0,0,0,0.05)"}}>
-          <div style={{flex:1,maxWidth:420,display:"flex",alignItems:"center",gap:10,background:dark?"rgba(148,163,184,0.08)":"#f1f5f9",border:`1px solid ${dark?"rgba(148,163,184,0.15)":"#e2e8f0"}`,borderRadius:12,padding:"0 14px",height:40}}>
-            <span style={{color:dark?"#64748b":"#94a3b8"}}><Ic.Search/></span>
-            <input type="text" placeholder="Search orders, SKUs, vendors..." value={search} onChange={e=>setSearch(e.target.value)} style={{flex:1,border:"none",background:"transparent",outline:"none",fontSize:13,color:dark?"#e2e8f0":"#334155",fontFamily:"inherit"}}/>
+        <div style={{padding:"18px 24px 4px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:14}}>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <span style={{fontSize:11,color:dark?"#475569":"#94a3b8"}}>ERP</span>
+            <span style={{color:dark?"#475569":"#cbd5e1"}}>&rsaquo;</span>
+            <span style={{fontSize:11,fontWeight:700,color:dark?"#94a3b8":"#64748b"}}>{titles[page]||page}</span>
           </div>
-          <div style={{flex:1}}/>
-          <div style={{position:"relative",cursor:"pointer",color:dark?"#94a3b8":"#64748b"}}>
-            <Ic.Bell/>
-            <span style={{position:"absolute",top:-5,right:-5,width:15,height:15,borderRadius:"50%",background:"#ef4444",color:"#fff",fontSize:8,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center"}}>3</span>
+          <div style={{display:"flex",alignItems:"center",gap:14}}>
+            <div 
+              onClick={() => setPage("notifications")}
+              title="View Notifications"
+              style={{position:"relative",cursor:"pointer",color:dark?"#94a3b8":"#64748b"}}
+            >
+              <Ic.Bell/>
+              <span style={{position:"absolute",top:-5,right:-5,width:15,height:15,borderRadius:"50%",background:"#ef4444",color:"#fff",fontSize:8,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center"}}>3</span>
+            </div>
+            <div style={{padding:"6px 14px",borderRadius:10,background:dark?"rgba(148,163,184,0.08)":"#ffffff",border:`1px solid ${dark?"rgba(148,163,184,0.15)":"#e2e8f0"}`,textAlign:"center",boxShadow:dark?"none":"0 1px 3px rgba(0,0,0,0.05)"}}>
+              <p style={{fontSize:10,fontWeight:600,color:dark?"#94a3b8":"#64748b",lineHeight:1}}>{timeStr}</p>
+              <p style={{fontSize:11,fontWeight:800,color:dark?"#f59e0b":"#b45309",marginTop:1}}>{dateStr}</p>
+            </div>
           </div>
-          <div style={{padding:"6px 14px",borderRadius:10,background:dark?"rgba(148,163,184,0.08)":"#f1f5f9",border:`1px solid ${dark?"rgba(148,163,184,0.15)":"#e2e8f0"}`,textAlign:"center"}}>
-            <p style={{fontSize:10,fontWeight:600,color:dark?"#94a3b8":"#64748b",lineHeight:1}}>{timeStr}</p>
-            <p style={{fontSize:11,fontWeight:800,color:dark?"#f59e0b":"#b45309",marginTop:1}}>{dateStr}</p>
-          </div>
-        </header>
-        <div style={{padding:"14px 24px 0",display:"flex",alignItems:"center",gap:8}}>
-          <span style={{fontSize:11,color:dark?"#475569":"#94a3b8"}}>ERP</span>
-          <span style={{color:dark?"#475569":"#cbd5e1"}}>&rsaquo;</span>
-          <span style={{fontSize:11,fontWeight:700,color:dark?"#94a3b8":"#64748b"}}>{titles[page]||page}</span>
         </div>
         <main style={{flex:1,padding:"18px 24px",overflowY:"auto"}}>
           {pages[page]||<ComingSoon title={titles[page]||"Page"} dark={dark}/>}

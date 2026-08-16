@@ -1,7 +1,7 @@
 import React from 'react';
-import { User, Bell, Search } from 'lucide-react';
+import { User, Bell } from 'lucide-react';
 
-export const ErpLayout = ({ children, activeTab }) => {
+export const ErpLayout = ({ children, activeTab, setActiveTab }) => {
   const getBreadcrumbs = () => {
     const parts = ['Inventory', activeTab.replace('-', ' ')];
     return parts.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' / ');
@@ -9,28 +9,23 @@ export const ErpLayout = ({ children, activeTab }) => {
 
   return (
     <div className="flex-1 ml-64 min-h-screen bg-slate-50 flex flex-col">
-      {/* Top Navbar */}
-      <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 sticky top-0 z-40">
+      {/* Top Bar */}
+      <div className="flex items-center justify-between px-8 pt-6 pb-2">
         <div className="flex items-center space-x-4">
           <span className="text-sm font-medium text-slate-500">{getBreadcrumbs()}</span>
         </div>
 
         <div className="flex items-center space-x-6">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-            <input 
-              type="text" 
-              placeholder="Search anything..." 
-              className="pl-10 pr-4 py-2 bg-slate-100 border-none rounded-full text-sm w-64 focus:ring-2 focus:ring-blue-500 transition-all outline-none"
-            />
-          </div>
-          
-          <button className="p-2 text-slate-500 hover:bg-slate-100 rounded-full transition-colors relative">
+          <button 
+            onClick={() => setActiveTab && setActiveTab('notifications')}
+            title="View Notifications"
+            className="p-2 text-slate-500 hover:bg-slate-200/60 rounded-full transition-colors relative cursor-pointer"
+          >
             <Bell size={20} />
             <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
           </button>
 
-          <div className="flex items-center space-x-3 pl-4 border-l border-slate-200">
+          <div className="flex items-center space-x-3 pl-4 border-l border-slate-300/60">
             <div className="text-right">
               <p className="text-sm font-semibold text-slate-900 leading-none">Admin User</p>
               <p className="text-xs text-slate-500 mt-1">Super Admin</p>
@@ -40,7 +35,7 @@ export const ErpLayout = ({ children, activeTab }) => {
             </div>
           </div>
         </div>
-      </header>
+      </div>
 
       {/* Page Content */}
       <main className="p-8 flex-1">

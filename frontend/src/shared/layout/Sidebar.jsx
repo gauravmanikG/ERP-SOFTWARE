@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { 
   LayoutDashboard, 
+  Bell,
   ArrowLeftRight, 
   History, 
   BarChart3, 
@@ -12,7 +13,9 @@ import {
   Tags,
   Boxes,
   Ruler,
-  FileCode
+  FileCode,
+  BookOpen,
+  Sparkles
 } from 'lucide-react';
 
 export const Sidebar = ({ activeTab, setActiveTab, onExit }) => {
@@ -23,6 +26,7 @@ export const Sidebar = ({ activeTab, setActiveTab, onExit }) => {
     { id: 'transaction', label: 'Create Transaction', icon: <ArrowLeftRight size={20} /> },
     { id: 'history', label: 'Transaction History', icon: <History size={20} /> },
     { id: 'stock', label: 'Stock Report', icon: <BarChart3 size={20} /> },
+    { id: 'notifications', label: 'Notifications', icon: <Bell size={20} />, badge: 3 },
   ];
 
   const masterDataItems = [
@@ -31,6 +35,11 @@ export const Sidebar = ({ activeTab, setActiveTab, onExit }) => {
     { id: 'group-master', label: 'Group', icon: <Boxes size={18} /> },
     { id: 'unit-master', label: 'Unit', icon: <Ruler size={18} /> },
     { id: 'code-master', label: 'Main Code', icon: <FileCode size={18} /> },
+  ];
+
+  const helpItems = [
+    { id: 'docs', label: 'Documentation 📖', icon: <BookOpen size={18} /> },
+    { id: 'ai-chatbot', label: 'AI Chatbot 🤖✨', icon: <Sparkles size={18} /> },
   ];
 
   return (
@@ -45,12 +54,19 @@ export const Sidebar = ({ activeTab, setActiveTab, onExit }) => {
           <button
             key={item.id}
             onClick={() => setActiveTab(item.id)}
-            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
+            className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-colors ${
               activeTab === item.id ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
             }`}
           >
-            {item.icon}
-            <span className="font-medium">{item.label}</span>
+            <div className="flex items-center space-x-3">
+              {item.icon}
+              <span className="font-medium">{item.label}</span>
+            </div>
+            {item.badge && (
+              <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                {item.badge}
+              </span>
+            )}
           </button>
         ))}
 
@@ -84,6 +100,22 @@ export const Sidebar = ({ activeTab, setActiveTab, onExit }) => {
               ))}
             </div>
           )}
+        </div>
+
+        <div className="pt-4 border-t border-slate-800/80 mt-3">
+          <p className="text-[10px] font-bold tracking-wider text-slate-500 uppercase px-4 mb-2">Help & Support</p>
+          {helpItems.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setActiveTab(item.id)}
+              className={`w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg transition-colors ${
+                activeTab === item.id ? 'bg-blue-600 text-white font-semibold' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+              }`}
+            >
+              {item.icon}
+              <span className="text-sm font-medium">{item.label}</span>
+            </button>
+          ))}
         </div>
       </nav>
 
