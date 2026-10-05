@@ -140,6 +140,37 @@ public class DataInitializer {
                 masterRepo.save(createMaster("MAT-005", "Welding Electrode", "Consumables", "KG", new BigDecimal("300"), "Production Store"));
                 System.out.println("Seeded 5 material master items.");
             }
+
+            // 5. Seed Supplier / Vendor Master from vendor_master.sql if table is empty
+            try {
+                Long vendorCount = jdbc.queryForObject("SELECT count(*) FROM supplier_master", Long.class);
+                if (vendorCount == null || vendorCount == 0) {
+                    org.springframework.core.io.ClassPathResource res = new org.springframework.core.io.ClassPathResource("vendor_master.sql");
+                    if (res.exists()) {
+                        org.springframework.jdbc.datasource.init.ResourceDatabasePopulator populator =
+                                new org.springframework.jdbc.datasource.init.ResourceDatabasePopulator(res);
+                        populator.setContinueOnError(true);
+                        populator.execute(java.util.Objects.requireNonNull(jdbc.getDataSource()));
+                        System.out.println("Seeded supplier_master from vendor_master.sql.");
+                    }
+                }
+            } catch (Exception e) {
+                System.err.println("Note: Supplier master seeding check: " + e.getMessage());
+            }
+
+            // 6. Seed Customer Master from customer_master.sql
+            try {
+                org.springframework.core.io.ClassPathResource res = new org.springframework.core.io.ClassPathResource("customer_master.sql");
+                if (res.exists()) {
+                    org.springframework.jdbc.datasource.init.ResourceDatabasePopulator populator =
+                            new org.springframework.jdbc.datasource.init.ResourceDatabasePopulator(res);
+                    populator.setContinueOnError(true);
+                    populator.execute(java.util.Objects.requireNonNull(jdbc.getDataSource()));
+                    System.out.println("Seeded customer_master from customer_master.sql.");
+                }
+            } catch (Exception e) {
+                System.err.println("Note: Customer master seeding check: " + e.getMessage());
+            }
         };
     }
 

@@ -113,7 +113,7 @@ const MODULES_LIST = [
     name: "Purchase",
     icon: <ModuleIcons.Purchase />,
     submodules: [
-      { name: "Suppliers", targetPage: "company-master-list" },
+      { name: "Suppliers", targetPage: "supplier-master" },
       { name: "Purchase Requisition" },
       { name: "RFQ" },
       { name: "Quotations" },
@@ -203,7 +203,7 @@ const MODULES_LIST = [
     name: "CRM & Order Management",
     icon: <ModuleIcons.CRM />,
     submodules: [
-      { name: "Customers", targetPage: "company-master-list" },
+      { name: "Customers", targetPage: "customer-master" },
       { name: "Leads" },
       { name: "Enquiries" },
       { name: "Quotations" },

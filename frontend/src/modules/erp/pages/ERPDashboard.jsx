@@ -13,6 +13,8 @@ import { DepartmentStockPage } from "../../analysis/pages/DepartmentStockPage";
 import { SettingsPage } from "./SettingsPage";
 import { MouldingBOMTransferPage } from "../../moulding/pages/MouldingBOMTransferPage";
 import { ItemMasterFormPage } from "../../engineering/pages/ItemMasterFormPage";
+import { SupplierMasterPage } from "../../purchase/pages/SupplierMasterPage";
+import { CustomerMasterPage } from "../../crm/pages/CustomerMasterPage";
 
 function pageSlot(page) {
   if (page === "company-master-form") return "entry-forms";
@@ -37,6 +39,10 @@ function SlotPage({ slot, dark, setPage, page, cm, isActive }) {
       return <CompanyMasterFormPage cm={cm} page={page} setPage={setPage} dark={dark} />;
     case "company-master-list":
       return <CompanyMasterListPage cm={cm} page={page} setPage={setPage} dark={dark} />;
+    case "supplier-master":
+      return <SupplierMasterPage dark={dark} onBackToHome={() => setPage("dashboard")} setPage={setPage} />;
+    case "customer-master":
+      return <CustomerMasterPage dark={dark} onBackToHome={() => setPage("dashboard")} setPage={setPage} />;
     case "inventory":
       return <InventoryTransactionPage defaultTab="form" dark={dark} isActive={isActive} />;
     case "moulding-bom":
@@ -121,6 +127,7 @@ export function ERPDashboard({ onBackToHome, activePage, onPageChange }) {
     {label:"OVERVIEW",items:[{id:"dashboard",label:"Dashboard",icon:<Ic.Dashboard/>},{id:"reports",label:"Reports & Analytics",icon:<Ic.Reports/>},{id:"notifications",label:"Notifications",icon:<Ic.Bell/>}]},
     {label:"OPERATIONS",items:[
       {id:"item-master",label:"Item Master Specifications",icon:<Ic.Reports/>},
+      {id:"supplier-master",label:"Supplier Master",icon:<Ic.EntryForm/>},
       {id:"entry-forms",label:"Entry Forms",icon:<Ic.EntryForm/>},
       {id:"inventory",label:"Inventory Management",icon:<Ic.Inventory/>},
       {id:"moulding-bom",label:"BOM Moulding Transfer",icon:<Ic.Inventory/>}
@@ -139,6 +146,7 @@ export function ERPDashboard({ onBackToHome, activePage, onPageChange }) {
     "company-master-form":"Entry Forms · Screen 1",
     "company-master-list":"Entry Forms · Screen 2 (Records)",
     "entry-forms-list":"Entry Forms · Screen 2 (Records)",
+    "supplier-master":"Supplier Master Directory",
     inventory:"Inventory Management",
     "inventory-history":"Inventory Management · History",
     "moulding-bom":"BOM Moulding Transfer",

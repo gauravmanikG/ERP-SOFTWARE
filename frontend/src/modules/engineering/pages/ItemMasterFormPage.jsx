@@ -557,9 +557,36 @@ export function ItemMasterFormPage({
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: bg, padding: "28px 36px", fontFamily: "'Inter', system-ui, sans-serif" }}>
-      <div style={{ maxWidth: 1320, margin: "0 auto" }}>
-        
+    <div
+      style={{
+        height: "calc(100vh - 68px)",
+        maxHeight: "calc(100vh - 68px)",
+        overflow: "hidden",
+        background: bg,
+        padding: "12px 20px 42px 20px",
+        boxSizing: "border-box",
+        display: "flex",
+        flexDirection: "column",
+        fontFamily: "'Inter', system-ui, sans-serif"
+      }}
+    >
+      <div
+        style={{
+          maxWidth: 1440,
+          width: "100%",
+          margin: "0 auto",
+          height: "100%",
+          maxHeight: "100%",
+          display: "flex",
+          flexDirection: "column",
+          minHeight: 0,
+          overflow: "hidden",
+          borderRadius: 12,
+          border: "1px solid #e2e8f0",
+          boxShadow: "0 4px 20px rgba(0,0,0,0.06)",
+          background: "#ffffff"
+        }}
+      >
         {/* Toast Alert */}
         {toastMessage && (
           <div
@@ -587,20 +614,19 @@ export function ItemMasterFormPage({
         )}
 
         {/* ========================================================================= */}
-        {/* TOP TOOLBAR & BREADCRUMB HEADER (MATCHING REFERENCE UI) */}
+        {/* TOP TOOLBAR & BREADCRUMB HEADER (STATIC - NEVER SCROLLS) */}
         {/* ========================================================================= */}
         <div
           style={{
+            flexShrink: 0,
             background: "#ffffff",
-            border: "1px solid #e2e8f0",
-            borderRadius: "12px 12px 0 0",
-            padding: "10px 18px",
+            borderBottom: "1px solid #e2e8f0",
+            padding: "9px 18px",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
             flexWrap: "wrap",
-            gap: 12,
-            boxShadow: "0 1px 3px rgba(0,0,0,0.04)"
+            gap: 12
           }}
         >
           {/* Left Action Buttons */}
@@ -756,19 +782,19 @@ export function ItemMasterFormPage({
         </div>
 
         {/* ========================================================================= */}
-        {/* ROW 2: SEARCH INPUT, CATEGORY PILLS & REAL-TIME SUMMARY METRICS */}
+        {/* ROW 2: SEARCH INPUT, CATEGORY PILLS & REAL-TIME SUMMARY METRICS (STATIC) */}
         {/* ========================================================================= */}
         <div
           style={{
+            flexShrink: 0,
             background: "#ffffff",
-            border: "1px solid #e2e8f0",
-            borderTop: "none",
-            padding: "14px 18px",
+            borderBottom: "1px solid #e2e8f0",
+            padding: "10px 18px",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
             flexWrap: "wrap",
-            gap: 16
+            gap: 14
           }}
         >
           {/* Main Search Input */}
@@ -838,24 +864,45 @@ export function ItemMasterFormPage({
               In-house <strong style={{ color: "#0f172a", fontSize: 14 }}>100%</strong>
             </div>
           </div>
-        </div>        {/* ========================================================================= */}
-        {/* DATA TABLE CONTAINER WITH COLUMN FILTER INPUTS */}
+        </div>
+
+        {/* ========================================================================= */}
+        {/* DATA TABLE CONTAINER (ONLY DATA ROWS SCROLL VERTICALLY) */}
         {/* ========================================================================= */}
         <div
           style={{
-            background: "#ffffff",
-            border: "1px solid #e2e8f0",
-            borderTop: "none",
-            borderRadius: "0 0 12px 12px",
+            flex: 1,
+            minHeight: 0,
+            overflowY: "auto",
             overflowX: "auto",
-            boxShadow: "0 2px 8px rgba(0,0,0,0.03)"
+            background: "#ffffff",
+            position: "relative"
           }}
         >
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, textAlign: "left" }}>
-            <thead>
-              {/* Header Row 1: Column Titles */}
-              <tr style={{ background: "#f1f5f9", borderBottom: "1px solid #cbd5e1" }}>
-                <th style={{ padding: "10px 12px", width: 36, textAlign: "center" }}>
+          <table
+            style={{
+              width: "100%",
+              borderCollapse: "separate",
+              borderSpacing: 0,
+              fontSize: 12,
+              textAlign: "left"
+            }}
+          >
+            <thead style={{ position: "sticky", top: 0, zIndex: 20 }}>
+              {/* Header Row 1: Column Titles (STICKY AT TOP 0) */}
+              <tr style={{ background: "#f1f5f9", height: 38 }}>
+                <th
+                  style={{
+                    position: "sticky",
+                    top: 0,
+                    zIndex: 22,
+                    background: "#f1f5f9",
+                    borderBottom: "1px solid #cbd5e1",
+                    padding: "8px 12px",
+                    width: 36,
+                    textAlign: "center"
+                  }}
+                >
                   <input
                     type="checkbox"
                     checked={selectedIds.size === filteredItems.length && filteredItems.length > 0}
@@ -863,22 +910,22 @@ export function ItemMasterFormPage({
                     style={{ cursor: "pointer", accentColor: "#2563eb" }}
                   />
                 </th>
-                <th style={{ padding: "10px 12px", fontWeight: 700, color: "#334155" }}>Photo</th>
-                <th style={{ padding: "10px 12px", fontWeight: 700, color: "#334155" }}>New Code (SMS FINAL)</th>
-                <th style={{ padding: "10px 12px", fontWeight: 700, color: "#334155" }}>Old Code</th>
-                <th style={{ padding: "10px 12px", fontWeight: 700, color: "#334155", minWidth: 200 }}>Description &amp; Size</th>
-                <th style={{ padding: "10px 12px", fontWeight: 700, color: "#334155" }}>Product</th>
-                <th style={{ padding: "10px 12px", fontWeight: 700, color: "#334155" }}>Segment</th>
-                <th style={{ padding: "10px 12px", fontWeight: 700, color: "#334155" }}>Region</th>
-                <th style={{ padding: "10px 12px", fontWeight: 700, color: "#334155" }}>Dimensions (ID × OD × H)</th>
-                <th style={{ padding: "10px 12px", fontWeight: 700, color: "#334155" }}>Material</th>
-                <th style={{ padding: "10px 12px", fontWeight: 700, color: "#334155" }}>Price</th>
+                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", whiteSpace: "nowrap" }}>Photo</th>
+                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", whiteSpace: "nowrap" }}>New Code (SMS FINAL)</th>
+                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", whiteSpace: "nowrap" }}>Old Code</th>
+                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", minWidth: 200, whiteSpace: "nowrap" }}>Description &amp; Size</th>
+                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", whiteSpace: "nowrap" }}>Product</th>
+                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", whiteSpace: "nowrap" }}>Segment</th>
+                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", whiteSpace: "nowrap" }}>Region</th>
+                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", whiteSpace: "nowrap" }}>Dimensions (ID × OD × H)</th>
+                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", whiteSpace: "nowrap" }}>Material</th>
+                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", whiteSpace: "nowrap" }}>Price</th>
               </tr>
 
-              {/* Header Row 2: Per-Column Filter Input Boxes */}
-              <tr style={{ background: "#f8fafc", borderBottom: "2px solid #cbd5e1" }}>
-                <td style={{ padding: "6px 12px", textAlign: "center" }}></td>
-                <td style={{ padding: "6px 10px" }}>
+              {/* Header Row 2: Per-Column Filter Input Boxes (STICKY AT TOP 37) */}
+              <tr style={{ background: "#f8fafc", height: 38 }}>
+                <td style={{ position: "sticky", top: 37, zIndex: 21, background: "#f8fafc", borderBottom: "2px solid #cbd5e1", padding: "4px 12px", textAlign: "center", boxShadow: "0 2px 4px rgba(0,0,0,0.04)" }}></td>
+                <td style={{ position: "sticky", top: 37, zIndex: 21, background: "#f8fafc", borderBottom: "2px solid #cbd5e1", padding: "4px 8px", boxShadow: "0 2px 4px rgba(0,0,0,0.04)" }}>
                   <input
                     type="text"
                     placeholder="Filter..."
@@ -890,11 +937,12 @@ export function ItemMasterFormPage({
                       fontSize: 11,
                       border: "1px solid #cbd5e1",
                       borderRadius: 4,
-                      outline: "none"
+                      outline: "none",
+                      boxSizing: "border-box"
                     }}
                   />
                 </td>
-                <td style={{ padding: "6px 10px" }}>
+                <td style={{ position: "sticky", top: 37, zIndex: 21, background: "#f8fafc", borderBottom: "2px solid #cbd5e1", padding: "4px 8px", boxShadow: "0 2px 4px rgba(0,0,0,0.04)" }}>
                   <input
                     type="text"
                     placeholder="Filter..."
@@ -906,11 +954,12 @@ export function ItemMasterFormPage({
                       fontSize: 11,
                       border: "1px solid #cbd5e1",
                       borderRadius: 4,
-                      outline: "none"
+                      outline: "none",
+                      boxSizing: "border-box"
                     }}
                   />
                 </td>
-                <td style={{ padding: "6px 10px" }}>
+                <td style={{ position: "sticky", top: 37, zIndex: 21, background: "#f8fafc", borderBottom: "2px solid #cbd5e1", padding: "4px 8px", boxShadow: "0 2px 4px rgba(0,0,0,0.04)" }}>
                   <input
                     type="text"
                     placeholder="Filter..."
@@ -922,11 +971,12 @@ export function ItemMasterFormPage({
                       fontSize: 11,
                       border: "1px solid #cbd5e1",
                       borderRadius: 4,
-                      outline: "none"
+                      outline: "none",
+                      boxSizing: "border-box"
                     }}
                   />
                 </td>
-                <td style={{ padding: "6px 10px" }}>
+                <td style={{ position: "sticky", top: 37, zIndex: 21, background: "#f8fafc", borderBottom: "2px solid #cbd5e1", padding: "4px 8px", boxShadow: "0 2px 4px rgba(0,0,0,0.04)" }}>
                   <input
                     type="text"
                     placeholder="Filter desc..."
@@ -938,11 +988,12 @@ export function ItemMasterFormPage({
                       fontSize: 11,
                       border: "1px solid #cbd5e1",
                       borderRadius: 4,
-                      outline: "none"
+                      outline: "none",
+                      boxSizing: "border-box"
                     }}
                   />
                 </td>
-                <td style={{ padding: "6px 10px" }}>
+                <td style={{ position: "sticky", top: 37, zIndex: 21, background: "#f8fafc", borderBottom: "2px solid #cbd5e1", padding: "4px 8px", boxShadow: "0 2px 4px rgba(0,0,0,0.04)" }}>
                   <input
                     type="text"
                     placeholder="Filter..."
@@ -954,11 +1005,12 @@ export function ItemMasterFormPage({
                       fontSize: 11,
                       border: "1px solid #cbd5e1",
                       borderRadius: 4,
-                      outline: "none"
+                      outline: "none",
+                      boxSizing: "border-box"
                     }}
                   />
                 </td>
-                <td style={{ padding: "6px 10px" }}>
+                <td style={{ position: "sticky", top: 37, zIndex: 21, background: "#f8fafc", borderBottom: "2px solid #cbd5e1", padding: "4px 8px", boxShadow: "0 2px 4px rgba(0,0,0,0.04)" }}>
                   <input
                     type="text"
                     placeholder="Filter..."
@@ -970,11 +1022,12 @@ export function ItemMasterFormPage({
                       fontSize: 11,
                       border: "1px solid #cbd5e1",
                       borderRadius: 4,
-                      outline: "none"
+                      outline: "none",
+                      boxSizing: "border-box"
                     }}
                   />
                 </td>
-                <td style={{ padding: "6px 10px" }}>
+                <td style={{ position: "sticky", top: 37, zIndex: 21, background: "#f8fafc", borderBottom: "2px solid #cbd5e1", padding: "4px 8px", boxShadow: "0 2px 4px rgba(0,0,0,0.04)" }}>
                   <input
                     type="text"
                     placeholder="Filter..."
@@ -986,11 +1039,12 @@ export function ItemMasterFormPage({
                       fontSize: 11,
                       border: "1px solid #cbd5e1",
                       borderRadius: 4,
-                      outline: "none"
+                      outline: "none",
+                      boxSizing: "border-box"
                     }}
                   />
                 </td>
-                <td style={{ padding: "6px 10px" }}>
+                <td style={{ position: "sticky", top: 37, zIndex: 21, background: "#f8fafc", borderBottom: "2px solid #cbd5e1", padding: "4px 8px", boxShadow: "0 2px 4px rgba(0,0,0,0.04)" }}>
                   <input
                     type="text"
                     placeholder="Filter..."
@@ -1002,11 +1056,12 @@ export function ItemMasterFormPage({
                       fontSize: 11,
                       border: "1px solid #cbd5e1",
                       borderRadius: 4,
-                      outline: "none"
+                      outline: "none",
+                      boxSizing: "border-box"
                     }}
                   />
                 </td>
-                <td style={{ padding: "6px 10px" }}>
+                <td style={{ position: "sticky", top: 37, zIndex: 21, background: "#f8fafc", borderBottom: "2px solid #cbd5e1", padding: "4px 8px", boxShadow: "0 2px 4px rgba(0,0,0,0.04)" }}>
                   <input
                     type="text"
                     placeholder="Filter..."
@@ -1018,11 +1073,12 @@ export function ItemMasterFormPage({
                       fontSize: 11,
                       border: "1px solid #cbd5e1",
                       borderRadius: 4,
-                      outline: "none"
+                      outline: "none",
+                      boxSizing: "border-box"
                     }}
                   />
                 </td>
-                <td style={{ padding: "6px 10px" }}>
+                <td style={{ position: "sticky", top: 37, zIndex: 21, background: "#f8fafc", borderBottom: "2px solid #cbd5e1", padding: "4px 8px", boxShadow: "0 2px 4px rgba(0,0,0,0.04)" }}>
                   <input
                     type="text"
                     placeholder="Filter..."
@@ -1034,7 +1090,8 @@ export function ItemMasterFormPage({
                       fontSize: 11,
                       border: "1px solid #cbd5e1",
                       borderRadius: 4,
-                      outline: "none"
+                      outline: "none",
+                      boxSizing: "border-box"
                     }}
                   />
                 </td>
@@ -1165,14 +1222,13 @@ export function ItemMasterFormPage({
           </table>
         </div>
 
-        {/* Pagination Toolbar */}
+        {/* Pagination Toolbar (STATIC AT BOTTOM OF CARD) */}
         <div
           style={{
+            flexShrink: 0,
             background: "#ffffff",
-            border: "1px solid #e2e8f0",
-            borderTop: "none",
-            borderRadius: "0 0 12px 12px",
-            padding: "10px 18px",
+            borderTop: "1px solid #e2e8f0",
+            padding: "8px 18px",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",

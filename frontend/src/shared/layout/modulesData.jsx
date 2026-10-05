@@ -120,7 +120,7 @@ export const MODULES_LIST = [
     name: "Purchase",
     iconKey: "Purchase",
     submodules: [
-      { name: "Suppliers", targetPage: "company-master-list", ready: true },
+      { name: "Suppliers", targetPage: "supplier-master", ready: true },
       { name: "Purchase Requisition" },
       { name: "RFQ" },
       { name: "Quotations" },
@@ -210,7 +210,7 @@ export const MODULES_LIST = [
     name: "CRM & Order Management",
     iconKey: "CRM",
     submodules: [
-      { name: "Customers", targetPage: "company-master-list", ready: true },
+      { name: "Customers", targetPage: "customer-master", ready: true },
       { name: "Leads" },
       { name: "Enquiries" },
       { name: "Quotations" },

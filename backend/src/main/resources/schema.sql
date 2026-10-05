@@ -960,3 +960,80 @@ ON CONFLICT (old_code) DO UPDATE SET
 INSERT INTO sms_inventory.operation_master (operation_name) VALUES ('BOM FG Transfer Receipt') ON CONFLICT (operation_name) DO NOTHING;
 INSERT INTO public.operation_master (operation_name) VALUES ('BOM FG Transfer Receipt') ON CONFLICT (operation_name) DO NOTHING;
 INSERT INTO transaction_type (type) VALUES ('BOM FG Transfer Receipt') ON CONFLICT (type) DO NOTHING;
+
+-- =============================================================================
+-- Supplier / Vendor Master Schema (Book 3 & Book 5 matched attributes)
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS public.supplier_master (
+    id BIGSERIAL PRIMARY KEY,
+    supplier_id VARCHAR(50) NOT NULL UNIQUE,
+    supplier_code VARCHAR(50) NOT NULL UNIQUE,
+    supplier_name VARCHAR(255) NOT NULL,
+    company_id VARCHAR(50) NOT NULL DEFAULT 'COMP-001',
+    supplier_type VARCHAR(50) DEFAULT 'MATERIAL',
+    gstin VARCHAR(50),
+    pan VARCHAR(30),
+    udyam_no VARCHAR(50),
+    msme_category VARCHAR(50) DEFAULT 'NOT_MSME',
+    gst_registration_type VARCHAR(50) NOT NULL DEFAULT 'REGISTERED',
+    tds_section_id VARCHAR(50) DEFAULT 'TDS-194C',
+    contact_person VARCHAR(255),
+    email VARCHAR(255),
+    phone VARCHAR(50),
+    payment_terms_id VARCHAR(50) DEFAULT 'PT-30',
+    currency VARCHAR(10) DEFAULT 'INR',
+    status VARCHAR(30) NOT NULL DEFAULT 'ACTIVE',
+    address TEXT,
+    city VARCHAR(100),
+    state VARCHAR(100),
+    state_code VARCHAR(10),
+    pincode VARCHAR(20),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(50) NOT NULL DEFAULT 'SYSTEM',
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_by VARCHAR(50) NOT NULL DEFAULT 'SYSTEM'
+);
+
+CREATE INDEX IF NOT EXISTS idx_supplier_code ON public.supplier_master(supplier_code);
+CREATE INDEX IF NOT EXISTS idx_supplier_name ON public.supplier_master(supplier_name);
+CREATE INDEX IF NOT EXISTS idx_supplier_gstin ON public.supplier_master(gstin);
+CREATE INDEX IF NOT EXISTS idx_supplier_state ON public.supplier_master(state);
+
+-- =============================================================================
+-- Customer Master Schema (Book 3 & Book 5 matched attributes)
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS public.customer_master (
+    id BIGSERIAL PRIMARY KEY,
+    customer_id VARCHAR(50) NOT NULL UNIQUE,
+    customer_code VARCHAR(50) NOT NULL UNIQUE,
+    customer_name VARCHAR(255) NOT NULL,
+    company_id VARCHAR(50) NOT NULL DEFAULT 'COMP-001',
+    customer_type VARCHAR(50) DEFAULT 'OEM',
+    gstin VARCHAR(50),
+    pan VARCHAR(30),
+    udyam_no VARCHAR(50),
+    msme_category VARCHAR(50) DEFAULT 'NOT_MSME',
+    gst_registration_type VARCHAR(50) NOT NULL DEFAULT 'REGISTERED',
+    contact_person VARCHAR(255),
+    email VARCHAR(255),
+    phone VARCHAR(50),
+    payment_terms_id VARCHAR(50) DEFAULT 'PT-30',
+    credit_limit NUMERIC(15,2) DEFAULT 500000.00,
+    currency VARCHAR(10) DEFAULT 'INR',
+    status VARCHAR(30) NOT NULL DEFAULT 'ACTIVE',
+    address TEXT,
+    city VARCHAR(100),
+    state VARCHAR(100),
+    state_code VARCHAR(10),
+    pincode VARCHAR(20),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(50) NOT NULL DEFAULT 'SYSTEM',
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_by VARCHAR(50) NOT NULL DEFAULT 'SYSTEM'
+);
+
+CREATE INDEX IF NOT EXISTS idx_customer_code ON public.customer_master(customer_code);
+CREATE INDEX IF NOT EXISTS idx_customer_name ON public.customer_master(customer_name);
+CREATE INDEX IF NOT EXISTS idx_customer_gstin ON public.customer_master(gstin);
+CREATE INDEX IF NOT EXISTS idx_customer_state ON public.customer_master(state);
+

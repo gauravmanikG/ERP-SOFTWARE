@@ -50,6 +50,12 @@ export function GlobalTopHeader({
     if (currentView === "item-master") {
       return { module: "Engineering", screen: "Item Master Specifications" };
     }
+    if (currentView === "supplier-master") {
+      return { module: "Purchase", screen: "Supplier Master Directory" };
+    }
+    if (currentView === "customer-master") {
+      return { module: "CRM & Sales", screen: "Customer Master Directory" };
+    }
     if (currentView === "operations") {
       const slotMap = {
         dashboard: "Dashboard Overview",
@@ -59,6 +65,7 @@ export function GlobalTopHeader({
         "entry-forms": "Entry Forms · Screen 1",
         "company-master-form": "Company & Supplier Master",
         "company-master-list": "Company Master List",
+        "supplier-master": "Supplier Master Directory",
         inventory: "Inventory Management",
         "moulding-bom": "BOM Moulding Transfer",
         "dept-wise-cb": "Department Stock Ledger",
