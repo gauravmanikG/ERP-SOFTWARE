@@ -3,19 +3,19 @@ import * as XLSX from "xlsx";
 // Canonical field keys for inventory transactions
 export const INVENTORY_EXCEL_FIELDS = [
   { key: "slipNumber", label: "Slip No.", required: false, desc: "Optional manual slip reference" },
-  { key: "type", label: "Type", required: true, desc: "Mandatory (ISSUE, RECEIPT, or REVERSE)" },
-  { key: "fromDept", label: "From Dept", required: true, desc: "Mandatory (e.g. Stores, Production)" },
-  { key: "toDept", label: "To Dept", required: false, desc: "Optional / Destination department" },
-  { key: "itemCode", label: "Item Code", required: true, desc: "Mandatory (e.g. MAT-001, MAT-002)" },
-  { key: "description", label: "Description", required: false, desc: "Item description (auto-filled if empty)" },
-  { key: "category", label: "Category", required: false, desc: "Item category (auto-filled from master if empty)" },
-  { key: "quantity", label: "Quantity", required: true, desc: "Mandatory positive quantity (> 0)" },
+  { key: "type", label: "Type", required: true, desc: "Must match an operation_master name (case-insensitive)" },
+  { key: "fromDept", label: "From Dept", required: true, desc: "Must match a department name (case-insensitive)" },
+  { key: "toDept", label: "To Dept", required: true, desc: "Must match a department name (case-insensitive)" },
+  { key: "itemCode", label: "Item Code", required: true, desc: "Must exist in item / material master (matched as uppercase)" },
+  { key: "description", label: "Description", required: false, desc: "If empty, taken from the item master" },
+  { key: "category", label: "Category", required: true, desc: "Must match a category_master name (case-insensitive)" },
+  { key: "quantity", label: "Quantity", required: true, desc: "Required numeric quantity greater than 0" },
   { key: "timestamp", label: "Timestamp", required: false, desc: "Optional date/time (defaults to now)" },
   { key: "remarks", label: "Remarks", required: false, desc: "Optional notes" },
 ];
 
 // Core mandatory columns in Excel header
-const REQUIRED_HEADERS = ["type", "fromDept", "itemCode", "quantity"];
+const REQUIRED_HEADERS = ["type", "fromDept", "toDept", "itemCode", "quantity", "category"];
 
 // Normalize header text for flexible matching:
 // 1. Removes text in parentheses (e.g. "(Required: ISSUE / RECEIPT / REVERSE)", "(Optional)")
@@ -67,85 +67,95 @@ const HEADER_MAP = {
 /**
  * Generate and download sample Excel template with guidelines & valid master references
  */
-export function downloadInventorySampleExcel(departments = [], masterItems = []) {
+export function downloadInventorySampleExcel(departments = [], masterItems = [], transactionTypes = [], categories = []) {
+  const opName = (t) => t?.type || t?.operationName || "";
+  const catName = (c) => c?.categoryName || c?.name || "";
+  const firstOp = opName(transactionTypes[0]) || "Material Transfer";
+  const inboundOp = transactionTypes.map(opName).find((n) => n.toLowerCase() === "customer rejection receipt") || firstOp;
+  const deptA = departments[0]?.name || "";
+  const deptB = departments[1]?.name || departments[0]?.name || "";
+  const itemA = masterItems[0];
+  const itemB = masterItems[1] || masterItems[0];
+  const itemC = masterItems[2] || masterItems[0];
+  const catA = catName(categories[0]) || itemA?.category || "";
+  const catB = catName(categories[1]) || catName(categories[0]) || itemB?.category || "";
+  const catC = catName(categories[2]) || catName(categories[0]) || itemC?.category || "";
+
   const sampleRows = [
     {
       "Slip No. (Optional)": "SLIP-2026-001",
-      "Type * (Required: ISSUE / RECEIPT / REVERSE)": "ISSUE",
-      "From Dept * (Required)": "Stores",
-      "To Dept (Optional)": "Production",
-      "Item Code * (Required)": "MAT-001",
-      "Description (Optional)": "Steel Sheet",
-      "Category (Optional)": "Raw Material - Prime Steel",
+      "Type * (Required)": firstOp,
+      "From Dept * (Required)": deptA,
+      "To Dept * (Required)": deptB,
+      "Item Code * (Required)": itemA?.code || "",
+      "Description (Optional)": itemA?.description || "",
+      "Category * (Required)": catA,
       "Quantity * (Required > 0)": 50,
       "Timestamp (Optional)": "15-Aug-2026",
-      "Remarks (Optional)": "Issued for Line 1 Fabrication",
+      "Remarks (Optional)": "Sample transfer",
     },
     {
       "Slip No. (Optional)": "SLIP-2026-002",
-      "Type * (Required: ISSUE / RECEIPT / REVERSE)": "RECEIPT",
-      "From Dept * (Required)": "Stores",
-      "To Dept (Optional)": "Main Store",
-      "Item Code * (Required)": "MAT-002",
-      "Description (Optional)": "Stainless Steel Rod",
-      "Category (Optional)": "Raw Material - Stainless Rod 304",
+      "Type * (Required)": inboundOp,
+      "From Dept * (Required)": deptA,
+      "To Dept * (Required)": deptA,
+      "Item Code * (Required)": itemB?.code || "",
+      "Description (Optional)": itemB?.description || "",
+      "Category * (Required)": catB,
       "Quantity * (Required > 0)": 100,
       "Timestamp (Optional)": "15-Aug-2026",
-      "Remarks (Optional)": "Vendor GRN inward consignment",
+      "Remarks (Optional)": "Sample inbound (Customer Rejection Receipt — stock check skipped)",
     },
     {
       "Slip No. (Optional)": "SLIP-2026-003",
-      "Type * (Required: ISSUE / RECEIPT / REVERSE)": "ISSUE",
-      "From Dept * (Required)": "Stores",
-      "To Dept (Optional)": "Maintenance",
-      "Item Code * (Required)": "MAT-003",
-      "Description (Optional)": "Bearing 6205",
-      "Category (Optional)": "Spare Parts - Deep Groove Bearing",
+      "Type * (Required)": firstOp,
+      "From Dept * (Required)": deptA,
+      "To Dept * (Required)": deptB,
+      "Item Code * (Required)": itemC?.code || "",
+      "Description (Optional)": itemC?.description || "",
+      "Category * (Required)": catC,
       "Quantity * (Required > 0)": 5,
       "Timestamp (Optional)": "15-Aug-2026",
-      "Remarks (Optional)": "Replaced for Pump Motor 02",
+      "Remarks (Optional)": "Sample movement",
     },
   ];
 
+  const allowedOps = transactionTypes.map(opName).filter(Boolean).join(", ") || "(load operations from backend)";
+  const allowedDepts = departments.map((d) => d.name).filter(Boolean).join(", ") || "(load departments from backend)";
+  const allowedCats = categories.map(catName).filter(Boolean).join(", ") || "(load categories from backend)";
   const guidelinesData = [
-    { "Field Name": "Type", "Required": "REQUIRED *", "Allowed Values & Notes": "Must be ISSUE, RECEIPT, or REVERSE" },
-    { "Field Name": "From Dept", "Required": "REQUIRED *", "Allowed Values & Notes": "Must match a valid department (e.g. Stores, Production, Maintenance, Quality Control, Administration)" },
-    { "Field Name": "To Dept", "Required": "OPTIONAL", "Allowed Values & Notes": "Destination department name if applicable (e.g. Production)" },
-    { "Field Name": "Item Code", "Required": "REQUIRED *", "Allowed Values & Notes": "Must match an existing Item Code in Material Master (e.g. MAT-001 to MAT-005)" },
-    { "Field Name": "Quantity", "Required": "REQUIRED *", "Allowed Values & Notes": "Positive number greater than 0 (e.g. 50, 10.5)" },
-    { "Field Name": "Category", "Required": "OPTIONAL", "Allowed Values & Notes": "Item Category (auto-filled from Material Master if left blank)" },
+    { "Field Name": "Type", "Required": "REQUIRED *", "Allowed Values & Notes": `Must match an operation_master name (case-insensitive). Current list: ${allowedOps}` },
+    { "Field Name": "From Dept", "Required": "REQUIRED *", "Allowed Values & Notes": `Must match a department name from the backend list (case-insensitive). Current list: ${allowedDepts}` },
+    { "Field Name": "To Dept", "Required": "REQUIRED *", "Allowed Values & Notes": `Must match a department name from the backend list (case-insensitive). Current list: ${allowedDepts}` },
+    { "Field Name": "Item Code", "Required": "REQUIRED *", "Allowed Values & Notes": "Must exist in item / material master. Matched case-insensitively and compared as uppercase. See Valid Master Items sheet." },
+    { "Field Name": "Quantity", "Required": "REQUIRED *", "Allowed Values & Notes": "Required numeric value greater than 0. For types other than Customer Rejection Receipt: if From Dept has a known closing balance > 0, quantity cannot exceed that balance." },
+    { "Field Name": "Category", "Required": "REQUIRED *", "Allowed Values & Notes": `Must match a category_master name (case-insensitive). Current list: ${allowedCats}` },
     { "Field Name": "Slip No.", "Required": "OPTIONAL", "Allowed Values & Notes": "Optional custom slip number or reference code" },
-    { "Field Name": "Description", "Required": "OPTIONAL", "Allowed Values & Notes": "Item description (auto-derived from master if left blank)" },
+    { "Field Name": "Description", "Required": "OPTIONAL", "Allowed Values & Notes": "If empty, taken from the item master" },
     { "Field Name": "Timestamp", "Required": "OPTIONAL", "Allowed Values & Notes": "Date of transaction (defaults to current system date if empty)" },
     { "Field Name": "Remarks", "Required": "OPTIONAL", "Allowed Values & Notes": "Optional transaction notes or remarks" },
   ];
 
-  const validReferenceData = masterItems.length > 0
-    ? masterItems.map((m) => ({
+  const validReferenceData = masterItems.map((m) => ({
         "Valid Item Code": m.code,
         "Item Description": m.description,
         "Category": m.category,
         "Unit (UOM)": m.unitOfMeasurement,
         "Store Name": m.storeName,
         "Current Available Balance": m.currentBalance || m.openingBalance || 0,
-      }))
-    : [
-        { "Valid Item Code": "MAT-001", "Item Description": "Steel Sheet", "Category": "Raw Material", "Unit (UOM)": "KG", "Store Name": "Main Store", "Current Available Balance": 5000 },
-        { "Valid Item Code": "MAT-002", "Item Description": "Stainless Steel Rod", "Category": "Raw Material", "Unit (UOM)": "KG", "Store Name": "Main Store", "Current Available Balance": 2500 },
-        { "Valid Item Code": "MAT-003", "Item Description": "Bearing 6205", "Category": "Spare Parts", "Unit (UOM)": "PCS", "Store Name": "Maintenance Store", "Current Available Balance": 150 },
-        { "Valid Item Code": "MAT-004", "Item Description": "Lubricating Oil", "Category": "Consumables", "Unit (UOM)": "LTR", "Store Name": "Maintenance Store", "Current Available Balance": 500 },
-        { "Valid Item Code": "MAT-005", "Item Description": "Welding Electrode", "Category": "Consumables", "Unit (UOM)": "KG", "Store Name": "Production Store", "Current Available Balance": 300 },
-      ];
+      }));
 
-  const validDeptData = departments.length > 0
-    ? departments.map((d) => ({ "Valid Department Name": d.name, "Department ID": d.id }))
-    : [
-        { "Valid Department Name": "Stores", "Department ID": 4 },
-        { "Valid Department Name": "Production", "Department ID": 1 },
-        { "Valid Department Name": "Maintenance", "Department ID": 2 },
-        { "Valid Department Name": "Quality Control", "Department ID": 3 },
-        { "Valid Department Name": "Administration", "Department ID": 5 },
-      ];
+  const validDeptData = departments.map((d) => ({ "Valid Department Name": d.name, "Department ID": d.id }));
+
+  const validOpData = transactionTypes.map((t) => ({
+    "Valid Operation": t.type || t.operationName,
+    "Operation ID": t.id,
+  }));
+
+  const validCatData = categories.map((c) => ({
+    "Valid Category": catName(c),
+    "Category ID": c.id,
+  }));
 
   const workbook = XLSX.utils.book_new();
 
@@ -163,14 +173,22 @@ export function downloadInventorySampleExcel(departments = [], masterItems = [])
   XLSX.utils.book_append_sheet(workbook, worksheet2, "Field Guidelines");
 
   // Sheet 3: Available Item Masters Reference
-  const worksheet3 = XLSX.utils.json_to_sheet(validReferenceData);
+  const worksheet3 = XLSX.utils.json_to_sheet(validReferenceData.length ? validReferenceData : [{ "Valid Item Code": "(none loaded from backend)" }]);
   worksheet3["!cols"] = [{ wch: 18 }, { wch: 25 }, { wch: 20 }, { wch: 14 }, { wch: 20 }, { wch: 25 }];
   XLSX.utils.book_append_sheet(workbook, worksheet3, "Valid Master Items");
 
   // Sheet 4: Available Departments Reference
-  const worksheet4 = XLSX.utils.json_to_sheet(validDeptData);
+  const worksheet4 = XLSX.utils.json_to_sheet(validDeptData.length ? validDeptData : [{ "Valid Department Name": "(none loaded from backend)" }]);
   worksheet4["!cols"] = [{ wch: 25 }, { wch: 18 }];
   XLSX.utils.book_append_sheet(workbook, worksheet4, "Valid Departments");
+
+  const worksheet5 = XLSX.utils.json_to_sheet(validOpData.length ? validOpData : [{ "Valid Operation": "(none loaded from operation_master)" }]);
+  worksheet5["!cols"] = [{ wch: 40 }, { wch: 18 }];
+  XLSX.utils.book_append_sheet(workbook, worksheet5, "Valid Operations");
+
+  const worksheet6 = XLSX.utils.json_to_sheet(validCatData.length ? validCatData : [{ "Valid Category": "(none loaded from category_master)" }]);
+  worksheet6["!cols"] = [{ wch: 40 }, { wch: 18 }];
+  XLSX.utils.book_append_sheet(workbook, worksheet6, "Valid Categories");
 
   XLSX.writeFile(workbook, "Inventory_Transaction_Upload_Template.xlsx");
 }
@@ -178,7 +196,7 @@ export function downloadInventorySampleExcel(departments = [], masterItems = [])
 /**
  * Parse Excel / CSV file, validate required headers & rows against master items, departments, and balances
  */
-export function parseAndValidateInventoryExcel(file, { departments = [], masterItems = [], getDeptBalance = () => 0 }) {
+export function parseAndValidateInventoryExcel(file, { departments = [], masterItems = [], transactionTypes = [], categories = [], getDeptBalance = () => 0 }) {
   return new Promise((resolve) => {
     const reader = new FileReader();
 
@@ -228,7 +246,7 @@ export function parseAndValidateInventoryExcel(file, { departments = [], masterI
           return resolve({
             valid: false,
             errors: [
-              `Missing required column(s) in Excel header: ${missingRequiredColumns.join(", ")}. Please ensure columns for 'Type', 'From Dept', 'Item Code', and 'Quantity' exist.`,
+              `Missing required column(s) in Excel header: ${missingRequiredColumns.join(", ")}. Please ensure columns for 'Type', 'From Dept', 'To Dept', 'Item Code', 'Quantity', and 'Category' exist.`,
             ],
             records: [],
           });
@@ -240,21 +258,18 @@ export function parseAndValidateInventoryExcel(file, { departments = [], masterI
         }
 
         // Fallback lookup maps for departments and master items if lists are loading
-        const effectiveDepts = departments.length > 0 ? departments : [
-          { id: 4, name: "Stores" },
-          { id: 1, name: "Production" },
-          { id: 2, name: "Maintenance" },
-          { id: 3, name: "Quality Control" },
-          { id: 5, name: "Administration" }
-        ];
+        const allowedTypes = (transactionTypes || [])
+          .map((t) => (t.type || t.operationName || "").trim())
+          .filter(Boolean);
+        const allowedTypeSet = new Set(allowedTypes.map((t) => t.toLowerCase()));
 
-        const effectiveMasters = masterItems.length > 0 ? masterItems : [
-          { id: 1, code: "MAT-001", description: "Steel Sheet", category: "Raw Material", unitOfMeasurement: "KG", currentBalance: 5000 },
-          { id: 2, code: "MAT-002", description: "Stainless Steel Rod", category: "Raw Material", unitOfMeasurement: "KG", currentBalance: 2500 },
-          { id: 3, code: "MAT-003", description: "Bearing 6205", category: "Spare Parts", unitOfMeasurement: "PCS", currentBalance: 150 },
-          { id: 4, code: "MAT-004", description: "Lubricating Oil", category: "Consumables", unitOfMeasurement: "LTR", currentBalance: 500 },
-          { id: 5, code: "MAT-005", description: "Welding Electrode", category: "Consumables", unitOfMeasurement: "KG", currentBalance: 300 }
-        ];
+        const allowedCategories = (categories || [])
+          .map((c) => (c.categoryName || c.name || "").trim())
+          .filter(Boolean);
+        const allowedCategorySet = new Set(allowedCategories.map((c) => c.toLowerCase()));
+
+        const effectiveDepts = departments;
+        const effectiveMasters = masterItems;
 
         const deptMap = {};
         effectiveDepts.forEach((d) => {
@@ -282,7 +297,7 @@ export function parseAndValidateInventoryExcel(file, { departments = [], masterI
           const rec = {
             rowNumber,
             slipNumber: "",
-            type: "ISSUE",
+            type: "",
             fromDept: "",
             toDept: "",
             itemCode: "",
@@ -302,15 +317,17 @@ export function parseAndValidateInventoryExcel(file, { departments = [], masterI
 
           const rowErrors = [];
 
-          // 1. Validate Transaction Type
-          const upperType = (rec.type || "").toUpperCase().trim();
-          if (!upperType) {
-            rowErrors.push("Transaction Type is required (ISSUE, RECEIPT, or REVERSE)");
-          } else if (!["ISSUE", "RECEIPT", "REVERSE"].includes(upperType)) {
-            rowErrors.push(`Invalid Transaction Type '${rec.type}'. Must be ISSUE, RECEIPT, or REVERSE`);
+          // 1. Validate Transaction Type / Operation Name
+          const rawType = (rec.type || "").trim();
+          if (!rawType) {
+            rowErrors.push("Transaction Type / Operation Name is required");
+          } else if (allowedTypeSet.size > 0 && !allowedTypeSet.has(rawType.toLowerCase())) {
+            rowErrors.push(`Type '${rawType}' is not in operation_master`);
           } else {
-            rec.type = upperType;
+            const canonical = allowedTypes.find((t) => t.toLowerCase() === rawType.toLowerCase());
+            rec.type = canonical || rawType;
           }
+
 
           // 2. Validate From Department
           if (!rec.fromDept) {
@@ -326,8 +343,12 @@ export function parseAndValidateInventoryExcel(file, { departments = [], masterI
             }
           }
 
-          // 3. Validate To Department (optional)
-          if (rec.toDept && rec.toDept.trim()) {
+          // 3. Validate To Department (required)
+          if (!rec.toDept) {
+            rowErrors.push("To Dept is required");
+            rec.toDepartmentId = null;
+            rec.toDepartmentName = "";
+          } else {
             const cleanToDept = rec.toDept.toLowerCase().trim();
             const matchedToDept = deptMap[cleanToDept];
             if (!matchedToDept) {
@@ -336,9 +357,6 @@ export function parseAndValidateInventoryExcel(file, { departments = [], masterI
               rec.toDepartmentId = matchedToDept.id;
               rec.toDepartmentName = matchedToDept.name;
             }
-          } else {
-            rec.toDepartmentId = null;
-            rec.toDepartmentName = "";
           }
 
           // 4. Validate Item Code
@@ -356,13 +374,17 @@ export function parseAndValidateInventoryExcel(file, { departments = [], masterI
               rec.masterDescription = matchedMaster.description;
               rec.unitOfMeasurement = matchedMaster.unitOfMeasurement;
               if (!rec.description) rec.description = matchedMaster.description;
-              if (!rec.category) rec.category = matchedMaster.category || "General";
             }
           }
 
-          // 5. Populate Category
-          if (!rec.category && matchedMaster) {
-            rec.category = matchedMaster.category || "General";
+          // 5. Validate Category (required — must match category_master)
+          if (!rec.category) {
+            rowErrors.push("Category is required");
+          } else if (allowedCategorySet.size > 0 && !allowedCategorySet.has(rec.category.toLowerCase())) {
+            rowErrors.push(`Category '${rec.category}' is not in category_master`);
+          } else {
+            const canonicalCat = allowedCategories.find((c) => c.toLowerCase() === rec.category.toLowerCase());
+            rec.category = canonicalCat || rec.category;
           }
 
           // 6. Validate Quantity
@@ -373,9 +395,9 @@ export function parseAndValidateInventoryExcel(file, { departments = [], masterI
             rec.quantity = numQty;
           }
 
-          // 7. Stock Balance Check for ISSUE transactions
-          if (rec.type === "ISSUE" && matchedMaster && rec.fromDepartmentId && !isNaN(numQty) && numQty > 0) {
-            const currentDeptBalance = Number(getDeptBalance(matchedMaster.id, rec.fromDepartmentId)) || 0;
+          // 7. Stock balance check for non-inbound operations
+          if (rec.type && rec.type.toLowerCase() !== "customer rejection receipt" && matchedMaster && rec.fromDepartmentId && !isNaN(numQty) && numQty > 0) {
+            const currentDeptBalance = Number(getDeptBalance(matchedMaster.id, rec.fromDepartmentId, rec.category)) || 0;
             // Only alert if balance tracking is loaded and balance is strictly 0 or less than quantity
             if (currentDeptBalance > 0 && numQty > currentDeptBalance) {
               rowErrors.push(

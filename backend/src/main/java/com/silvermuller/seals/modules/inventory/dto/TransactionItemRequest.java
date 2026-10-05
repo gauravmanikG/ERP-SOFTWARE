@@ -1,5 +1,6 @@
 package com.silvermuller.seals.modules.inventory.dto;
 
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import java.math.BigDecimal;
@@ -15,6 +16,10 @@ public class TransactionItemRequest {
 
     private String remarks;
 
+    @NotBlank(message = "Category of Item is required")
+    private String category;
+
+
     public TransactionItemRequest() {
     }
 
@@ -22,6 +27,13 @@ public class TransactionItemRequest {
         this.masterId = masterId;
         this.quantity = quantity;
         this.remarks = remarks;
+    }
+
+    public TransactionItemRequest(Long masterId, BigDecimal quantity, String remarks, String category) {
+        this.masterId = masterId;
+        this.quantity = quantity;
+        this.remarks = remarks;
+        this.category = category;
     }
 
     public Long getMasterId() {
@@ -46,5 +58,13 @@ public class TransactionItemRequest {
 
     public void setRemarks(String remarks) {
         this.remarks = remarks;
+    }
+
+    public String getCategory() {
+        return category;
+    }
+
+    public void setCategory(String category) {
+        this.category = category;
     }
 }

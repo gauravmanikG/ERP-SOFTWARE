@@ -10,10 +10,13 @@ public class CreateTransactionRequest {
     @NotNull(message = "Master ID is required")
     private Long masterId;
 
-    @NotNull(message = "Department ID is required")
+    @NotNull(message = "From Department ID is required")
     private Long departmentId;
 
-    @NotBlank(message = "Transaction type is required (ISSUE or RECEIPT)")
+    @NotNull(message = "To Department ID is required")
+    private Long toDepartmentId;
+
+    @NotBlank(message = "Transaction type is required (must match operation_master)")
     private String transactionType;
 
     @NotNull(message = "Quantity is required")
@@ -21,6 +24,9 @@ public class CreateTransactionRequest {
     private BigDecimal quantity;
 
     private String remarks;
+
+    @NotBlank(message = "Category of Item is required")
+    private String category;
 
     public CreateTransactionRequest() {
     }
@@ -49,6 +55,14 @@ public class CreateTransactionRequest {
         this.departmentId = departmentId;
     }
 
+    public Long getToDepartmentId() {
+        return toDepartmentId;
+    }
+
+    public void setToDepartmentId(Long toDepartmentId) {
+        this.toDepartmentId = toDepartmentId;
+    }
+
     public String getTransactionType() {
         return transactionType;
     }
@@ -71,5 +85,13 @@ public class CreateTransactionRequest {
 
     public void setRemarks(String remarks) {
         this.remarks = remarks;
+    }
+
+    public String getCategory() {
+        return category;
+    }
+
+    public void setCategory(String category) {
+        this.category = category;
     }
 }

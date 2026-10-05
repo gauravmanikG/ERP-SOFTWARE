@@ -61,7 +61,13 @@ export function DashboardHome({ dark, setPage }) {
   ];
   const tC={ISSUE:["rgba(245,158,11,0.14)","#d97706"],RECEIPT:["rgba(16,185,129,0.14)","#059669"],REVERSE:["rgba(139,92,246,0.14)","#7c3aed"]};
   const card={background:dark?"#1e293b":"#fff",border:`1px solid ${dark?"rgba(148,163,184,0.12)":"rgba(148,163,184,0.2)"}`,borderRadius:20,boxShadow:dark?"0 4px 24px rgba(0,0,0,0.28)":"0 2px 16px rgba(0,0,0,0.06)"};
-  const qa=[{label:"New Issue Slip",sub:"Material Issue",icon:"\uD83D\uDCE4",p:"entry-forms",c:"#f59e0b"},{label:"Record Receipt",sub:"Stock Inward",icon:"\uD83D\uDCE5",p:"entry-forms",c:"#10b981"},{label:"Stock Overview",sub:"View Balances",icon:"\uD83D\uDCE6",p:"inventory",c:"#6366f1"},{label:"View Audit Log",sub:"Tx History",icon:"\uD83D\uDCCB",p:"entry-forms",c:"#0ea5e9"}];
+  const qa=[
+    {label:"Item Master Catalog",sub:"Create, Edit & Delete Items",icon:"⚙️",p:"item-master",c:"#c51f28"},
+    {label:"New Issue Slip",sub:"Material Issue",icon:"\uD83D\uDCE4",p:"entry-forms",c:"#f59e0b"},
+    {label:"Record Receipt",sub:"Stock Inward",icon:"\uD83D\uDCE5",p:"entry-forms",c:"#10b981"},
+    {label:"Stock Overview",sub:"View Balances",icon:"\uD83D\uDCE6",p:"inventory",c:"#6366f1"},
+    {label:"View Audit Log",sub:"Tx History",icon:"\uD83D\uDCCB",p:"entry-forms",c:"#0ea5e9"}
+  ];
   return(
     <div style={{display:"flex",flexDirection:"column",gap:22,paddingBottom:32}}>
       <div style={{borderRadius:20,padding:"28px 32px",position:"relative",overflow:"hidden",background:"linear-gradient(135deg, #0369a1 0%, #0ea5e9 40%, #0284c7 75%, #0369a1 100%)",boxShadow:"0 8px 40px rgba(14,165,233,0.35)"}}>

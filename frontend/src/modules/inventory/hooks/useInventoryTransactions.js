@@ -6,12 +6,66 @@ const BASE = import.meta.env.VITE_API_URL || (
     : "https://silver-muller-seals-backend-deploy.onrender.com"
 );
 
-export function useInventoryTransactions() {
+export function useInventoryTransactions(isActive = true) {
   const [departments, setDepartments] = useState([]);
   const [transactionTypes, setTransactionTypes] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [openingBalancesMap, setOpeningBalancesMap] = useState({});
   const [masterItems, setMasterItems] = useState([]);
   const [transactions, setTransactions] = useState([]);
-  const [previewTransactionNumber, setPreviewTransactionNumber] = useState("ISU-001");
+  const [previewTransactionNumber, setPreviewTransactionNumber] = useState("001");
+
+  const fetchOpeningBalances = async () => {
+    try {
+      const res = await fetch(`${BASE}/api/inventory/opening-balances`);
+      const contentType = res.headers.get("content-type") || "";
+      if (res.ok && contentType.includes("application/json")) {
+        const data = await res.json();
+        const map = {};
+        data.forEach((ob) => {
+          if (ob.itemCode && ob.categoryName && ob.departmentName) {
+            const key = `${ob.itemCode.trim().toLowerCase()}::${ob.categoryName.trim().toLowerCase()}::${ob.departmentName.trim().toLowerCase()}`;
+            map[key] = Number(ob.openingBalance) || 0;
+          }
+        });
+        setOpeningBalancesMap(map);
+      }
+    } catch (err) {
+      console.error("Failed to fetch opening balances from database", err);
+    }
+  };
+
+  const fetchCategories = async () => {
+    try {
+      const res = await fetch(`${BASE}/api/inventory/categories`);
+      const contentType = res.headers.get("content-type") || "";
+      if (res.ok && contentType.includes("application/json")) {
+        const data = await res.json();
+        setCategories(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch categories from category_master", err);
+    }
+  };
+
+
+
+  const fetchPreviewTransactionNumber = useCallback(async (typeName = "Material Transfer") => {
+    try {
+      const res = await fetch(`${BASE}/api/inventory/transactions/preview-transaction-number?type=${encodeURIComponent(typeName)}`);
+      const contentType = res.headers.get("content-type") || "";
+      if (res.ok && contentType.includes("application/json")) {
+        const data = await res.json();
+        const num = data.transactionNumber || data.slipNumber || "001";
+        setPreviewTransactionNumber(num);
+        return num;
+      }
+    } catch (err) {
+      console.error("Failed to fetch preview transaction number", err);
+    }
+    return "001";
+  }, []);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -30,16 +84,21 @@ export function useInventoryTransactions() {
 
   const fetchTransactionTypes = async () => {
     try {
-      const res = await fetch(`${BASE}/api/inventory/transaction-types`);
+      const res = await fetch(`${BASE}/api/inventory/operations`);
       const contentType = res.headers.get("content-type") || "";
       if (res.ok && contentType.includes("application/json")) {
         const data = await res.json();
-        setTransactionTypes(data);
+        const mapped = (Array.isArray(data) ? data : []).map((op) => ({
+          id: op.id,
+          type: op.operationName || op.type,
+        }));
+        setTransactionTypes(mapped);
       }
     } catch (err) {
-      console.error("Failed to fetch transaction types", err);
+      console.error("Failed to fetch operations from operation_master", err);
     }
   };
+
 
   const fetchMasterItems = async () => {
     try {
@@ -67,21 +126,6 @@ export function useInventoryTransactions() {
     }
   };
 
-  const fetchPreviewTransactionNumber = useCallback(async (typeName = "ISSUE") => {
-    try {
-      const res = await fetch(`${BASE}/api/inventory/transactions/preview-transaction-number?type=${encodeURIComponent(typeName)}`);
-      const contentType = res.headers.get("content-type") || "";
-      if (res.ok && contentType.includes("application/json")) {
-        const data = await res.json();
-        const num = data.transactionNumber || data.slipNumber || "ISU-001";
-        setPreviewTransactionNumber(num);
-        return num;
-      }
-    } catch (err) {
-      console.error("Failed to fetch preview transaction number", err);
-    }
-    return "ISU-001";
-  }, []);
 
   const reloadAll = useCallback(async () => {
     setLoading(true);
@@ -90,10 +134,14 @@ export function useInventoryTransactions() {
       await Promise.all([
         fetchDepartments(),
         fetchTransactionTypes(),
+        fetchCategories(),
+        fetchOpeningBalances(),
         fetchMasterItems(),
         fetchTransactions(),
-        fetchPreviewTransactionNumber("ISSUE"),
+        fetchPreviewTransactionNumber("Material Transfer"),
       ]);
+
+
     } catch (err) {
       setError("Failed to load inventory database records.");
     } finally {
@@ -102,18 +150,20 @@ export function useInventoryTransactions() {
   }, [fetchPreviewTransactionNumber]);
 
   useEffect(() => {
+    if (!isActive) return;
     reloadAll();
-  }, [reloadAll]);
+  }, [reloadAll, isActive]);
 
-  // Auto-retry once after 4s if server was sleeping during first page load
+  // Auto-retry once if a list is still empty after load finished (e.g. cold start)
   useEffect(() => {
+    if (loading) return;
     if (departments.length === 0 || transactionTypes.length === 0 || masterItems.length === 0) {
       const timer = setTimeout(() => {
         reloadAll();
       }, 4000);
       return () => clearTimeout(timer);
     }
-  }, [departments.length, transactionTypes.length, masterItems.length, reloadAll]);
+  }, [loading, departments.length, transactionTypes.length, masterItems.length, reloadAll]);
 
   const submitBatchTransaction = async ({ transactionType, fromDepartmentId, toDepartmentId, slipNumber, items, remarks }) => {
     try {
@@ -127,6 +177,7 @@ export function useInventoryTransactions() {
           masterId: Number(it.masterId),
           quantity: Number(it.quantity),
           remarks: it.remarks || "",
+          category: it.category || "",
         })),
       };
 
@@ -186,7 +237,7 @@ export function useInventoryTransactions() {
 
       await fetchMasterItems();
       await fetchTransactions();
-      await fetchPreviewTransactionNumber("REVERSE");
+      await fetchPreviewTransactionNumber("Material Transfer");
 
       return {
         success: true,
@@ -224,6 +275,7 @@ export function useInventoryTransactions() {
           masterId: rec.masterId,
           quantity: rec.quantity,
           remarks: rec.remarks || "",
+          category: rec.category || "",
         });
       });
 
@@ -262,24 +314,73 @@ export function useInventoryTransactions() {
     }
   };
 
-  const getDeptBalance = (masterId, departmentId) => {
+  const getDeptBalance = (masterId, departmentId, categoryName) => {
     const item = masterItems.find((m) => String(m.id) === String(masterId));
-    if (!item || !item.deptBalances) return item ? item.currentBalance : 0;
+    if (!item) return 0;
 
-    if (item.deptBalances[departmentId] !== undefined) {
-      return item.deptBalances[departmentId];
-    }
     const deptObj = departments.find((d) => String(d.id) === String(departmentId));
-    if (deptObj && item.deptBalances[deptObj.name] !== undefined) {
-      return item.deptBalances[deptObj.name];
+    const deptName = deptObj ? deptObj.name.trim().toLowerCase() : "";
+
+    const code = item.code ? item.code.trim().toLowerCase() : "";
+    // Use the EXACT category provided — do NOT fall back to item.category
+    // so that each category's balance is tracked independently
+    const cat = (categoryName || "").trim().toLowerCase();
+
+    // 1. Base opening balance lookup from openingBalancesMap (keyed by code::category::deptname)
+    const key = `${code}::${cat}::${deptName}`;
+    let baseBal = openingBalancesMap[key];
+
+    if (baseBal === undefined) {
+      // Strict lookup only — no cross-category fallback
+      baseBal = 0;
     }
-    return item.currentBalance;
+
+    // 2. Net transactions stock changes — compare by DEPARTMENT NAME (not ID)
+    // because transactions store public.department IDs (44=Store, 47=Moulding)
+    // but departments dropdown uses department_master IDs (4=Store, 7=Moulding)
+    // ALSO filter by category so item 651 FG and 651 OUTER METAL SHELL are tracked separately
+    let netTx = 0;
+    transactions.forEach((tx) => {
+      if (String(tx.masterId) === String(masterId)) {
+        // Only count transactions for the SAME category
+        const txCat = (tx.category || "").trim().toLowerCase();
+        if (cat && txCat && txCat !== cat) return; // skip different category transactions
+
+        const type = (tx.transactionType || "").trim();
+        const fromName = (tx.fromDepartmentName || "").trim().toLowerCase();
+        const toName = (tx.toDepartmentName || "").trim().toLowerCase();
+        const qty = Number(tx.quantity) || 0;
+
+        const isTxInbound = type.toLowerCase() === "customer rejection receipt"
+          || type.toLowerCase() === "bom moulding receipt"
+          || type.toLowerCase() === "bom transfer receipt"
+          || type.toLowerCase() === "bom fg transfer receipt";
+
+        if (isTxInbound) {
+          if (toName === deptName || (!toName && fromName === deptName)) {
+            netTx += qty;
+          }
+        } else if (tx.reversedTransactionId) {
+          // Reversal of a prior movement is applied by the backend; skip client double-count
+        } else {
+          if (fromName === deptName) netTx -= qty;
+          if (toName === deptName) netTx += qty;
+        }
+      }
+    });
+
+    return baseBal + netTx;
   };
+
+
+
 
   return {
     departments,
     transactionTypes,
+    categories,
     masterItems,
+
     transactions,
     previewTransactionNumber,
     previewSlipNumber: previewTransactionNumber,
@@ -288,9 +389,50 @@ export function useInventoryTransactions() {
     getDeptBalance,
     fetchPreviewTransactionNumber,
     fetchPreviewSlipNumber: fetchPreviewTransactionNumber,
+    clearAllTransactions: async () => {
+      try {
+        const res = await fetch(`${BASE}/api/inventory/transactions`, { method: "DELETE" });
+        if (res.ok) {
+          setTransactions([]);
+          await reloadAll();
+          return { success: true, message: "All transaction history cleared successfully." };
+        }
+      } catch (err) {
+        console.error("Failed to clear transaction history", err);
+      }
+      return { success: false, error: "Failed to clear history." };
+    },
+    fetchOpeningBalance: async (itemCode, categoryName) => {
+      if (!itemCode || !categoryName) return 0;
+      try {
+        const res = await fetch(`${BASE}/api/inventory/opening-balances/balance?code=${encodeURIComponent(itemCode)}&category=${encodeURIComponent(categoryName)}`);
+        if (res.ok) {
+          const data = await res.json();
+          return data.openingBalance || 0;
+        }
+      } catch (err) {
+        console.error("Failed to fetch opening balance", err);
+      }
+      return 0;
+    },
+    getCategoriesForItemCode: async (itemCode) => {
+
+      if (!itemCode) return [];
+      try {
+        const res = await fetch(`${BASE}/api/inventory/opening-balances/categories-for-item?code=${encodeURIComponent(itemCode)}`);
+        if (res.ok) {
+          return await res.json();
+        }
+      } catch (err) {
+        console.error("Failed to fetch categories for item code", err);
+      }
+      return [];
+    },
     reloadAll,
     submitBatchTransaction,
     submitReverseTransaction,
     submitExcelTransactions,
   };
 }
+
+

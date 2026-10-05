@@ -20,6 +20,20 @@ public interface InventoryTransactionRepository extends JpaRepository<InventoryT
 
     Optional<InventoryTransaction> findByReversedTransactionId(Long reversedTransactionId);
 
+    List<InventoryTransaction> findByReversedTransaction_IdIn(List<Long> ids);
+
+    @Query("SELECT MAX(t.id) FROM InventoryTransaction t")
+    Long findMaxTransactionId();
+
     @Query("SELECT t.transactionNumber FROM InventoryTransaction t WHERE t.transactionType.id = :typeId ORDER BY t.id DESC LIMIT 1")
     Optional<String> findLatestTransactionNumberByTypeId(@Param("typeId") Long typeId);
+
+    List<InventoryTransaction> findByFromDepartment_IdOrToDepartment_Id(Long fromDepartmentId, Long toDepartmentId);
+
+    long countByCategoryIgnoreCase(String category);
+
+    List<InventoryTransaction> findByTransactionNumberStartingWithOrderByTransactionDateDescIdDesc(String prefix);
+
+    void deleteByMaster_Id(Long masterId);
 }
+

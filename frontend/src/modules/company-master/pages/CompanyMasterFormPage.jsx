@@ -8,7 +8,7 @@ import { MasterField } from "../components/MasterField";
 import { CompanyMasterSubNav } from "../components/CompanyMasterSubNav";
 import { downloadSampleExcel } from "../../../shared/utils/excel";
 
-export function CompanyMasterFormPage({ cm, page, setPage }) {
+export function CompanyMasterFormPage({ cm, page, setPage, dark = false }) {
   const { form, editingId, isReadOnly, setIsReadOnly, activeTab, setActiveTab, toast, handleChange, handleLogo, handleNew, handleSave, handleImportExcel, records, loading, loadError, errors } = cm;
 
   const [excelFile, setExcelFile] = useState(null);
@@ -88,22 +88,45 @@ export function CompanyMasterFormPage({ cm, page, setPage }) {
           </div>
         )}
 
-        {/* Excel Import Card */}
+        {/* Excel Import Card — sky theme (matches PageHero / ERP accents) */}
         {!isReadOnly && (
-          <div className="mb-6 p-4 rounded-xl border shadow-sm transition-all duration-200 bg-gradient-to-r from-amber-50/50 via-white to-orange-50/30 border-orange-200/80 dark:from-slate-800/90 dark:via-slate-800/90 dark:to-sky-950/30 dark:border-slate-700 dark:shadow-slate-950/40">
+          <div
+            className="mb-6 p-4 rounded-xl border shadow-sm transition-all duration-200"
+            style={{
+              background: dark
+                ? "linear-gradient(135deg, rgba(2,132,199,0.28) 0%, rgba(14,165,233,0.16) 50%, rgba(56,189,248,0.12) 100%)"
+                : "linear-gradient(135deg, #e0f2fe 0%, #f0f9ff 45%, #ecfeff 100%)",
+              borderColor: dark ? "rgba(56,189,248,0.35)" : "#7dd3fc",
+              boxShadow: dark ? "0 4px 20px rgba(2,132,199,0.15)" : "0 4px 16px rgba(14,165,233,0.12)",
+            }}
+          >
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-emerald-100 text-emerald-800 dark:bg-sky-950/80 dark:text-sky-400 font-bold shrink-0 shadow-xs border border-emerald-200/60 dark:border-sky-800/50">
+                <div
+                  className="w-10 h-10 rounded-lg flex items-center justify-center font-bold shrink-0 shadow-xs border"
+                  style={{
+                    background: dark ? "rgba(14,165,233,0.25)" : "#bae6fd",
+                    color: dark ? "#7dd3fc" : "#0369a1",
+                    borderColor: dark ? "rgba(56,189,248,0.4)" : "#7dd3fc",
+                  }}
+                >
                   <FileSpreadsheet size={22} />
                 </div>
                 <div>
-                  <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                  <h4 className="text-sm font-bold flex items-center gap-2" style={{ color: dark ? "#f1f5f9" : "#0f172a" }}>
                     Import Companies from Excel Sheet
-                    <span className="text-[10px] font-semibold uppercase px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-sky-950/80 dark:text-sky-300 dark:border dark:border-sky-800/60">
+                    <span
+                      className="text-[10px] font-semibold uppercase px-2 py-0.5 rounded border"
+                      style={{
+                        background: dark ? "rgba(14,165,233,0.25)" : "#e0f2fe",
+                        color: dark ? "#7dd3fc" : "#0369a1",
+                        borderColor: dark ? "rgba(56,189,248,0.4)" : "#7dd3fc",
+                      }}
+                    >
                       Bulk Import
                     </span>
                   </h4>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  <p className="text-xs mt-0.5" style={{ color: dark ? "#94a3b8" : "#64748b" }}>
                     Upload an <code>.xlsx</code> / <code>.csv</code> file. Validates required fields & ensures no duplicate records before auto-saving to database.
                   </p>
                 </div>
@@ -113,14 +136,26 @@ export function CompanyMasterFormPage({ cm, page, setPage }) {
                 <button
                   type="button"
                   onClick={downloadSampleExcel}
-                  className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-lg border bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100 dark:bg-slate-700/80 dark:hover:bg-slate-700 dark:text-slate-200 dark:border-slate-600 transition shadow-xs"
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-lg border transition shadow-xs"
+                  style={{
+                    background: dark ? "rgba(14,165,233,0.2)" : "#fff",
+                    color: dark ? "#e0f2fe" : "#0369a1",
+                    borderColor: dark ? "rgba(56,189,248,0.45)" : "#7dd3fc",
+                  }}
                 >
-                  <Download size={14} className="text-emerald-700 dark:text-sky-400 shrink-0" />
+                  <Download size={14} style={{ color: dark ? "#38bdf8" : "#0284c7" }} className="shrink-0" />
                   <span>Download Excel Sheet Template</span>
                 </button>
 
-                <label className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border bg-white hover:bg-slate-50 text-slate-800 border-slate-200 dark:bg-slate-800 dark:hover:bg-slate-750 dark:text-slate-200 dark:border-slate-600 cursor-pointer transition shadow-xs">
-                  <Upload size={14} className="text-sky-600 dark:text-sky-400" />
+                <label
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border cursor-pointer transition shadow-xs"
+                  style={{
+                    background: dark ? "rgba(2,132,199,0.35)" : "#0284c7",
+                    color: "#fff",
+                    borderColor: dark ? "rgba(56,189,248,0.5)" : "#0369a1",
+                  }}
+                >
+                  <Upload size={14} className="text-white" />
                   <span>{excelFile ? excelFile.name : "Select Excel File"}</span>
                   <input
                     type="file"
@@ -136,7 +171,8 @@ export function CompanyMasterFormPage({ cm, page, setPage }) {
                     type="button"
                     onClick={onImportExcel}
                     disabled={importing}
-                    className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold rounded-lg text-white transition shadow-sm bg-emerald-600 hover:bg-emerald-700 dark:bg-sky-500 dark:hover:bg-sky-600 disabled:opacity-50"
+                    className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold rounded-lg text-white transition shadow-sm disabled:opacity-50"
+                    style={{ background: "#0ea5e9" }}
                   >
                     {importing ? (
                       "Validating & Importing…"

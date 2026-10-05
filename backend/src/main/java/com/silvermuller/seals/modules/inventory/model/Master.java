@@ -12,23 +12,24 @@ public class Master {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "code", nullable = false, unique = true, length = 100)
+    @Column(name = "code", nullable = false, columnDefinition = "TEXT")
     private String code;
 
-    @Column(name = "description", nullable = false, length = 255)
+    @Column(name = "description", nullable = false, columnDefinition = "TEXT")
     private String description;
 
-    @Column(name = "category", nullable = false, length = 100)
+    @Column(name = "category", nullable = false, columnDefinition = "TEXT")
     private String category = "General";
 
-    @Column(name = "unit_of_measurement", nullable = false, length = 50)
+    @Column(name = "unit_of_measurement", nullable = false, columnDefinition = "TEXT")
     private String unitOfMeasurement;
 
     @Column(name = "opening_balance", nullable = false, precision = 15, scale = 2)
     private BigDecimal openingBalance = BigDecimal.ZERO;
 
-    @Column(name = "store_name", nullable = false, length = 100)
+    @Column(name = "store_name", nullable = false, columnDefinition = "TEXT")
     private String storeName;
+
 
     public Master() {
     }

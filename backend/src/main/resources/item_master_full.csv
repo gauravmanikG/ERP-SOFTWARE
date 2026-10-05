@@ -1,0 +1,24 @@
+<USER_REQUEST>
+just like these table i want to create a database ( inside the sms_seals ofc ) its name should be " sms_inventory " and inside that sms_inventory i want to create multiple table 
+table 1 : 
+item master
+
+inside this i want columns 
+
+GROUP	Subgroup	Group Code	Old Code  	Main FG Code	     SMS New Part No.  	Description & Size	    FG OUTSOURCE	  SFG OUTSOURCE	    OUTSOURCE COMBO FG & SFG	Purchased Uom	  Consumption_UOM	  ID	   OD	W	Thickenesss
+
+now just for ur help that what type of values i will insert inside this column i m giving u some values for this columns u need to add those values into the database - attached file (item_master(1) ) 
+
+just create the database first then i will tell u how frontend will work later
+
+
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-08-23T14:37:53+05:30.
+
+The user's current state is as follows:
+Active Document: c:\Users\gaura\Downloads\silver-muller-seals\frontend\src\modules\company-master\pages\CompanyMasterFormPage.jsx (LANGUAGE_JAVASCRIPT)
+Cursor is on line: 1
+Other open documents:
+- c:\Users\gaura\Downloads\silver-muller-seals\frontend\src\modules\company-master\pages\CompanyMasterFormPage.jsx (LANGUAGE_JAVASCRIPT)
+</ADDITIONAL_METADATA>

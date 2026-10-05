@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
+
 import {
   FileText,
   ArrowRightLeft,
@@ -25,8 +26,206 @@ import {
   exportTransactionsToExcel,
 } from "../../../shared/utils/inventoryExcel";
 
-export function InventoryTransactionPage({ defaultTab = "form", dark = false }) {
-  const inv = useInventoryTransactions();
+function ItemCodeSelect({ value, onChange, masterItems }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [coords, setCoords] = useState({ top: 0, left: 0, width: 420, maxHeight: 420, openUp: false });
+  const inputRef = useRef(null);
+
+  const selectedMaster = masterItems.find((m) => String(m.id) === String(value));
+
+  useEffect(() => {
+    if (selectedMaster) {
+      setQuery(selectedMaster.code);
+    } else {
+      setQuery("");
+    }
+  }, [value, selectedMaster]);
+
+  const updateCoords = () => {
+    if (!inputRef.current) return;
+    const rect = inputRef.current.getBoundingClientRect();
+    const gap = 6;
+    const minWidth = 420;
+    const width = Math.min(Math.max(rect.width, minWidth), Math.max(320, window.innerWidth - 24));
+    const spaceBelow = window.innerHeight - rect.bottom - 12;
+    const spaceAbove = rect.top - 12;
+    const openUp = spaceBelow < 280 && spaceAbove > spaceBelow;
+    const available = openUp ? spaceAbove : spaceBelow;
+    const maxHeight = Math.max(260, Math.min(available - gap, 480));
+    let left = rect.left;
+    if (left + width > window.innerWidth - 12) {
+      left = Math.max(12, window.innerWidth - width - 12);
+    }
+    setCoords({
+      top: openUp ? rect.top - gap : rect.bottom + gap,
+      left,
+      width,
+      maxHeight,
+      openUp,
+    });
+  };
+
+  const handleFocus = () => {
+    updateCoords();
+    setIsOpen(true);
+  };
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (
+        inputRef.current &&
+        !inputRef.current.contains(e.target) &&
+        !e.target.closest(".item-code-dropdown-portal")
+      ) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    window.addEventListener("scroll", updateCoords, true);
+    window.addEventListener("resize", updateCoords);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      window.removeEventListener("scroll", updateCoords, true);
+      window.removeEventListener("resize", updateCoords);
+    };
+  }, []);
+
+  const filteredItems = useMemo(() => {
+    const newestFirst = [...masterItems].sort((a, b) => Number(b.id) - Number(a.id));
+    if (!query.trim()) return newestFirst.slice(0, 200);
+    const q = query.toLowerCase().trim();
+    const starts = [];
+    const codeHas = [];
+    const descHas = [];
+    for (const m of masterItems) {
+      const code = String(m.code ?? "").toLowerCase();
+      const desc = String(m.description ?? "").toLowerCase();
+      if (code.startsWith(q)) starts.push(m);
+      else if (code.includes(q)) codeHas.push(m);
+      else if (desc.includes(q)) descHas.push(m);
+    }
+    starts.sort((a, b) => String(a.code).localeCompare(String(b.code), undefined, { numeric: true, sensitivity: "base" }));
+    return [...starts, ...codeHas, ...descHas].slice(0, 200);
+  }, [query, masterItems]);
+
+  const handleSelect = (itemObj) => {
+    if (!itemObj) {
+      onChange("");
+      setQuery("");
+    } else {
+      onChange(itemObj.id);
+      setQuery(itemObj.code);
+    }
+    setIsOpen(false);
+  };
+
+  return (
+    <div className="w-full">
+      <div className="relative flex items-center">
+        <input
+          ref={inputRef}
+          type="text"
+          value={query}
+          placeholder="Type to search item code..."
+          onClick={handleFocus}
+          onFocus={handleFocus}
+          onChange={(e) => {
+            const val = e.target.value;
+            setQuery(val);
+            updateCoords();
+            setIsOpen(true);
+            if (!val.trim()) onChange("");
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && filteredItems[0]) {
+              e.preventDefault();
+              handleSelect(filteredItems[0]);
+            }
+            if (e.key === "Escape") setIsOpen(false);
+          }}
+          className="w-full bg-white border border-slate-300 focus:border-sky-500 rounded-lg pl-3 pr-8 py-2 text-slate-900 text-sm focus:outline-none font-medium placeholder:text-slate-400 cursor-text"
+        />
+        <button
+          type="button"
+          onClick={() => {
+            if (isOpen) {
+              setIsOpen(false);
+            } else {
+              handleFocus();
+            }
+          }}
+          className="absolute right-2 text-slate-400 hover:text-slate-600 focus:outline-none"
+        >
+          <Search className="w-4 h-4" />
+        </button>
+      </div>
+
+      {isOpen && (
+        <div
+          style={{
+            position: "fixed",
+            top: coords.openUp ? "auto" : `${coords.top}px`,
+            bottom: coords.openUp ? `${window.innerHeight - coords.top}px` : "auto",
+            left: `${coords.left}px`,
+            width: `${coords.width}px`,
+            maxHeight: `${coords.maxHeight}px`,
+          }}
+          className="item-code-dropdown-portal z-[9999] flex flex-col overflow-hidden bg-white border border-slate-200 rounded-xl shadow-[0_16px_48px_rgba(15,23,42,0.18)] text-sm"
+        >
+          <div className="sticky top-0 z-10 px-3 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
+              Item codes
+            </span>
+            <span className="text-[11px] font-medium text-sky-700">
+              {filteredItems.length} shown{query && selectedMaster?.code?.toLowerCase() !== query.trim().toLowerCase() ? " · filtered" : ""}
+            </span>
+          </div>
+
+          <div
+            onClick={() => handleSelect(null)}
+            className="px-3 py-2 hover:bg-rose-50 text-rose-600 font-semibold cursor-pointer border-b border-slate-100 flex items-center justify-between shrink-0"
+          >
+            <span>No item selected</span>
+            <span className="text-xs text-rose-400 font-normal">(Clear)</span>
+          </div>
+
+          <div className="overflow-y-auto flex-1 min-h-0">
+            {filteredItems.length === 0 ? (
+              <div className="px-3 py-6 text-slate-400 italic text-xs text-center">
+                No matching items found
+              </div>
+            ) : (
+              filteredItems.map((m) => (
+                <div
+                  key={m.id}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => handleSelect(m)}
+                  className={`px-3 py-2 cursor-pointer border-b border-slate-50 last:border-0 grid grid-cols-[minmax(72px,0.4fr)_1fr] gap-3 items-center ${
+                    String(m.id) === String(value)
+                      ? "bg-sky-50 font-bold text-sky-900"
+                      : "hover:bg-sky-50/80 text-slate-800"
+                  }`}
+                >
+                  <span className="font-semibold text-slate-900 tabular-nums">{m.code}</span>
+                  <span className="text-xs text-slate-500 truncate" title={m.description}>
+                    {m.description}
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+
+export function InventoryTransactionPage({ defaultTab = "form", dark = false, isActive = true }) {
+
+  const inv = useInventoryTransactions(isActive);
   const [activeTab, setActiveTab] = useState(defaultTab); // 'form' | 'history'
 
   // Excel Import State
@@ -44,7 +243,7 @@ export function InventoryTransactionPage({ defaultTab = "form", dark = false }) 
   }).replace(/ /g, "-");
 
   // Form State
-  const [txType, setTxType] = useState("ISSUE");
+  const [txType, setTxType] = useState("");
   const [manualSlipNumber, setManualSlipNumber] = useState("");
   const [fromDeptId, setFromDeptId] = useState("");
   const [toDeptId, setToDeptId] = useState("");
@@ -59,36 +258,30 @@ export function InventoryTransactionPage({ defaultTab = "form", dark = false }) 
   const [alert, setAlert] = useState(null); // { type: 'success' | 'error', message: string }
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Item-specific categories map for custom sub-categories per item code
-  const itemCategoryMap = {
-    "MAT-001": ["Raw Material - Prime Steel", "Raw Material - Coated Sheet", "Raw Material - Scrap Grade"],
-    "MAT-002": ["Raw Material - Stainless Rod 304", "Raw Material - Stainless Rod 316", "Raw Material - Alloy Rod"],
-    "MAT-003": ["Spare Parts - Deep Groove Bearing", "Spare Parts - Roller Bearing", "Spare Parts - Precision Seal Bearing"],
-    "MAT-004": ["Consumables - High Temp Oil", "Consumables - Hydraulic Fluid", "Consumables - Gearbox Lubricant"],
-    "MAT-005": ["Consumables - E6013 Electrode", "Consumables - E7018 Electrode", "Consumables - Stainless Electrode"]
-  };
-
-  // Helper to get categories available for a given item code / object
-  const getCategoriesForItem = (masterObj) => {
-    if (!masterObj) return ["Raw Material", "Spare Parts", "Consumables", "Finished Goods", "Sub-Assembly"];
-    const code = masterObj.code;
-    const customList = itemCategoryMap[code];
-    if (customList && customList.length > 0) {
-      return customList;
-    }
-    // Fallback: Primary category + variations
-    const primary = masterObj.category || "General";
-    return [primary, `${primary} - Standard`, `${primary} - Premium`, `${primary} - Grade B`];
-  };
+  const masterCategoryOptions = (inv.categories || []).map((c) => c.categoryName).filter(Boolean);
 
   // History Search & Filter State
   const [historySearch, setHistorySearch] = useState("");
   const [historyTypeFilter, setHistoryTypeFilter] = useState("all");
 
+  // Auto-select first loaded operation type if txType is empty or legacy
+  useEffect(() => {
+    if (inv.transactionTypes && inv.transactionTypes.length > 0) {
+      const exists = inv.transactionTypes.some((t) => t.type === txType);
+      if (!exists) {
+        setTxType(inv.transactionTypes[0].type);
+      }
+    }
+  }, [inv.transactionTypes, txType]);
+
   // Automatically update preview transaction number when txType changes
   useEffect(() => {
-    inv.fetchPreviewTransactionNumber(txType);
+    if (txType) {
+      inv.fetchPreviewTransactionNumber(txType);
+    }
   }, [txType, inv.fetchPreviewTransactionNumber]);
+
+
 
   // Item Row Handlers
   const handleAddItemRow = () => {
@@ -116,13 +309,17 @@ export function InventoryTransactionPage({ defaultTab = "form", dark = false }) 
         }
 
         if (field === "masterId") {
-          // When item is selected, pick the first specific category from its dedicated list
           const selectedMaster = inv.masterItems.find((m) => String(m.id) === String(value));
-          const availableCats = getCategoriesForItem(selectedMaster);
+          const currentCat = item.category;
+          const keepCat = currentCat && masterCategoryOptions.includes(currentCat)
+            ? currentCat
+            : (selectedMaster?.category && masterCategoryOptions.includes(selectedMaster.category)
+              ? selectedMaster.category
+              : "");
           return {
             ...item,
             masterId: value,
-            category: availableCats.length > 0 ? availableCats[0] : (selectedMaster ? selectedMaster.category : ""),
+            category: keepCat,
           };
         }
 
@@ -150,6 +347,10 @@ export function InventoryTransactionPage({ defaultTab = "form", dark = false }) 
       setAlert({ type: "error", message: "Please select a From Department." });
       return;
     }
+    if (!toDeptId) {
+      setAlert({ type: "error", message: "Please select a To Department." });
+      return;
+    }
 
     if (items.length === 0) {
       setAlert({ type: "error", message: "Please add at least one item row." });
@@ -164,6 +365,10 @@ export function InventoryTransactionPage({ defaultTab = "form", dark = false }) 
         setAlert({ type: "error", message: `Row ${sr}: Please select an Item Code.` });
         return;
       }
+      if (!row.category || !String(row.category).trim()) {
+        setAlert({ type: "error", message: `Row ${sr}: Please select a Category of Item.` });
+        return;
+      }
       const qty = Number(row.quantity);
       if (isNaN(qty) || qty <= 0) {
         setAlert({ type: "error", message: `Row ${sr}: Please enter a valid quantity greater than 0.` });
@@ -171,15 +376,26 @@ export function InventoryTransactionPage({ defaultTab = "form", dark = false }) 
       }
 
       const masterObj = getMasterItem(row.masterId);
-      if (masterObj && txType === "ISSUE") {
-        const fromDeptBal = Number(inv.getDeptBalance(row.masterId, fromDeptId)) || 0;
+      const isInbound = (txType || "").trim().toLowerCase() === "customer rejection receipt";
+      if (masterObj && !isInbound) {
+        const selectedCat = row.category || "";
+        const fromDeptBal = Number(inv.getDeptBalance(row.masterId, fromDeptId, selectedCat)) || 0;
         const fromDeptObj = inv.departments.find((d) => String(d.id) === String(fromDeptId));
         const fromDeptName = fromDeptObj ? fromDeptObj.name : "From Department";
+        const catLabel = selectedCat ? ` [${selectedCat}]` : "";
+
+        if (fromDeptBal <= 0) {
+          setAlert({
+            type: "error",
+            message: `Row ${sr} (${masterObj.code}${catLabel}): No stock available in '${fromDeptName}'. Balance is ${fromDeptBal} ${masterObj.unitOfMeasurement}.`,
+          });
+          return;
+        }
 
         if (qty > fromDeptBal) {
           setAlert({
             type: "error",
-            message: `Row ${sr} (${masterObj.code}): Transaction quantity (${qty} ${masterObj.unitOfMeasurement}) cannot be greater than closing balance in '${fromDeptName}' (${fromDeptBal} ${masterObj.unitOfMeasurement}).`,
+            message: `Row ${sr} (${masterObj.code}${catLabel}): Quantity (${qty}) exceeds available stock in '${fromDeptName}' (${fromDeptBal} ${masterObj.unitOfMeasurement}).`,
           });
           return;
         }
@@ -190,12 +406,13 @@ export function InventoryTransactionPage({ defaultTab = "form", dark = false }) 
     const res = await inv.submitBatchTransaction({
       transactionType: txType,
       fromDepartmentId: fromDeptId,
-      toDepartmentId: toDeptId || null,
+      toDepartmentId: toDeptId,
       slipNumber: manualSlipNumber,
       items: items.map((it) => ({
         masterId: it.masterId,
         quantity: it.quantity,
         remarks: it.remarks,
+        category: it.category,
       })),
       remarks,
     });
@@ -240,7 +457,7 @@ export function InventoryTransactionPage({ defaultTab = "form", dark = false }) 
       `"${tx.toDepartmentName || '-'}"`,
       tx.masterCode,
       `"${tx.masterDescription}"`,
-      `"${tx.category || (getCategoriesForItem(getMasterItem(tx.masterId))[0]) || '-'}"`,
+      `"${tx.category || '-'}"`,
       tx.quantity,
       tx.unitOfMeasurement,
       `"${tx.transactionDate}"`,
@@ -270,6 +487,8 @@ export function InventoryTransactionPage({ defaultTab = "form", dark = false }) 
       const result = await parseAndValidateInventoryExcel(file, {
         departments: inv.departments,
         masterItems: inv.masterItems,
+        transactionTypes: inv.transactionTypes,
+        categories: inv.categories,
         getDeptBalance: inv.getDeptBalance,
       });
       setExcelPreviewData(result);
@@ -393,7 +612,7 @@ export function InventoryTransactionPage({ defaultTab = "form", dark = false }) 
           <div className="flex flex-wrap items-center gap-2.5">
             {/* Download Sample Template */}
             <button
-              onClick={() => downloadInventorySampleExcel(inv.departments, inv.masterItems)}
+              onClick={() => downloadInventorySampleExcel(inv.departments, inv.masterItems, inv.transactionTypes, inv.categories)}
               className="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs md:text-sm font-semibold transition border border-slate-300 shadow-2xs"
               title="Download Sample Excel Template (.xlsx)"
             >
@@ -536,6 +755,7 @@ export function InventoryTransactionPage({ defaultTab = "form", dark = false }) 
                     onChange={(e) => setTxType(e.target.value)}
                     className="w-full bg-white border border-slate-300 focus:border-sky-500 rounded-xl px-3.5 py-2.5 text-slate-900 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-sky-500/20"
                   >
+                    <option value="">Select type</option>
                     {inv.transactionTypes.map((tt) => (
                       <option key={tt.id} value={tt.type}>
                         {tt.type}
@@ -596,14 +816,14 @@ export function InventoryTransactionPage({ defaultTab = "form", dark = false }) 
                 {/* F. TO DEPARTMENT */}
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                    To Department
+                    To Department <span className="text-sky-500">*</span>
                   </label>
                   <select
                     value={toDeptId}
                     onChange={(e) => setToDeptId(e.target.value)}
                     className="w-full bg-white border border-slate-300 focus:border-sky-500 rounded-xl px-3.5 py-2.5 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20 font-medium"
                   >
-                    <option value="">-- Select To Department (Optional) --</option>
+                    <option value="">-- Select To Department --</option>
                     {inv.departments.map((dept) => (
                       <option key={dept.id} value={dept.id}>
                         {dept.name}
@@ -648,7 +868,7 @@ export function InventoryTransactionPage({ defaultTab = "form", dark = false }) 
                       <th className="py-3.5 px-4 w-16 text-center">SR No.</th>
                       <th className="py-3.5 px-4 min-w-[160px]">Item Code</th>
                       <th className="py-3.5 px-4 min-w-[200px]">Item Description</th>
-                      <th className="py-3.5 px-4 min-w-[140px]">Category of Item</th>
+                      <th className="py-3.5 px-4 min-w-[140px]">Category of Item <span className="text-sky-500 normal-case">*</span></th>
                       <th className="py-3.5 px-4 min-w-[120px]">Unit & Measurement</th>
                       <th className="py-3.5 px-4 min-w-[140px] text-right">Closing Balance</th>
                       <th className="py-3.5 px-4 min-w-[160px]">Transaction Quantity</th>
@@ -668,19 +888,15 @@ export function InventoryTransactionPage({ defaultTab = "form", dark = false }) 
 
                           {/* 2. ITEM CODE */}
                           <td className="py-3 px-4">
-                            <select
+                            <ItemCodeSelect
                               value={row.masterId}
-                              onChange={(e) => handleItemChange(row.id, "masterId", e.target.value)}
-                              className="w-full bg-white border border-slate-300 focus:border-sky-500 rounded-lg px-3 py-2 text-slate-900 text-sm focus:outline-none font-medium"
-                            >
-                              <option value="">Select Item Code</option>
-                              {inv.masterItems.map((m) => (
-                                <option key={m.id} value={m.id}>
-                                  {m.code} ({m.description})
-                                </option>
-                              ))}
-                            </select>
+                              onChange={(newMasterId) => handleItemChange(row.id, "masterId", newMasterId)}
+                              masterItems={inv.masterItems}
+                              rowId={row.id}
+                            />
+
                           </td>
+
 
                           {/* 3. ITEM DESCRIPTION */}
                           <td className="py-3 px-4 text-slate-800">
@@ -693,33 +909,24 @@ export function InventoryTransactionPage({ defaultTab = "form", dark = false }) 
 
                           {/* 4. CATEGORY OF ITEM */}
                           <td className="py-3 px-4">
-                            {!masterObj ? (
-                              <select
-                                disabled
-                                value=""
-                                className="w-full bg-slate-100 border border-slate-300 rounded-lg px-3 py-2 text-slate-400 text-sm focus:outline-none cursor-not-allowed italic"
-                              >
-                                <option value="">Select an item code...</option>
-                              </select>
-                            ) : (
-                              (() => {
-                                const itemCategories = getCategoriesForItem(masterObj);
-                                return (
-                                  <select
-                                    value={row.category || (itemCategories[0] || "")}
-                                    onChange={(e) => handleItemChange(row.id, "category", e.target.value)}
-                                    className="w-full bg-white border border-slate-300 focus:border-sky-500 rounded-lg px-3 py-2 text-slate-900 text-sm focus:outline-none font-medium"
-                                  >
-                                    {itemCategories.map((cat) => (
-                                      <option key={cat} value={cat}>
-                                        {cat}
-                                      </option>
-                                    ))}
-                                  </select>
-                                );
-                              })()
-                            )}
+                            {(() => {
+                              return (
+                                <select
+                                  value={row.category || ""}
+                                  onChange={(e) => handleItemChange(row.id, "category", e.target.value)}
+                                  className="w-full bg-white border border-slate-300 focus:border-sky-500 rounded-lg px-3 py-2 text-slate-900 text-sm focus:outline-none font-medium"
+                                >
+                                  <option value="">Select category</option>
+                                  {masterCategoryOptions.map((catName) => (
+                                    <option key={catName} value={catName}>
+                                      {catName}
+                                    </option>
+                                  ))}
+                                </select>
+                              );
+                            })()}
                           </td>
+
 
                           {/* 5. UNIT & MEASUREMENT */}
                           <td className="py-3 px-4 text-slate-800 font-semibold">
@@ -729,9 +936,14 @@ export function InventoryTransactionPage({ defaultTab = "form", dark = false }) 
                           {/* 6. CLOSING BALANCE */}
                           <td className="py-3 px-4 text-right font-bold">
                             {masterObj ? (() => {
-                              const deptBal = Number(inv.getDeptBalance(row.masterId, fromDeptId)) || 0;
+                              const currentCat = row.category || "";
+                              const deptBal = currentCat
+                                ? Number(inv.getDeptBalance(row.masterId, fromDeptId, currentCat)) || 0
+                                : 0;
                               const fromDeptObj = inv.departments.find((d) => String(d.id) === String(fromDeptId));
                               const deptLabel = fromDeptObj ? fromDeptObj.name : "From Dept";
+
+
                               return (
                                 <div>
                                   <span
@@ -754,6 +966,7 @@ export function InventoryTransactionPage({ defaultTab = "form", dark = false }) 
                               <span className="text-slate-400 italic">-</span>
                             )}
                           </td>
+
 
                           {/* 7. TRANSACTION QUANTITY */}
                           <td className="py-3 px-4">
@@ -862,8 +1075,27 @@ export function InventoryTransactionPage({ defaultTab = "form", dark = false }) 
                   <Download className="w-4 h-4" />
                   <span>Export CSV</span>
                 </button>
+                <button
+                  onClick={async () => {
+                    if (window.confirm("Are you sure you want to delete all transaction history records from PostgreSQL?")) {
+                      const res = await inv.clearAllTransactions();
+                      if (res.success) {
+                        setAlert({ type: "success", message: res.message });
+                      } else {
+                        setAlert({ type: "error", message: res.error });
+                      }
+                    }
+                  }}
+                  disabled={inv.transactions.length === 0}
+                  className="flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold text-xs md:text-sm transition border border-rose-300 shadow-2xs disabled:opacity-50"
+                  title="Clear all transaction history from database"
+                >
+                  <Trash2 className="w-4 h-4 text-rose-600" />
+                  <span>Clear History</span>
+                </button>
               </div>
             </div>
+
 
             {/* Filter Bar */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -884,11 +1116,14 @@ export function InventoryTransactionPage({ defaultTab = "form", dark = false }) 
                   onChange={(e) => setHistoryTypeFilter(e.target.value)}
                   className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-slate-900 text-sm focus:outline-none focus:border-sky-500 font-semibold"
                 >
-                  <option value="all">All Transaction Types</option>
-                  <option value="issue">ISSUE</option>
-                  <option value="receipt">RECEIPT</option>
-                  <option value="reverse">REVERSE</option>
+                  <option value="all">All Operations / Transaction Types</option>
+                  {inv.transactionTypes.map((tt) => (
+                    <option key={tt.id} value={tt.type.toLowerCase()}>
+                      {tt.type}
+                    </option>
+                  ))}
                 </select>
+
               </div>
             </div>
 
@@ -932,11 +1167,9 @@ export function InventoryTransactionPage({ defaultTab = "form", dark = false }) 
                           <td className="py-3 px-4">
                             <span
                               className={`px-2.5 py-0.5 rounded-full text-xs font-extrabold border ${
-                                tx.transactionType === "ISSUE"
-                                  ? "bg-amber-50 text-amber-800 border-amber-300"
-                                  : tx.transactionType === "RECEIPT"
+                                (tx.transactionType || "").toLowerCase() === "customer rejection receipt"
                                   ? "bg-emerald-50 text-emerald-800 border-emerald-300"
-                                  : "bg-purple-50 text-purple-800 border-purple-300"
+                                  : "bg-sky-50 text-sky-800 border-sky-300"
                               }`}
                             >
                               {tx.transactionType}
@@ -948,7 +1181,7 @@ export function InventoryTransactionPage({ defaultTab = "form", dark = false }) 
                           <td className="py-3 px-4 text-slate-700">{tx.masterDescription}</td>
                           <td className="py-3 px-4 text-slate-700">
                             {(() => {
-                              const displayCat = tx.category || (itemCategory ? (getCategoriesForItem(masterObj)[0] || itemCategory) : null);
+                              const displayCat = tx.category || itemCategory || "-";
                               return displayCat ? (
                                 <span className="inline-block px-2.5 py-1 rounded-md bg-sky-50 text-xs font-bold text-sky-800 border border-sky-200">
                                   {displayCat}
@@ -1109,11 +1342,9 @@ export function InventoryTransactionPage({ defaultTab = "form", dark = false }) 
                             <td className="py-2.5 px-3">
                               <span
                                 className={`px-2 py-0.5 rounded text-[10px] font-extrabold border ${
-                                  r.type === "ISSUE"
-                                    ? "bg-amber-50 text-amber-800 border-amber-300"
-                                    : r.type === "RECEIPT"
+                                  String(r.type || "").toLowerCase() === "customer rejection receipt"
                                     ? "bg-emerald-50 text-emerald-800 border-emerald-300"
-                                    : "bg-purple-50 text-purple-800 border-purple-300"
+                                    : "bg-sky-50 text-sky-800 border-sky-300"
                                 }`}
                               >
                                 {r.type}
@@ -1148,7 +1379,7 @@ export function InventoryTransactionPage({ defaultTab = "form", dark = false }) 
             {/* Modal Footer */}
             <div className="bg-white border-t border-slate-200 px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <button
-                onClick={() => downloadInventorySampleExcel(inv.departments, inv.masterItems)}
+                onClick={() => downloadInventorySampleExcel(inv.departments, inv.masterItems, inv.transactionTypes, inv.categories)}
                 className="flex items-center space-x-1.5 text-xs text-sky-700 font-semibold hover:underline"
               >
                 <FileSpreadsheet className="w-4 h-4 text-emerald-600" />

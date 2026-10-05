@@ -8,12 +8,13 @@ import java.util.List;
 
 public class CreateBatchTransactionRequest {
 
-    @NotBlank(message = "Transaction type is required (ISSUE, RECEIPT, or REVERSE)")
+    @NotBlank(message = "Transaction type is required (must match operation_master)")
     private String transactionType;
 
     @NotNull(message = "From Department ID is required")
     private Long fromDepartmentId;
 
+    @NotNull(message = "To Department ID is required")
     private Long toDepartmentId;
 
     private String slipNumber; // Optional manual slip number entered by user

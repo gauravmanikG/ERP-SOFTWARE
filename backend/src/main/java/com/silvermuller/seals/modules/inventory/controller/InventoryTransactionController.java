@@ -29,13 +29,13 @@ public class InventoryTransactionController {
     }
 
     @GetMapping("/preview-transaction-number")
-    public ResponseEntity<Map<String, String>> previewTransactionNumber(@RequestParam(defaultValue = "ISSUE") String type) {
+    public ResponseEntity<Map<String, String>> previewTransactionNumber(@RequestParam(defaultValue = "Material Transfer") String type) {
         String txNum = transactionService.getPreviewTransactionNumber(type);
         return ResponseEntity.ok(Map.of("transactionNumber", txNum, "slipNumber", txNum));
     }
 
     @GetMapping("/preview-slip-number")
-    public ResponseEntity<Map<String, String>> previewSlipNumber(@RequestParam(defaultValue = "ISSUE") String type) {
+    public ResponseEntity<Map<String, String>> previewSlipNumber(@RequestParam(defaultValue = "Material Transfer") String type) {
         String txNum = transactionService.getPreviewTransactionNumber(type);
         return ResponseEntity.ok(Map.of("transactionNumber", txNum, "slipNumber", txNum));
     }
@@ -62,4 +62,11 @@ public class InventoryTransactionController {
         TransactionResponse response = transactionService.processReverse(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
+
+    @DeleteMapping
+    public ResponseEntity<Map<String, String>> deleteAllTransactions() {
+        transactionService.clearAllTransactions();
+        return ResponseEntity.ok(Map.of("message", "All inventory transaction history cleared successfully."));
+    }
 }
+

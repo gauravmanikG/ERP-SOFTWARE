@@ -8,10 +8,16 @@ import com.silvermuller.seals.modules.inventory.model.Department;
 import com.silvermuller.seals.modules.inventory.model.InventoryTransaction;
 import com.silvermuller.seals.modules.inventory.model.Master;
 import com.silvermuller.seals.modules.inventory.model.TransactionType;
+import com.silvermuller.seals.modules.inventory.model.OpeningBalance;
 import com.silvermuller.seals.modules.inventory.repository.DepartmentRepository;
 import com.silvermuller.seals.modules.inventory.repository.InventoryTransactionRepository;
 import com.silvermuller.seals.modules.inventory.repository.MasterRepository;
+import com.silvermuller.seals.modules.inventory.repository.OpeningBalanceRepository;
+import com.silvermuller.seals.modules.inventory.repository.CategoryMasterRepository;
+import com.silvermuller.seals.modules.inventory.repository.OperationRepository;
 import com.silvermuller.seals.modules.inventory.repository.TransactionTypeRepository;
+import com.silvermuller.seals.modules.notifications.service.StockAlertService;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,79 +34,135 @@ public class InventoryTransactionService {
     private final InventoryTransactionRepository transactionRepository;
     private final MasterRepository masterRepository;
     private final DepartmentRepository departmentRepository;
+    private final DepartmentService departmentService;
     private final TransactionTypeRepository transactionTypeRepository;
+    private final OpeningBalanceRepository openingBalanceRepository;
+    private final OperationRepository operationRepository;
+    private final CategoryMasterRepository categoryMasterRepository;
+    private final StockAlertService stockAlertService;
 
     public InventoryTransactionService(
             InventoryTransactionRepository transactionRepository,
             MasterRepository masterRepository,
             DepartmentRepository departmentRepository,
-            TransactionTypeRepository transactionTypeRepository) {
+            DepartmentService departmentService,
+            TransactionTypeRepository transactionTypeRepository,
+            OpeningBalanceRepository openingBalanceRepository,
+            OperationRepository operationRepository,
+            CategoryMasterRepository categoryMasterRepository,
+            @Lazy StockAlertService stockAlertService) {
         this.transactionRepository = transactionRepository;
         this.masterRepository = masterRepository;
         this.departmentRepository = departmentRepository;
+        this.departmentService = departmentService;
         this.transactionTypeRepository = transactionTypeRepository;
+        this.openingBalanceRepository = openingBalanceRepository;
+        this.operationRepository = operationRepository;
+        this.categoryMasterRepository = categoryMasterRepository;
+        this.stockAlertService = stockAlertService;
+    }
+
+    /** Inbound stock (adds to destination). All other operations move from → to. */
+    static boolean isInboundOperation(String type) {
+        if (type == null) {
+            return false;
+        }
+        String t = type.trim();
+        return "CUSTOMER REJECTION RECEIPT".equalsIgnoreCase(t)
+                || "BOM MOULDING RECEIPT".equalsIgnoreCase(t)
+                || "BOM TRANSFER RECEIPT".equalsIgnoreCase(t)
+                || "BOM FG TRANSFER RECEIPT".equalsIgnoreCase(t);
     }
 
     @Transactional(readOnly = true)
     public BigDecimal getDepartmentClosingBalance(Long masterId, Long departmentId) {
+        return getDepartmentClosingBalance(masterId, null, departmentId);
+    }
+
+    @Transactional(readOnly = true)
+    public BigDecimal getDepartmentClosingBalance(Long masterId, String categoryName, Long departmentId) {
         Master master = masterRepository.findById(masterId)
                 .orElseThrow(() -> new ResourceNotFoundException("Material master not found with ID: " + masterId));
 
-        Department department = departmentRepository.findById(departmentId)
-                .orElseThrow(() -> new ResourceNotFoundException("Department not found with ID: " + departmentId));
+        Department department = departmentService.getDepartmentEntity(departmentId);
+
+        String code = master.getCode();
+        String catName = (categoryName != null && !categoryName.isBlank()) ? categoryName.trim() : master.getCategory();
+        String deptName = department.getName();
 
         BigDecimal balance = BigDecimal.ZERO;
-        String storeName = master.getStoreName() != null ? master.getStoreName().toLowerCase() : "";
-        String deptName = department.getName().toLowerCase();
 
-        if (deptName.equals(storeName) ||
-            (storeName.contains("main") && deptName.contains("stores")) ||
-            (storeName.contains("maintenance") && deptName.contains("maintenance")) ||
-            (storeName.contains("production") && deptName.contains("production"))) {
-            balance = master.getOpeningBalance();
+        List<OpeningBalance> obExact = openingBalanceRepository
+                .findByItemCodeIgnoreCaseAndCategoryNameIgnoreCaseAndDepartmentNameIgnoreCase(code, catName, deptName);
+        if (!obExact.isEmpty() && obExact.get(0).getOpeningBalance() != null) {
+            balance = obExact.get(0).getOpeningBalance();
         }
 
         List<InventoryTransaction> transactions = transactionRepository.findByMasterIdOrderByTransactionDateAscIdAsc(masterId);
 
         for (InventoryTransaction tx : transactions) {
-            String type = tx.getTransactionType().getType().toUpperCase();
-            Long fromId = tx.getFromDepartment() != null ? tx.getFromDepartment().getId() : null;
-            Long toId = tx.getToDepartment() != null ? tx.getToDepartment().getId() : null;
+            String txCat = (tx.getCategory() == null || tx.getCategory().isBlank())
+                    ? master.getCategory()
+                    : tx.getCategory().trim();
+            if (catName != null && txCat != null && !catName.equalsIgnoreCase(txCat)) {
+                continue;
+            }
 
-            if ("RECEIPT".equals(type)) {
-                if (departmentId.equals(toId) || (toId == null && departmentId.equals(fromId))) {
+            String type = tx.getTransactionType().getType();
+
+            if (isInboundOperation(type)) {
+                if (isSameDepartment(departmentId, department, tx.getToDepartment())
+                        || (tx.getToDepartment() == null && isSameDepartment(departmentId, department, tx.getFromDepartment()))) {
                     balance = balance.add(tx.getQuantity());
                 }
-            } else if ("ISSUE".equals(type)) {
-                if (departmentId.equals(fromId)) {
+            } else if (tx.getReversedTransaction() != null) {
+                InventoryTransaction reversed = tx.getReversedTransaction();
+                String origType = reversed.getTransactionType().getType();
+
+                if (isInboundOperation(origType)) {
+                    if (isSameDepartment(departmentId, department, reversed.getToDepartment())
+                            || (reversed.getToDepartment() == null && isSameDepartment(departmentId, department, reversed.getFromDepartment()))) {
+                        balance = balance.subtract(tx.getQuantity());
+                    }
+                } else {
+                    if (isSameDepartment(departmentId, department, reversed.getFromDepartment())) {
+                        balance = balance.add(tx.getQuantity());
+                    }
+                    if (isSameDepartment(departmentId, department, reversed.getToDepartment())) {
+                        balance = balance.subtract(tx.getQuantity());
+                    }
+                }
+            } else {
+                if (isSameDepartment(departmentId, department, tx.getFromDepartment())) {
                     balance = balance.subtract(tx.getQuantity());
                 }
-                if (departmentId.equals(toId)) {
+                if (isSameDepartment(departmentId, department, tx.getToDepartment())) {
                     balance = balance.add(tx.getQuantity());
-                }
-            } else if ("REVERSE".equals(type)) {
-                InventoryTransaction reversed = tx.getReversedTransaction();
-                if (reversed != null) {
-                    String origType = reversed.getTransactionType().getType().toUpperCase();
-                    Long origFromId = reversed.getFromDepartment() != null ? reversed.getFromDepartment().getId() : null;
-                    Long origToId = reversed.getToDepartment() != null ? reversed.getToDepartment().getId() : null;
-
-                    if ("RECEIPT".equals(origType)) {
-                        if (departmentId.equals(origToId) || (origToId == null && departmentId.equals(origFromId))) {
-                            balance = balance.subtract(tx.getQuantity());
-                        }
-                    } else if ("ISSUE".equals(origType)) {
-                        if (departmentId.equals(origFromId)) {
-                            balance = balance.add(tx.getQuantity());
-                        }
-                        if (departmentId.equals(origToId)) {
-                            balance = balance.subtract(tx.getQuantity());
-                        }
-                    }
                 }
             }
         }
+
+        if (balance.compareTo(BigDecimal.ZERO) < 0) {
+            return BigDecimal.ZERO;
+        }
         return balance;
+    }
+
+    private boolean isSameDepartment(Long requestedId, Department resolved, Department txDept) {
+        if (txDept == null) {
+            return false;
+        }
+        if (requestedId != null && requestedId.equals(txDept.getId())) {
+            return true;
+        }
+        if (resolved != null && resolved.getId() != null && resolved.getId().equals(txDept.getId())) {
+            return true;
+        }
+        if (resolved != null && resolved.getName() != null && txDept.getName() != null
+                && resolved.getName().trim().equalsIgnoreCase(txDept.getName().trim())) {
+            return true;
+        }
+        return false;
     }
 
     @Transactional(readOnly = true)
@@ -112,21 +174,21 @@ public class InventoryTransactionService {
         List<InventoryTransaction> transactions = transactionRepository.findByMasterIdOrderByTransactionDateAscIdAsc(masterId);
 
         for (InventoryTransaction tx : transactions) {
-            String type = tx.getTransactionType().getType().toUpperCase();
-            if ("RECEIPT".equals(type)) {
-                balance = balance.add(tx.getQuantity());
-            } else if ("ISSUE".equals(type)) {
-                balance = balance.subtract(tx.getQuantity());
-            } else if ("REVERSE".equals(type)) {
-                InventoryTransaction reversed = tx.getReversedTransaction();
-                if (reversed != null) {
-                    String origType = reversed.getTransactionType().getType().toUpperCase();
-                    if ("RECEIPT".equals(origType)) {
-                        balance = balance.subtract(tx.getQuantity());
-                    } else if ("ISSUE".equals(origType)) {
-                        balance = balance.add(tx.getQuantity());
-                    }
+            String type = tx.getTransactionType().getType();
+            boolean hasTo = tx.getToDepartment() != null;
+            if (tx.getReversedTransaction() != null) {
+                String origType = tx.getReversedTransaction().getTransactionType().getType();
+                boolean origInbound = isInboundOperation(origType);
+                boolean origHasTo = tx.getReversedTransaction().getToDepartment() != null;
+                if (origInbound) {
+                    balance = balance.subtract(tx.getQuantity());
+                } else if (!origHasTo) {
+                    balance = balance.add(tx.getQuantity());
                 }
+            } else if (isInboundOperation(type)) {
+                balance = balance.add(tx.getQuantity());
+            } else if (!hasTo) {
+                balance = balance.subtract(tx.getQuantity());
             }
         }
         return balance;
@@ -134,7 +196,7 @@ public class InventoryTransactionService {
 
     @Transactional(readOnly = true)
     public String getPreviewTransactionNumber(String typeStr) {
-        String normalizedType = typeStr != null ? typeStr.trim().toUpperCase() : "ISSUE";
+        String normalizedType = typeStr != null && !typeStr.isBlank() ? typeStr.trim() : "Material Transfer";
         TransactionType type = transactionTypeRepository.findByTypeIgnoreCase(normalizedType)
                 .orElseGet(() -> transactionTypeRepository.findAll().stream().findFirst().orElseThrow());
         return generateTransactionNumber(type);
@@ -147,22 +209,28 @@ public class InventoryTransactionService {
 
     @Transactional(rollbackFor = Exception.class)
     public List<TransactionResponse> processBatchTransaction(CreateBatchTransactionRequest request) {
-        String typeStr = request.getTransactionType().trim().toUpperCase();
-        if (!"ISSUE".equals(typeStr) && !"RECEIPT".equals(typeStr)) {
-            throw new InvalidTransactionException("Transaction type must be ISSUE or RECEIPT. For reversals, use /reverse.");
+        String typeStr = request.getTransactionType() != null ? request.getTransactionType().trim() : "Material Transfer";
+
+        if (operationRepository.findByOperationNameIgnoreCase(typeStr).isEmpty()) {
+            throw new InvalidTransactionException(
+                    "Unknown operation '" + typeStr + "'. Add it in operation_master to use it.");
         }
 
-        Department fromDept = departmentRepository.findById(request.getFromDepartmentId())
-                .orElseThrow(() -> new ResourceNotFoundException("From Department not found with ID: " + request.getFromDepartmentId()));
+        Department fromDept = departmentService.getDepartmentEntity(request.getFromDepartmentId());
 
-        Department toDept = null;
-        if (request.getToDepartmentId() != null) {
-            toDept = departmentRepository.findById(request.getToDepartmentId())
-                    .orElseThrow(() -> new ResourceNotFoundException("To Department not found with ID: " + request.getToDepartmentId()));
+        if (request.getToDepartmentId() == null) {
+            throw new InvalidTransactionException("To Department is required.");
         }
+        Department toDept = departmentService.getDepartmentEntity(request.getToDepartmentId());
 
+
+        final String finalTypeStr = typeStr;
         TransactionType type = transactionTypeRepository.findByTypeIgnoreCase(typeStr)
-                .orElseThrow(() -> new ResourceNotFoundException("Transaction type not found: " + typeStr));
+                .orElseGet(() -> {
+                    TransactionType newType = new TransactionType();
+                    newType.setType(finalTypeStr);
+                    return transactionTypeRepository.save(newType);
+                });
 
         if (request.getItems() == null || request.getItems().isEmpty()) {
             throw new InvalidTransactionException("Transaction must contain at least one item.");
@@ -180,24 +248,36 @@ public class InventoryTransactionService {
             Master master = masterRepository.findByIdForUpdate(itemReq.getMasterId())
                     .orElseThrow(() -> new ResourceNotFoundException("Material master not found with ID: " + itemReq.getMasterId()));
 
-            BigDecimal fromDeptBalance = getDepartmentClosingBalance(master.getId(), fromDept.getId());
+            if (itemReq.getCategory() == null || itemReq.getCategory().isBlank()) {
+                throw new InvalidTransactionException("Category of Item is required for item '" + master.getCode() + "'.");
+            }
+            String requestedCategory = itemReq.getCategory().trim();
+            String itemCategory = categoryMasterRepository.findByCategoryNameIgnoreCase(requestedCategory)
+                    .map(c -> c.getCategoryName())
+                    .orElseThrow(() -> new InvalidTransactionException(
+                            "Category '" + requestedCategory + "' is not in category_master."));
 
-            if ("ISSUE".equals(typeStr)) {
+            // Validate sufficient stock using category-specific balance
+            BigDecimal fromDeptBalance = getDepartmentClosingBalance(master.getId(), itemCategory, request.getFromDepartmentId());
+
+            if (!isInboundOperation(typeStr)) {
                 if (itemReq.getQuantity().compareTo(fromDeptBalance) > 0) {
                     throw new InsufficientStockException(String.format(
-                            "Transaction quantity (%s %s) cannot be greater than closing balance in department '%s' (%s %s) for item '%s'.",
+                            "Transaction quantity (%s %s) cannot be greater than closing balance in department '%s' (%s %s) for item '%s' [%s].",
                             itemReq.getQuantity(), master.getUnitOfMeasurement(),
                             fromDept.getName(), fromDeptBalance, master.getUnitOfMeasurement(),
-                            master.getCode()
+                            master.getCode(), itemCategory
                     ));
                 }
             }
+
 
             InventoryTransaction tx = new InventoryTransaction();
             tx.setTransactionNumber(transactionNumber);
             tx.setSlipNumber(manualSlipNumber);
             tx.setTransactionType(type);
             tx.setMaster(master);
+            tx.setCategory(itemCategory);  // save the exact selected category
             tx.setFromDepartment(fromDept);
             tx.setToDepartment(toDept);
             tx.setQuantity(itemReq.getQuantity());
@@ -207,6 +287,7 @@ public class InventoryTransactionService {
             InventoryTransaction savedTx = transactionRepository.save(tx);
             BigDecimal newBalance = getCurrentBalance(master.getId());
             responses.add(mapToResponse(savedTx, newBalance));
+            stockAlertService.evaluateItem(master.getCode(), itemCategory);
         }
 
         return responses;
@@ -217,9 +298,11 @@ public class InventoryTransactionService {
         CreateBatchTransactionRequest batchReq = new CreateBatchTransactionRequest();
         batchReq.setTransactionType(request.getTransactionType());
         batchReq.setFromDepartmentId(request.getDepartmentId());
+        batchReq.setToDepartmentId(request.getToDepartmentId());
         batchReq.setRemarks(request.getRemarks());
 
-        TransactionItemRequest item = new TransactionItemRequest(request.getMasterId(), request.getQuantity(), request.getRemarks());
+        TransactionItemRequest item = new TransactionItemRequest(
+                request.getMasterId(), request.getQuantity(), request.getRemarks(), request.getCategory());
         batchReq.setItems(List.of(item));
 
         List<TransactionResponse> responses = processBatchTransaction(batchReq);
@@ -231,7 +314,7 @@ public class InventoryTransactionService {
         InventoryTransaction targetTx = transactionRepository.findById(request.getTargetTransactionId())
                 .orElseThrow(() -> new ResourceNotFoundException("Transaction not found to reverse with ID: " + request.getTargetTransactionId()));
 
-        if ("REVERSE".equalsIgnoreCase(targetTx.getTransactionType().getType())) {
+        if (targetTx.getReversedTransaction() != null) {
             throw new InvalidTransactionException("Cannot reverse a reversal transaction.");
         }
 
@@ -239,16 +322,17 @@ public class InventoryTransactionService {
             throw new InvalidTransactionException("Transaction '" + targetTx.getSlipNumber() + "' has already been reversed.");
         }
 
-        TransactionType reverseType = transactionTypeRepository.findByTypeIgnoreCase("REVERSE")
-                .orElseThrow(() -> new ResourceNotFoundException("Transaction type REVERSE not found"));
+        TransactionType reverseType = transactionTypeRepository.findByTypeIgnoreCase("Internal Material Return")
+                .orElseGet(() -> transactionTypeRepository.findByTypeIgnoreCase(targetTx.getTransactionType().getType())
+                        .orElseThrow(() -> new ResourceNotFoundException("No operation type available to record a reversal")));
 
         Long masterId = targetTx.getMaster().getId();
         BigDecimal currentBalance = getCurrentBalance(masterId);
 
-        if ("RECEIPT".equalsIgnoreCase(targetTx.getTransactionType().getType())) {
+        if (isInboundOperation(targetTx.getTransactionType().getType())) {
             if (currentBalance.compareTo(targetTx.getQuantity()) < 0) {
                 throw new InsufficientStockException(String.format(
-                        "Cannot reverse RECEIPT '%s': available balance (%s) is less than receipt quantity (%s)",
+                        "Cannot reverse inbound '%s': available balance (%s) is less than receipt quantity (%s)",
                         targetTx.getSlipNumber(), currentBalance, targetTx.getQuantity()
                 ));
             }
@@ -272,6 +356,10 @@ public class InventoryTransactionService {
 
         InventoryTransaction savedTx = transactionRepository.save(reverseTx);
         BigDecimal newBalance = getCurrentBalance(masterId);
+        String cat = targetTx.getCategory() != null && !targetTx.getCategory().isBlank()
+                ? targetTx.getCategory()
+                : targetTx.getMaster().getCategory();
+        stockAlertService.evaluateItem(targetTx.getMaster().getCode(), cat);
 
         return mapToResponse(savedTx, newBalance);
     }
@@ -291,37 +379,11 @@ public class InventoryTransactionService {
     }
 
     private synchronized String generateTransactionNumber(TransactionType type) {
-        String typeName = type.getType().toUpperCase();
-        String prefix;
-        switch (typeName) {
-            case "ISSUE":
-                prefix = "ISU";
-                break;
-            case "RECEIPT":
-                prefix = "REC";
-                break;
-            case "REVERSE":
-                prefix = "REV";
-                break;
-            default:
-                prefix = "TX";
-                break;
-        }
-
-        Optional<String> latestTxNumOpt = transactionRepository.findLatestTransactionNumberByTypeId(type.getId());
-        int nextSeq = 1;
-        if (latestTxNumOpt.isPresent()) {
-            String latestTxNum = latestTxNumOpt.get();
-            try {
-                String numPart = latestTxNum.substring(latestTxNum.lastIndexOf('-') + 1);
-                nextSeq = Integer.parseInt(numPart) + 1;
-            } catch (Exception ignored) {
-                nextSeq = 1;
-            }
-        }
-
-        return String.format("%s-%03d", prefix, nextSeq);
+        Long maxId = transactionRepository.findMaxTransactionId();
+        long nextSeq = (maxId != null ? maxId : 0) + 1;
+        return String.format("%03d", nextSeq);
     }
+
 
     private TransactionResponse mapToResponse(InventoryTransaction tx, BigDecimal currentBalanceAfter) {
         TransactionResponse dto = new TransactionResponse();
@@ -332,7 +394,7 @@ public class InventoryTransactionService {
         dto.setMasterId(tx.getMaster().getId());
         dto.setMasterCode(tx.getMaster().getCode());
         dto.setMasterDescription(tx.getMaster().getDescription());
-        dto.setCategory(tx.getMaster().getCategory());
+        dto.setCategory(tx.getCategory() != null ? tx.getCategory() : tx.getMaster().getCategory());
         dto.setUnitOfMeasurement(tx.getMaster().getUnitOfMeasurement());
         if (tx.getFromDepartment() != null) {
             dto.setFromDepartmentId(tx.getFromDepartment().getId());
@@ -351,4 +413,10 @@ public class InventoryTransactionService {
         dto.setCurrentBalanceAfter(currentBalanceAfter);
         return dto;
     }
+
+    @Transactional
+    public void clearAllTransactions() {
+        transactionRepository.deleteAllInBatch();
+    }
 }
+

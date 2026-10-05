@@ -28,7 +28,7 @@ public class DataInitializer {
                 // 1. Ensure companies table exists across all databases (PostgreSQL & H2)
                 jdbc.execute("""
                     CREATE TABLE IF NOT EXISTS companies (
-                        id UUID DEFAULT RANDOM_UUID() PRIMARY KEY,
+                        id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
                         company_code VARCHAR(100) NOT NULL,
                         company_name VARCHAR(255) NOT NULL,
                         legal_name VARCHAR(255) DEFAULT '',
@@ -55,23 +55,24 @@ public class DataInitializer {
                         state VARCHAR(100) DEFAULT '',
                         country VARCHAR(100) DEFAULT 'India',
                         pin_code VARCHAR(20) DEFAULT '',
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
                     )
                 """);
 
                 // 2. Ensure inventory_transaction table exists across all databases
                 jdbc.execute("""
                     CREATE TABLE IF NOT EXISTS inventory_transaction (
-                        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                        id BIGSERIAL PRIMARY KEY,
                         transaction_number VARCHAR(50) NOT NULL,
                         slip_number VARCHAR(100),
                         transaction_type_id BIGINT NOT NULL,
                         master_id BIGINT NOT NULL,
                         from_department_id BIGINT NOT NULL,
                         to_department_id BIGINT,
+                        category VARCHAR(150),
                         quantity NUMERIC(15, 2) NOT NULL,
-                        transaction_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        transaction_date TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
                         remarks TEXT,
                         reversed_transaction_id BIGINT
                     )
@@ -80,27 +81,55 @@ public class DataInitializer {
                 System.err.println("Note: Table initialization: " + e.getMessage());
             }
 
-            // 2. Seed Transaction Types if empty
-            if (txTypeRepo.count() == 0) {
-                List<String> types = List.of("ISSUE", "RECEIPT", "REVERSE");
-                for (String t : types) {
+            // 2. Seed transaction types from operation names only (no ISSUE / RECEIPT / REVERSE)
+            List<String> types = List.of(
+                "Material Transfer",
+                "Internal Material Return",
+                "Rejection Tfd to Burning",
+                "Rejection tfd to Scrap Yard",
+                "Recycle Material Issue",
+                "Material Send for Job work",
+                "Customer Rejection Receipt",
+                "Customer Rejection Dismentle & SFG Recover",
+                "FG Dismantling & SFG Recovery",
+                "Rework"
+            );
+            for (String t : types) {
+                if (txTypeRepo.findByTypeIgnoreCase(t).isEmpty()) {
                     TransactionType tt = new TransactionType();
                     tt.setType(t);
                     txTypeRepo.save(tt);
                 }
-                System.out.println("Seeded transaction types: " + types);
             }
+            try {
+                jdbc.update("""
+                    DELETE FROM transaction_type
+                    WHERE UPPER(type) IN ('ISSUE', 'RECEIPT', 'REVERSE', 'TRANSFER')
+                      AND id NOT IN (
+                        SELECT DISTINCT transaction_type_id FROM inventory_transaction
+                        WHERE transaction_type_id IS NOT NULL
+                      )
+                    """);
+            } catch (Exception e) {
+                System.err.println("Note: Could not drop legacy transaction types: " + e.getMessage());
+            }
+            System.out.println("Seeded operation transaction types.");
 
-            // 3. Seed Departments if empty
-            if (deptRepo.count() == 0) {
-                List<String> depts = List.of("Production", "Maintenance", "Quality Control", "Stores", "Administration");
-                for (String d : depts) {
+
+            // 3. Seed Departments if missing
+            List<String> depts = List.of(
+                "Gate", "LASER", "T/Room", "Store", "Sand", "Tambling",
+                "Moulding", "Finishing", "CNC", "Burning", "Packing", "Rejection Store"
+            );
+            for (String d : depts) {
+                if (deptRepo.findByNameIgnoreCase(d).isEmpty()) {
                     Department dept = new Department();
                     dept.setName(d);
                     deptRepo.save(dept);
                 }
-                System.out.println("Seeded departments: " + depts);
             }
+            System.out.println("Seeded departments from department_master.");
+
 
             // 4. Seed Material Master Items if empty
             if (masterRepo.count() == 0) {

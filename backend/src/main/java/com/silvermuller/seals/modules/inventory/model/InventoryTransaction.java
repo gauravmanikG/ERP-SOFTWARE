@@ -35,6 +35,9 @@ public class InventoryTransaction {
     @JoinColumn(name = "to_department_id", foreignKey = @ForeignKey(name = "fk_inv_tx_to_dept"))
     private Department toDepartment;
 
+    @Column(name = "category", length = 150)
+    private String category;
+
     @Column(name = "quantity", nullable = false, precision = 15, scale = 2)
     private BigDecimal quantity;
 
@@ -129,6 +132,14 @@ public class InventoryTransaction {
 
     public void setTransactionDate(OffsetDateTime transactionDate) {
         this.transactionDate = transactionDate;
+    }
+
+    public String getCategory() {
+        return category;
+    }
+
+    public void setCategory(String category) {
+        this.category = category;
     }
 
     public String getRemarks() {
