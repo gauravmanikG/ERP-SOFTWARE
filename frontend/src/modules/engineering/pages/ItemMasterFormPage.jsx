@@ -1,5 +1,6 @@
-import { useState, useRef, useEffect } from "react";
-import { Eye, Pencil, Trash2, Search, X } from "lucide-react";
+import { useState, useRef, useEffect, useMemo } from "react";
+import { Eye, Pencil, Trash2, Search, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
+import { REAL_ITEM_MASTER_DATA } from "../data/realItemMasterData";
 
 // Master lists extracted directly from the reference sheet
 const PRODUCT_OPTIONS = [
@@ -150,9 +151,8 @@ function getHighestPartNumberSuffix(savedItems = []) {
 
 function getNextIncrementalSuffix(savedItems = [], baseOffset = 0) {
   let highest = getHighestPartNumberSuffix(savedItems);
-  // Default base to 5745 so initial incremented code generated is 05746
   if (highest === 0) {
-    highest = 5745;
+    highest = 7326;
   }
   if (baseOffset > 0 && baseOffset > highest) {
     highest = baseOffset;
@@ -161,94 +161,9 @@ function getNextIncrementalSuffix(savedItems = [], baseOffset = 0) {
   return String(nextVal).padStart(5, "0");
 }
 
-const DEFAULT_SAVED_ITEMS = [
-  {
-    id: 1,
-    sms_new_part_no: "945-05745",
-    old_code: "101",
-    product: "9 - OIL SEAL",
-    segment: "9 - Trucks / HCV",
-    region: "5 - IND",
-    group_name: "FG",
-    subgroup: "Oil Seal",
-    sub_subgroup: "Axle Seal",
-    product_type: "Rotary Shaft Double Lip",
-    description_size: "Oil Seal-NBR (Size: 95x130x13)",
-    inner_diameter: "95",
-    outer_diameter: "130",
-    height: "13",
-    thickness: "13",
-    uom: "PCS",
-    category: "Oil Seal",
-    material: "NBR",
-    color: "Black",
-    price: "185.00",
-    application: "Rear Axle Wheel Hub",
-    oem: "Tata Motors / Ashok Leyland",
-    corteco_no: "12011145B",
-    fitting_position: "Rear Axle Inner",
-    swirl_type: "Bi-Directional",
-    image: null
-  },
-  {
-    id: 2,
-    sms_new_part_no: "945-05744",
-    old_code: "102",
-    product: "9 - OIL SEAL",
-    segment: "9 - Trucks / HCV",
-    region: "5 - IND",
-    group_name: "FG",
-    subgroup: "Oil Seal",
-    sub_subgroup: "Pinion Seal",
-    product_type: "High Pressure TC Seal",
-    description_size: "Oil Seal-NBR (Size: 110x140x13)",
-    inner_diameter: "110",
-    outer_diameter: "140",
-    height: "13",
-    thickness: "13",
-    uom: "PCS",
-    category: "Oil Seal",
-    material: "NBR",
-    color: "Black",
-    price: "210.00",
-    application: "Differential Pinion",
-    oem: "Tata 1613 / 2518",
-    corteco_no: "12015520B",
-    fitting_position: "Differential",
-    swirl_type: "Right Hand (RH)",
-    image: null
-  },
-  {
-    id: 3,
-    sms_new_part_no: "877-05743",
-    old_code: "121",
-    product: "8 - O-RING",
-    segment: "7 - Automotive/Passenger/4W",
-    region: "7 - JAPANESE",
-    group_name: "FG",
-    subgroup: "O-Ring",
-    sub_subgroup: "Engine Flange O-Ring",
-    product_type: "Static Circular Seal",
-    description_size: "OIL SEAL-NBR (Size: 52x72x12)",
-    inner_diameter: "52",
-    outer_diameter: "72",
-    height: "12",
-    thickness: "12",
-    uom: "PCS",
-    category: "O-Ring",
-    material: "FKM",
-    color: "Brown",
-    price: "95.00",
-    application: "Engine Crankcase Flange",
-    oem: "Maruti Suzuki / Toyota",
-    corteco_no: "01034421B",
-    fitting_position: "Front Flange",
-    swirl_type: "None",
-    image: null
-  }
-];
+const DEFAULT_SAVED_ITEMS = REAL_ITEM_MASTER_DATA;
 
-const STORAGE_KEY = "sms_engineering_item_master";
+const STORAGE_KEY = "sms_engineering_item_master_v3";
 
 export function ItemMasterFormPage({
   dark = false,
@@ -267,12 +182,17 @@ export function ItemMasterFormPage({
   const [quickPickerMode, setQuickPickerMode] = useState(null); // 'edit' | 'delete' | null
   const [quickSearch, setQuickSearch] = useState("");
 
+  // Pagination State (for fast, responsive browsing of all 1,582 records)
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+
   // Table selection & column filter state
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [colFilters, setColFilters] = useState({
     photo: "",
     newCode: "",
     oldCode: "",
+    description: "",
     product: "",
     segment: "",
     region: "",
@@ -281,25 +201,20 @@ export function ItemMasterFormPage({
     price: ""
   });
 
-  // Persistent records via localStorage
+  // Persistent records via localStorage (defaulting to the 1,582 real master records)
   const [savedItems, setSavedItems] = useState(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map((item) => {
-            if (item.sms_new_part_no === "985-05901") {
-              return { ...item, sms_new_part_no: "877-05743" };
-            }
-            return item;
-          });
+        if (Array.isArray(parsed) && parsed.length > 50) {
+          return parsed;
         }
       }
     } catch (e) {
       console.error("Error reading item master from localStorage", e);
     }
-    return DEFAULT_SAVED_ITEMS;
+    return REAL_ITEM_MASTER_DATA;
   });
 
   // Keep localStorage synchronized
@@ -458,48 +373,77 @@ export function ItemMasterFormPage({
     }
   };
 
+  // Reset page when search or filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedCategoryFilter, colFilters]);
+
   // Comprehensive filtering matching top search, category pills, and per-column filters
-  const filteredItems = savedItems.filter((item) => {
-    // 1. Top Search
-    const matchesSearch =
-      searchTerm === "" ||
-      item.sms_new_part_no?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.old_code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.description_size?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.product?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.oem?.toLowerCase().includes(searchTerm.toLowerCase());
+  const filteredItems = useMemo(() => {
+    const sTerm = searchTerm.trim().toLowerCase();
+    const catTerm = selectedCategoryFilter;
+    const fNewCode = colFilters.newCode.trim().toLowerCase();
+    const fOldCode = colFilters.oldCode.trim().toLowerCase();
+    const fDesc = colFilters.description.trim().toLowerCase();
+    const fProd = colFilters.product.trim().toLowerCase();
+    const fSeg = colFilters.segment.trim().toLowerCase();
+    const fReg = colFilters.region.trim().toLowerCase();
+    const fDims = colFilters.dimensions.trim().toLowerCase();
+    const fMat = colFilters.material.trim().toLowerCase();
+    const fPrice = colFilters.price.trim().toLowerCase();
 
-    // 2. Category Pill Filter
-    const matchesCat =
-      selectedCategoryFilter === "ALL" ||
-      item.product?.toLowerCase().includes(selectedCategoryFilter.toLowerCase()) ||
-      item.category?.toLowerCase().includes(selectedCategoryFilter.toLowerCase());
+    return savedItems.filter((item) => {
+      // 1. Top Search
+      if (sTerm) {
+        const inSearch =
+          (item.sms_new_part_no && item.sms_new_part_no.toLowerCase().includes(sTerm)) ||
+          (item.old_code && item.old_code.toLowerCase().includes(sTerm)) ||
+          (item.description_size && item.description_size.toLowerCase().includes(sTerm)) ||
+          (item.product && item.product.toLowerCase().includes(sTerm)) ||
+          (item.subgroup && item.subgroup.toLowerCase().includes(sTerm)) ||
+          (item.oem && item.oem.toLowerCase().includes(sTerm));
+        if (!inSearch) return false;
+      }
 
-    // 3. Per-Column Filters
-    const matchesNewCode = !colFilters.newCode || item.sms_new_part_no?.toLowerCase().includes(colFilters.newCode.toLowerCase());
-    const matchesOldCode = !colFilters.oldCode || item.old_code?.toLowerCase().includes(colFilters.oldCode.toLowerCase());
-    const matchesProduct = !colFilters.product || item.product?.toLowerCase().includes(colFilters.product.toLowerCase());
-    const matchesSegment = !colFilters.segment || item.segment?.toLowerCase().includes(colFilters.segment.toLowerCase());
-    const matchesRegion = !colFilters.region || item.region?.toLowerCase().includes(colFilters.region.toLowerCase());
-    const dimsStr = `${item.inner_diameter || ""} ${item.outer_diameter || ""} ${item.height || item.thickness || ""}`;
-    const matchesDims = !colFilters.dimensions || dimsStr.toLowerCase().includes(colFilters.dimensions.toLowerCase());
-    const matStr = `${item.material || ""} ${item.color || ""}`;
-    const matchesMaterial = !colFilters.material || matStr.toLowerCase().includes(colFilters.material.toLowerCase());
-    const matchesPrice = !colFilters.price || String(item.price || "").toLowerCase().includes(colFilters.price.toLowerCase());
+      // 2. Category Pill Filter
+      if (catTerm !== "ALL") {
+        const inCat =
+          (item.product && item.product.toLowerCase().includes(catTerm.toLowerCase())) ||
+          (item.category && item.category.toLowerCase().includes(catTerm.toLowerCase())) ||
+          (item.subgroup && item.subgroup.toLowerCase().includes(catTerm.toLowerCase()));
+        if (!inCat) return false;
+      }
 
-    return (
-      matchesSearch &&
-      matchesCat &&
-      matchesNewCode &&
-      matchesOldCode &&
-      matchesProduct &&
-      matchesSegment &&
-      matchesRegion &&
-      matchesDims &&
-      matchesMaterial &&
-      matchesPrice
-    );
-  });
+      // 3. Per-Column Filters
+      if (fNewCode && (!item.sms_new_part_no || !item.sms_new_part_no.toLowerCase().includes(fNewCode))) return false;
+      if (fOldCode && (!item.old_code || !item.old_code.toLowerCase().includes(fOldCode))) return false;
+      if (fDesc && (!item.description_size || !item.description_size.toLowerCase().includes(fDesc))) return false;
+      if (fProd && (!item.product || !item.product.toLowerCase().includes(fProd)) && (!item.subgroup || !item.subgroup.toLowerCase().includes(fProd))) return false;
+      if (fSeg && (!item.segment || !item.segment.toLowerCase().includes(fSeg))) return false;
+      if (fReg && (!item.region || !item.region.toLowerCase().includes(fReg))) return false;
+      if (fDims) {
+        const dimsStr = `${item.inner_diameter || ""} ${item.outer_diameter || ""} ${item.height || item.thickness || ""}`.toLowerCase();
+        if (!dimsStr.includes(fDims)) return false;
+      }
+      if (fMat) {
+        const matStr = `${item.material || ""} ${item.color || ""}`.toLowerCase();
+        if (!matStr.includes(fMat)) return false;
+      }
+      if (fPrice && (!item.price || !String(item.price).toLowerCase().includes(fPrice))) return false;
+
+      return true;
+    });
+  }, [savedItems, searchTerm, selectedCategoryFilter, colFilters]);
+
+  // Pagination calculation
+  const totalRecords = filteredItems.length;
+  const isAllPages = pageSize === "ALL";
+  const numPageSize = isAllPages ? totalRecords : Number(pageSize);
+  const totalPages = isAllPages ? 1 : Math.ceil(totalRecords / numPageSize) || 1;
+  const clampedPage = Math.min(Math.max(currentPage, 1), totalPages);
+  const startIndex = isAllPages ? 0 : (clampedPage - 1) * numPageSize;
+  const endIndex = isAllPages ? totalRecords : Math.min(startIndex + numPageSize, totalRecords);
+  const paginatedItems = isAllPages ? filteredItems : filteredItems.slice(startIndex, endIndex);
 
   // Calculate live summary metrics
   const totalCount = savedItems.length;
@@ -922,6 +866,7 @@ export function ItemMasterFormPage({
                 <th style={{ padding: "10px 12px", fontWeight: 700, color: "#334155" }}>Photo</th>
                 <th style={{ padding: "10px 12px", fontWeight: 700, color: "#334155" }}>New Code (SMS FINAL)</th>
                 <th style={{ padding: "10px 12px", fontWeight: 700, color: "#334155" }}>Old Code</th>
+                <th style={{ padding: "10px 12px", fontWeight: 700, color: "#334155", minWidth: 200 }}>Description &amp; Size</th>
                 <th style={{ padding: "10px 12px", fontWeight: 700, color: "#334155" }}>Product</th>
                 <th style={{ padding: "10px 12px", fontWeight: 700, color: "#334155" }}>Segment</th>
                 <th style={{ padding: "10px 12px", fontWeight: 700, color: "#334155" }}>Region</th>
@@ -971,6 +916,22 @@ export function ItemMasterFormPage({
                     placeholder="Filter..."
                     value={colFilters.oldCode}
                     onChange={(e) => setColFilters({ ...colFilters, oldCode: e.target.value })}
+                    style={{
+                      width: "100%",
+                      padding: "3px 6px",
+                      fontSize: 11,
+                      border: "1px solid #cbd5e1",
+                      borderRadius: 4,
+                      outline: "none"
+                    }}
+                  />
+                </td>
+                <td style={{ padding: "6px 10px" }}>
+                  <input
+                    type="text"
+                    placeholder="Filter desc..."
+                    value={colFilters.description}
+                    onChange={(e) => setColFilters({ ...colFilters, description: e.target.value })}
                     style={{
                       width: "100%",
                       padding: "3px 6px",
@@ -1084,7 +1045,7 @@ export function ItemMasterFormPage({
             <tbody>
               {filteredItems.length === 0 ? (
                 <tr>
-                  <td colSpan={10} style={{ padding: "40px", textAlign: "center", color: "#64748b" }}>
+                  <td colSpan={11} style={{ padding: "40px", textAlign: "center", color: "#64748b" }}>
                     <p style={{ fontSize: 14, fontWeight: 700, margin: "0 0 8px" }}>No item master records found</p>
                     <button
                       onClick={handleOpenNewModal}
@@ -1104,7 +1065,7 @@ export function ItemMasterFormPage({
                   </td>
                 </tr>
               ) : (
-                filteredItems.map((item) => {
+                paginatedItems.map((item) => {
                   const isSelected = selectedIds.has(item.id);
                   return (
                     <tr
@@ -1142,42 +1103,58 @@ export function ItemMasterFormPage({
                       </td>
 
                       {/* New Code (SMS FINAL) */}
-                      <td style={{ padding: "10px 12px", fontWeight: 800, color: "#0f172a" }}>
+                      <td style={{ padding: "10px 12px", fontWeight: 800, color: "#0f172a", whiteSpace: "nowrap" }}>
                         {item.sms_new_part_no}
                       </td>
 
                       {/* Old Code */}
-                      <td style={{ padding: "10px 12px", color: "#334155", fontWeight: 500 }}>
+                      <td style={{ padding: "10px 12px", color: "#334155", fontWeight: 600, whiteSpace: "nowrap" }}>
                         {item.old_code || "-"}
                       </td>
 
+                      {/* Description & Size */}
+                      <td
+                        style={{
+                          padding: "10px 12px",
+                          color: "#334155",
+                          fontWeight: 500,
+                          maxWidth: 280,
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis"
+                        }}
+                        title={item.description_size}
+                      >
+                        {item.description_size || "-"}
+                      </td>
+
                       {/* Product */}
-                      <td style={{ padding: "10px 12px", color: "#334155", fontWeight: 600 }}>
+                      <td style={{ padding: "10px 12px", color: "#334155", fontWeight: 600, whiteSpace: "nowrap" }}>
                         {item.product}
                       </td>
 
                       {/* Segment */}
-                      <td style={{ padding: "10px 12px", color: "#334155", fontWeight: 500 }}>
+                      <td style={{ padding: "10px 12px", color: "#334155", fontWeight: 500, whiteSpace: "nowrap" }}>
                         {item.segment}
                       </td>
 
                       {/* Region */}
-                      <td style={{ padding: "10px 12px", color: "#334155", fontWeight: 500 }}>
+                      <td style={{ padding: "10px 12px", color: "#334155", fontWeight: 500, whiteSpace: "nowrap" }}>
                         {item.region}
                       </td>
 
                       {/* Dimensions (ID x OD x H) */}
-                      <td style={{ padding: "10px 12px", color: "#0f172a", fontWeight: 600 }}>
-                        {item.inner_diameter || "-"} &times; {item.outer_diameter || "-"} &times; {item.height || item.width || "-"} mm
+                      <td style={{ padding: "10px 12px", color: "#0f172a", fontWeight: 600, whiteSpace: "nowrap" }}>
+                        {item.inner_diameter || "-"} &times; {item.outer_diameter || "-"} &times; {item.height || item.thickness || "-"} mm
                       </td>
 
                       {/* Material */}
-                      <td style={{ padding: "10px 12px", color: "#334155", fontWeight: 500 }}>
+                      <td style={{ padding: "10px 12px", color: "#334155", fontWeight: 500, whiteSpace: "nowrap" }}>
                         {item.material || "NBR"} {item.color ? `· ${item.color}` : ""}
                       </td>
 
                       {/* Price */}
-                      <td style={{ padding: "10px 12px", fontWeight: 700, color: "#0f172a" }}>
+                      <td style={{ padding: "10px 12px", fontWeight: 700, color: "#0f172a", whiteSpace: "nowrap" }}>
                         {item.price ? `₹${item.price}` : "-"}
                       </td>
                     </tr>
@@ -1186,6 +1163,136 @@ export function ItemMasterFormPage({
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Pagination Toolbar */}
+        <div
+          style={{
+            background: "#ffffff",
+            border: "1px solid #e2e8f0",
+            borderTop: "none",
+            borderRadius: "0 0 12px 12px",
+            padding: "10px 18px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: 12,
+            fontSize: 12,
+            color: "#475569"
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            <span>
+              Showing{" "}
+              <strong>
+                {totalRecords === 0 ? 0 : (startIndex + 1).toLocaleString()} &ndash;{" "}
+                {endIndex.toLocaleString()}
+              </strong>{" "}
+              of <strong>{totalRecords.toLocaleString()}</strong> items
+            </span>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontSize: 11, color: "#64748b" }}>Rows per page:</span>
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(e.target.value === "ALL" ? "ALL" : Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                style={{
+                  padding: "3px 8px",
+                  borderRadius: 6,
+                  border: "1px solid #cbd5e1",
+                  fontSize: 11.5,
+                  fontWeight: 600,
+                  outline: "none",
+                  cursor: "pointer",
+                  background: "#ffffff"
+                }}
+              >
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+                <option value={250}>250</option>
+                <option value="ALL">All (1,582)</option>
+              </select>
+            </div>
+          </div>
+
+          {!isAllPages && totalPages > 1 && (
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <button
+                type="button"
+                onClick={() => setCurrentPage(1)}
+                disabled={clampedPage <= 1}
+                title="First Page"
+                style={{
+                  padding: "4px 8px",
+                  borderRadius: 6,
+                  border: "1px solid #cbd5e1",
+                  background: clampedPage <= 1 ? "#f8fafc" : "#ffffff",
+                  color: clampedPage <= 1 ? "#94a3b8" : "#1e293b",
+                  cursor: clampedPage <= 1 ? "not-allowed" : "pointer"
+                }}
+              >
+                <ChevronsLeft size={14} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={clampedPage <= 1}
+                title="Previous Page"
+                style={{
+                  padding: "4px 8px",
+                  borderRadius: 6,
+                  border: "1px solid #cbd5e1",
+                  background: clampedPage <= 1 ? "#f8fafc" : "#ffffff",
+                  color: clampedPage <= 1 ? "#94a3b8" : "#1e293b",
+                  cursor: clampedPage <= 1 ? "not-allowed" : "pointer"
+                }}
+              >
+                <ChevronLeft size={14} />
+              </button>
+
+              <span style={{ margin: "0 8px", fontWeight: 700, fontSize: 12 }}>
+                Page {clampedPage} of {totalPages}
+              </span>
+
+              <button
+                type="button"
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={clampedPage >= totalPages}
+                title="Next Page"
+                style={{
+                  padding: "4px 8px",
+                  borderRadius: 6,
+                  border: "1px solid #cbd5e1",
+                  background: clampedPage >= totalPages ? "#f8fafc" : "#ffffff",
+                  color: clampedPage >= totalPages ? "#94a3b8" : "#1e293b",
+                  cursor: clampedPage >= totalPages ? "not-allowed" : "pointer"
+                }}
+              >
+                <ChevronRight size={14} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrentPage(totalPages)}
+                disabled={clampedPage >= totalPages}
+                title="Last Page"
+                style={{
+                  padding: "4px 8px",
+                  borderRadius: 6,
+                  border: "1px solid #cbd5e1",
+                  background: clampedPage >= totalPages ? "#f8fafc" : "#ffffff",
+                  color: clampedPage >= totalPages ? "#94a3b8" : "#1e293b",
+                  cursor: clampedPage >= totalPages ? "not-allowed" : "pointer"
+                }}
+              >
+                <ChevronsRight size={14} />
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1212,9 +1319,17 @@ export function ItemMasterFormPage({
         }}
       >
         <div>
-          <span>{filteredItems.length} records</span>
+          <span>{totalRecords.toLocaleString()} records</span>
           <span style={{ margin: "0 6px", color: "#64748b" }}>|</span>
           <span>{selectedIds.size} selected</span>
+          {!isAllPages && (
+            <>
+              <span style={{ margin: "0 6px", color: "#64748b" }}>|</span>
+              <span style={{ color: "#94a3b8", fontWeight: 500 }}>
+                Page {clampedPage} of {totalPages}
+              </span>
+            </>
+          )}
         </div>
         <div style={{ color: "#94a3b8", fontSize: 11, fontWeight: 500 }}>
           Compression Moulding Line &middot; Active in Production Catalog
