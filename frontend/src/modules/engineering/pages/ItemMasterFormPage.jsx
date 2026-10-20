@@ -1,134 +1,223 @@
+import { useResizableColumns, ResizableColGroup, ColumnResizeHandle } from "../../../shared/components/ResizableTable";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { Eye, Pencil, Trash2, Search, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
 import { REAL_ITEM_MASTER_DATA } from "../data/realItemMasterData";
 
 // Master lists extracted directly from the reference sheet
-const PRODUCT_OPTIONS = [
-  { no: 9, name: "OIL SEAL", label: "9 - OIL SEAL" },
-  { no: 9, name: "VALVE STEAM SEAL", label: "9 - VALVE STEAM SEAL" },
-  { no: 8, name: "O-RING", label: "8 - O-RING" },
-  { no: 8, name: "O-RING KIT", label: "8 - O-RING KIT" },
-  { no: 7, name: "METAL PARTS", label: "7 - METAL PARTS" },
-  { no: 7, name: "ABS RING", label: "7 - ABS RING" },
-  { no: 6, name: "PU", label: "6 - PU" },
-  { no: 5, name: "REPAIR KIT", label: "5 - REPAIR KIT" },
-  { no: 4, name: "GASKET/WHEEL HUB", label: "4 - GASKET/WHEEL HUB" }
+const GROUP_OPTIONS = [
+  { no: 9, name: "OIL SEAL", label: "OIL SEAL" },
+  { no: 9, name: "VALVE STEAM SEAL", label: "VALVE STEAM SEAL" },
+  { no: 8, name: "O-RING", label: "O-RING" },
+  { no: 8, name: "O-RING KIT", label: "O-RING KIT" },
+  { no: 7, name: "METAL PARTS", label: "METAL PARTS" },
+  { no: 7, name: "ABS RING", label: "ABS RING" },
+  { no: 6, name: "PU", label: "PU" },
+  { no: 5, name: "REPAIR KIT", label: "REPAIR KIT" },
+  { no: 4, name: "GASKET/WHEEL HUB", label: "GASKET/WHEEL HUB" }
 ];
 
-const SEGMENT_OPTIONS = [
-  { no: 9, name: "Trucks / HCV", label: "9 - Trucks / HCV" },
-  { no: 8, name: "LCV/SCV", label: "8 - LCV/SCV" },
-  { no: 7, name: "Automotive/Passenger/4W", label: "7 - Automotive/Passenger/4W" },
-  { no: 6, name: "AGRICULTURAL/Tractor", label: "6 - AGRICULTURAL/Tractor" },
-  { no: 5, name: "Construction", label: "5 - Construction" },
-  { no: 4, name: "INDUS.", label: "4 - INDUS." },
-  { no: 3, name: "3 W", label: "3 - 3 W" },
-  { no: 2, name: "2 W", label: "2 - 2 W" }
+const SUBGROUP_OPTIONS = [
+  { no: 9, name: "Trucks / HCV", label: "Trucks / HCV" },
+  { no: 8, name: "LCV/SCV", label: "LCV/SCV" },
+  { no: 7, name: "Automotive/Passenger/4W", label: "Automotive/Passenger/4W" },
+  { no: 6, name: "AGRICULTURAL/Tractor", label: "AGRICULTURAL/Tractor" },
+  { no: 5, name: "Construction", label: "Construction" },
+  { no: 4, name: "INDUS.", label: "INDUS." },
+  { no: 3, name: "3 W", label: "3 W" },
+  { no: 2, name: "2 W", label: "2 W" }
 ];
 
-const REGION_OPTIONS = [
-  { no: 9, name: "EUROPEAN", label: "9 - EUROPEAN" },
-  { no: 8, name: "AMERICAN", label: "8 - AMERICAN" },
-  { no: 7, name: "JAPANESE", label: "7 - JAPANESE" },
-  { no: 6, name: "CHINESE", label: "6 - CHINESE" },
-  { no: 5, name: "IND", label: "5 - IND" },
-  { no: 4, name: "CIS", label: "4 - CIS" }
+const SUBSUBGROUP_OPTIONS = [
+  { no: 9, name: "EUROPEAN", label: "EUROPEAN" },
+  { no: 8, name: "AMERICAN", label: "AMERICAN" },
+  { no: 7, name: "JAPANESE", label: "JAPANESE" },
+  { no: 6, name: "CHINESE", label: "CHINESE" },
+  { no: 5, name: "IND", label: "IND" },
+  { no: 4, name: "CIS", label: "CIS" }
+];
+
+// Aliases for compatibility
+const PRODUCT_OPTIONS = GROUP_OPTIONS;
+const SEGMENT_OPTIONS = SUBGROUP_OPTIONS;
+const REGION_OPTIONS = SUBSUBGROUP_OPTIONS;
+
+const DEFAULT_PROCUREMENT_OPTIONS = [
+  "IN HOUSE",
+  "OUTSOURCE",
+  "BUY/INHOUSE",
+  "IMPORTED"
+];
+
+const DEFAULT_PROCESS_OPTIONS = [
+  { code: "PR-1", label: "PR-1 : 1 : Metal Open Type : In-house" },
+  { code: "PR-2", label: "PR-2 : 2 : Metal Close Type : In-house" },
+  { code: "PR-3", label: "PR-3 : 5 : Half Rubber : Open" },
+  { code: "PR-4", label: "PR-4 : 6 : Half Rubber : Close" },
+  { code: "PR-5", label: "PR-5 : 7 : Full Rubber : Open" },
+  { code: "PR-7", label: "PR-7 : 8 : Full Rubber : Close" },
+  { code: "PR-8", label: "PR-8 : 9 : Cassette Seal" },
+  { code: "PR-9", label: "PR-9 : 10 : Combi Seal" },
+  { code: "PR-10", label: "PR-10 : 11 : PTFE Moulded (no inner shell)" },
+  { code: "PR-11", label: "PR-11 : 12 : PTFE Moulded (with inner shell)" },
+  { code: "PR-12", label: "PR-12 : 13 : PTFE Fitted" },
+  { code: "PR-13", label: "PR-13 : 14 : Hub Seal SKF" },
+  { code: "PR-14", label: "PR-14 : 15 : Hub Seal National" },
+  { code: "PR-15", label: "PR-15 : 3: ABS SEAL" },
+  { code: "PR-51", label: "PR-51 : 16 : PTFE Moulded (no inner shell ) Half Rubber" },
+  { code: "PR-16", label: "PR-16 : NA" }
+];
+
+const DEFAULT_HSN_OPTIONS = [
+  { code: "8484", desc: "Gaskets and joints of metal sheeting" },
+  { code: "8487", desc: "Machinery parts without electrical connectors" },
+  { code: "4016", desc: "Vulcanised rubber articles" },
+  { code: "3926", desc: "Plastics articles" },
+  { code: "7318", desc: "Screws, bolts, nuts, washers" },
+  { code: "8482", desc: "Ball or roller bearings" }
 ];
 
 const INITIAL_ITEM_FORM = {
-  // Core Classification
-  product: "9 - OIL SEAL",
-  segment: "9 - Trucks / HCV",
-  region: "5 - IND",
+  // Core Classification (Row 1)
+  group: "",
+  subgroup: "",
+  sub_subgroup: "",
+  product: "",
+  segment: "",
+  region: "",
 
-  // Hierarchy & Groups
-  group_name: "FG",
-  subgroup: "Oil Seal",
-  sub_subgroup: "Rotary Shaft Seal",
+  // Codes (Row 2 & 3)
+  main_group_code: "FG",
+  group_code: "",
+  sms_new_part_no: "",
+  old_code: "",
+  sms_old_part_no: "",
 
-  // Part Codes
-  sms_new_part_no: "", // New Code
-  old_code: "",        // Old Code
+  // Description
+  description_size: "",
+  item_description: "",
 
-  // Dimensions
-  inner_diameter: "",  // ID
-  outer_diameter: "",  // OD
-  height: "",          // Height
-  thickness: "",       // Thickness
+  // Dimensions (Row 4)
+  inner_diameter: "",
+  outer_diameter: "",
+  height: "",
+  thickness: "",
 
-  // Description & Unit
-  description_size: "", // Product Description
-  uom: "PCS",           // UOM
+  // Physical & Style (Row 5)
+  color: "",
+  material: "",
+  style: "",
+  drawing_no: "",
+  drawing_image: null,
 
-  // Product Variant
-  product_type: "Rotary Oil Seal - Double Lip",
+  // UOM & Image (Row 6)
+  purchased_uom: "",
+  consumption_uom: "",
+  uom: "",
+  image: null,
+  file_name: "",
 
-  // Extended Attributes
-  category: "Oil Seal",
-  domestic_exports: "Domestic",
+  // Weights & Opening (Row 7)
+  gross_wt: "",
+  net_wt: "",
+  opening_balance: "",
+  item_class: "",
+
+  // Procurement & Process (Row 8)
+  procurement_type: "",
+  process_type: "",
+  min_stock_lvl: "",
+  max_stock_lvl: "",
+
+  // Stock Levels & Tolerance (Row 9)
+  reorder_stock_lvl: "",
+  rej_tolerance: "",
+  hsn_code: "",
+
+  // Financials (Row 10)
+  mrp: "",
+  price: "",
+  rate: "",
+
+  // Hierarchy & Groups (Tab 2)
+  group_name: "",
+  product_type: "",
+  category: "",
+  domestic_exports: "",
   application: "",
   ref_no: "",
   oem: "",
   corteco_no: "",
   cross_reference: "",
-  group_code: "945",
   main_fg_code: "",
-  material: "NBR",
-  color: "Black",
+  remark: "",
   fitting_position: "",
-  swirl_type: "None",
-  price: "",
-  purchased_uom: "Pc",
-  consumption_uom: "Pc",
-  file_name: "",
-  image: null,
-  fg_outsource: "IH",
-  sfg_outsource: "IH",
-  outsource_combo_fg_sfg: "IH"
+  swirl_type: "",
+  fg_outsource: "",
+  sfg_outsource: "",
+  outsource_combo_fg_sfg: "",
+
+  // Lead Time (Tab 1)
+  safety_lead_time: "",
+  procurement_lead_time: ""
 };
 
-// Helper functions to extract digits for product, segment, region and generate part number
-function getProductDigit(productStr) {
-  if (!productStr) return "9";
-  const leadingMatch = String(productStr).match(/^(\d+)/);
-  if (leadingMatch) return leadingMatch[1];
-  const found = PRODUCT_OPTIONS.find(
-    (p) =>
-      p.name.toLowerCase() === String(productStr).toLowerCase() ||
-      p.label.toLowerCase() === String(productStr).toLowerCase()
+// Helper functions to extract digits for group, subgroup, subsubgroup and generate part number
+function getGroupDigit(groupStr) {
+  if (!groupStr) return "";
+  const str = String(groupStr).trim().toLowerCase();
+  const found = GROUP_OPTIONS.find(
+    (g) =>
+      g.name.toLowerCase() === str ||
+      g.label.toLowerCase() === str ||
+      str.includes(g.name.toLowerCase())
   );
-  return found ? String(found.no) : "9";
+  if (found) return String(found.no);
+  const leadingMatch = str.match(/^(\d+)/);
+  if (leadingMatch) return leadingMatch[1];
+  return "";
 }
 
-function getSegmentDigit(segmentStr) {
-  if (!segmentStr) return "9";
-  const leadingMatch = String(segmentStr).match(/^(\d+)/);
-  if (leadingMatch) return leadingMatch[1];
-  const found = SEGMENT_OPTIONS.find(
+function getSubGroupDigit(subgroupStr) {
+  if (!subgroupStr) return "";
+  const str = String(subgroupStr).trim().toLowerCase();
+  const found = SUBGROUP_OPTIONS.find(
     (s) =>
-      s.name.toLowerCase() === String(segmentStr).toLowerCase() ||
-      s.label.toLowerCase() === String(segmentStr).toLowerCase()
+      s.name.toLowerCase() === str ||
+      s.label.toLowerCase() === str ||
+      str.includes(s.name.toLowerCase())
   );
-  return found ? String(found.no) : "9";
-}
-
-function getRegionDigit(regionStr) {
-  if (!regionStr) return "5";
-  const leadingMatch = String(regionStr).match(/^(\d+)/);
+  if (found) return String(found.no);
+  const leadingMatch = str.match(/^(\d+)/);
   if (leadingMatch) return leadingMatch[1];
-  const found = REGION_OPTIONS.find(
-    (r) =>
-      r.name.toLowerCase() === String(regionStr).toLowerCase() ||
-      r.label.toLowerCase() === String(regionStr).toLowerCase()
-  );
-  return found ? String(found.no) : "5";
+  return "";
 }
 
-function generatePartNumberPrefix(product, segment, region) {
-  const p = getProductDigit(product);
-  const s = getSegmentDigit(segment);
-  const r = getRegionDigit(region);
-  return `${p}${s}${r}`;
+function getSubSubGroupDigit(subsubgroupStr) {
+  if (!subsubgroupStr) return "";
+  const str = String(subsubgroupStr).trim().toLowerCase();
+  const found = SUBSUBGROUP_OPTIONS.find(
+    (r) =>
+      r.name.toLowerCase() === str ||
+      r.label.toLowerCase() === str ||
+      str.includes(r.name.toLowerCase())
+  );
+  if (found) return String(found.no);
+  const leadingMatch = str.match(/^(\d+)/);
+  if (leadingMatch) return leadingMatch[1];
+  return "";
+}
+
+// Aliases
+const getProductDigit = getGroupDigit;
+const getSegmentDigit = getSubGroupDigit;
+const getRegionDigit = getSubSubGroupDigit;
+
+function generatePartNumberPrefix(group, subgroup, subsubgroup) {
+  const p = getGroupDigit(group);
+  const s = getSubGroupDigit(subgroup);
+  const r = getSubSubGroupDigit(subsubgroup);
+  if (!p && !s && !r) return "";
+  return `${p || "0"}${s || "0"}${r || "0"}`;
 }
 
 function getHighestPartNumberSuffix(savedItems = []) {
@@ -165,15 +254,32 @@ const DEFAULT_SAVED_ITEMS = REAL_ITEM_MASTER_DATA;
 
 const STORAGE_KEY = "sms_engineering_item_master_v3";
 
+const ITEM_MASTER_FORM_PAGE_1_COLUMNS = [
+  { key: "select", width: 36, min: 32 },
+  { key: "photo", width: 80 },
+  { key: "new_code_sms_final", width: 180 },
+  { key: "old_code", width: 96 },
+  { key: "description_amp_size", width: 200 },
+  { key: "group", width: 80 },
+  { key: "sub_group", width: 103 },
+  { key: "sub_subgroup", width: 124 },
+  { key: "dimensions_id_od_h", width: 200 },
+  { key: "material", width: 96 },
+  { key: "price", width: 80 },
+];
+
 export function ItemMasterFormPage({
   dark = false,
   onBackToHome,
   onOpenSidebar,
-  sidebarOpen = false
+  sidebarOpen = false,
+  onNavigate
 }) {
+  const itemMasterFormPage1Resize = useResizableColumns("item-master-form-page-1", ITEM_MASTER_FORM_PAGE_1_COLUMNS);
   // Modal & Form State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("tab1"); // "tab1" or "tab2"
+
   const [formData, setFormData] = useState(INITIAL_ITEM_FORM);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState("ALL");
@@ -201,35 +307,88 @@ export function ItemMasterFormPage({
     price: ""
   });
 
-  // Persistent records via localStorage (defaulting to the 1,582 real master records)
-  const [savedItems, setSavedItems] = useState(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 50) {
-          return parsed;
-        }
-      }
-    } catch (e) {
-      console.error("Error reading item master from localStorage", e);
-    }
-    return REAL_ITEM_MASTER_DATA;
-  });
+  // Master dataset stored in state directly from PostgreSQL database (no localStorage)
+  const [savedItems, setSavedItems] = useState(REAL_ITEM_MASTER_DATA);
 
-  // Keep localStorage synchronized
+  // Uniqueness check for item description (case-insensitive)
+  const isDuplicateDescription = useMemo(() => {
+    const desc = (formData?.description_size || "").trim().toLowerCase();
+    if (!desc) return false;
+    return (savedItems || []).some((it) => {
+      if (editingId !== null && it.id === editingId) return false;
+      const itDesc = (it.description_size || it.item_name || it.item_description || "").trim().toLowerCase();
+      return itDesc === desc;
+    });
+  }, [formData?.description_size, savedItems, editingId]);
+
+  // Purge any old localStorage cached items to ensure pure PostgreSQL truth
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(savedItems));
-    } catch (e) {
-      console.error("Error saving item master to localStorage", e);
-    }
-  }, [savedItems]);
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem("sms_engineering_item_master");
+      localStorage.removeItem("sms_engineering_item_master_v2");
+    } catch (e) {}
+  }, []);
+
+  // Fetch all FG items directly from backend PostgreSQL item_master table
+  const fetchDbItems = () => {
+    fetch("http://localhost:4000/api/inventory/items?type=FG")
+      .then((res) => (res.ok ? res.json() : []))
+      .then((dbItems) => {
+        if (Array.isArray(dbItems) && dbItems.length > 0) {
+          const mapped = dbItems.map((it) => {
+            const code = it.sms_new_part_no || it.item_code || "";
+            return {
+              ...it,
+              id: it.id,
+              sms_new_part_no: code,
+              sms_old_part_no: it.old_code || "",
+              old_code: it.old_code || "",
+              description_size: it.description_size || it.item_name || "",
+              item_name: it.description_size || it.item_name || "",
+              product_group: it.subgroup || it.group_name || "FG",
+              group: it.group_name || "FG",
+              group_name: it.group_name || "FG",
+              subgroup: it.subgroup || "",
+              product: it.group_name || it.subgroup || "FG",
+              segment: it.segment || "",
+              region: it.region || "",
+              sub_subgroup: it.region || "",
+              material: it.material || "",
+              color: it.color || "",
+              inner_diameter: it.inner_diameter || "",
+              outer_diameter: it.outer_diameter || "",
+              height: it.width || it.height || "",
+              width: it.width || it.height || "",
+              thickness: it.thickness || "",
+              price: it.price || 0,
+              purchased_uom: it.purchased_uom || it.uom || "PCS",
+              consumption_uom: it.consumption_uom || it.purchased_uom || it.uom || "PCS",
+              image: it.image || null,
+              drawing_image: it.drawing_image || null,
+              safety_lead_time: it.safety_lead_time ?? "",
+              procurement_lead_time: it.procurement_lead_time ?? "",
+              total_lead_time: it.total_lead_time ?? 0,
+              main_fg_code: it.main_fg_code || "",
+              remark: it.main_fg_code || "",
+              oem: it.oem || ""
+            };
+          });
+          setSavedItems(mapped);
+        }
+      })
+      .catch((err) => console.warn("Could not fetch DB FG items:", err));
+  };
+
+  useEffect(() => {
+    fetchDbItems();
+  }, []);
 
   const [toastMessage, setToastMessage] = useState(null);
   const [detailItem, setDetailItem] = useState(null);
 
   const fileInputRef = useRef(null);
+  const drawingFileInputRef = useRef(null);
 
   // Modern UI theme variables
   const bg = dark ? "#0a0f1d" : "#f4f6fb";
@@ -242,29 +401,98 @@ export function ItemMasterFormPage({
   const borderCol = dark ? "rgba(148, 163, 184, 0.14)" : "#e2e8f0";
   const inputBg = dark ? "#0b1329" : "#ffffff";
   const rowHover = dark ? "rgba(255,255,255,0.02)" : "rgba(241,245,249,0.7)";
+  const fieldInputStyle = {
+    width: "100%",
+    height: 28,
+    padding: "2px 8px",
+    borderRadius: 6,
+    border: `1px solid ${borderCol}`,
+    background: inputBg,
+    color: textPrimary,
+    fontSize: 11
+  };
+
+  // Master lists loaded dynamically from PostgreSQL / APIs
+  const [procurementList, setProcurementList] = useState(DEFAULT_PROCUREMENT_OPTIONS);
+  const [processList, setProcessList] = useState(DEFAULT_PROCESS_OPTIONS);
+  const [hsnList, setHsnList] = useState(DEFAULT_HSN_OPTIONS);
+
+  useEffect(() => {
+    fetch("http://localhost:4000/api/inventory/procurement-master")
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          const list = data.map((d) => d.procurementType || d.procurementName).filter(Boolean);
+          if (list.length > 0) setProcurementList(Array.from(new Set(list)));
+        }
+      })
+      .catch((err) => console.warn("Could not fetch procurement master:", err));
+
+    fetch("http://localhost:4000/api/inventory/process-master")
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          const list = data.map((p) => ({
+            code: p.processCode,
+            label: `${p.processCode} : ${p.processDescription || ""}`
+          }));
+          if (list.length > 0) setProcessList(list);
+        }
+      })
+      .catch((err) => console.warn("Could not fetch process master:", err));
+
+    fetch("http://localhost:4000/api/purchase/hsn-master")
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          const list = data
+            .map((h) => ({
+              code: h.hsnSacCode || h.hsnCode,
+              desc: h.description || ""
+            }))
+            .filter((h) => Boolean(h.code));
+          if (list.length > 0) setHsnList(list);
+        }
+      })
+      .catch((err) => console.warn("Could not fetch HSN master:", err));
+  }, []);
 
   // Open "New Item" Modal with unique auto-generated code
   const handleOpenNewModal = () => {
     setEditingId(null);
-    const pfx = generatePartNumberPrefix(INITIAL_ITEM_FORM.product, INITIAL_ITEM_FORM.segment, INITIAL_ITEM_FORM.region);
+    setActiveTab("tab1");
     const sfx = getNextIncrementalSuffix(savedItems);
     setFormData({
       ...INITIAL_ITEM_FORM,
-      group_code: pfx,
-      sms_new_part_no: `${pfx}-${sfx}`
+      main_group_code: "FG",
+      group_code: "",
+      sms_new_part_no: `FG-${sfx}`
     });
-    setActiveTab("tab1");
     setIsModalOpen(true);
   };
 
   // Open "Edit Item" Modal
   const handleOpenEditModal = (item) => {
     setEditingId(item.id);
+    setActiveTab("tab1");
+    const code = item.sms_new_part_no || item.item_code || "";
     setFormData({
       ...INITIAL_ITEM_FORM,
-      ...item
+      ...item,
+      sms_new_part_no: code,
+      old_code: item.old_code || item.sms_old_part_no || "",
+      description_size: item.description_size || item.item_name || item.item_description || "",
+      purchased_uom: item.purchased_uom || item.uom || "",
+      consumption_uom: item.consumption_uom || item.purchased_uom || "",
+      price: item.price || item.rate || "",
+      rate: item.rate || item.price || "",
+      group: item.group || item.product || item.product_group || "",
+      subgroup: item.subgroup || item.segment || "",
+      sub_subgroup: item.sub_subgroup || item.region || "",
+      product: item.product || item.group || item.product_group || "",
+      segment: item.segment || item.subgroup || "",
+      region: item.region || item.sub_subgroup || ""
     });
-    setActiveTab("tab1");
     if (detailItem) setDetailItem(null);
     setIsModalOpen(true);
   };
@@ -278,37 +506,87 @@ export function ItemMasterFormPage({
   const handleConfirmDelete = () => {
     if (!deleteTarget) return;
     const deletedPartNo = deleteTarget.sms_new_part_no || "Item";
+    if (deletedPartNo) {
+      fetch(`http://localhost:4000/api/inventory/items/by-code/${encodeURIComponent(deletedPartNo)}`, {
+        method: "DELETE"
+      })
+        .then(() => {
+          window.dispatchEvent(new CustomEvent("SMS_ITEM_MASTER_UPDATED"));
+          fetchDbItems();
+        })
+        .catch(console.warn);
+    }
     setSavedItems((prev) => prev.filter((item) => item.id !== deleteTarget.id));
     if (detailItem?.id === deleteTarget.id) {
       setDetailItem(null);
     }
     setDeleteTarget(null);
-    setToastMessage(`Item "${deletedPartNo}" deleted successfully!`);
+    setToastMessage(`Item "${deletedPartNo}" deleted successfully from PostgreSQL database!`);
     setTimeout(() => setToastMessage(null), 4000);
   };
 
   const handleInputChange = (field, value) => {
     setFormData((prev) => {
       const updated = { ...prev, [field]: value };
-      
-      // Auto-generate part number when product, segment, or region changes (during item creation)
-      if (editingId === null && (field === "product" || field === "segment" || field === "region")) {
-        const prod = field === "product" ? value : prev.product;
-        const seg = field === "segment" ? value : prev.segment;
-        const reg = field === "region" ? value : prev.region;
-        const newPrefix = generatePartNumberPrefix(prod, seg, reg);
 
-        // Keep current suffix if already set, or calculate next
+      // Keep group, subgroup, sub_subgroup synced with product, segment, region
+      if (field === "group" || field === "product") {
+        updated.group = value;
+        updated.product = value;
+        updated.group_name = value;
+      }
+      if (field === "subgroup" || field === "segment") {
+        updated.subgroup = value;
+        updated.segment = value;
+      }
+      if (field === "sub_subgroup" || field === "region") {
+        updated.sub_subgroup = value;
+        updated.region = value;
+      }
+
+      // Sync remark and main_fg_code
+      if (field === "remark" || field === "main_fg_code") {
+        updated.remark = value;
+        updated.main_fg_code = value;
+      }
+
+      // Sanitize numeric dimension fields (ID, OD, Height, Thickness) - accept only numbers & decimals
+      if (["inner_diameter", "outer_diameter", "height", "thickness"].includes(field)) {
+        const clean = String(value).replace(/[^0-9.]/g, "");
+        const parts = clean.split(".");
+        const sanitized = parts.length > 2 ? `${parts[0]}.${parts.slice(1).join("")}` : clean;
+        updated[field] = sanitized;
+      }
+
+      // Auto-generate part number when group, subgroup, or sub_subgroup changes (during item creation)
+      if (
+        editingId === null &&
+        (field === "group" ||
+          field === "product" ||
+          field === "subgroup" ||
+          field === "segment" ||
+          field === "sub_subgroup" ||
+          field === "region")
+      ) {
+        const grp = updated.group || updated.product;
+        const sub = updated.subgroup || updated.segment;
+        const subsub = updated.sub_subgroup || updated.region;
+        const p = getGroupDigit(grp);
+        const s = getSubGroupDigit(sub);
+        const r = getSubSubGroupDigit(subsub);
+        const newPrefix = (p || s || r) ? `${p || "0"}${s || "0"}${r || "0"}` : "";
+
         let currentSuffix = "";
-        const match = prev.sms_new_part_no ? String(prev.sms_new_part_no).match(/-([0-9]+)/) : null;
-        if (match) {
-          currentSuffix = match[1];
+        const parts = String(prev.sms_new_part_no || "").split("-");
+        const lastPart = parts[parts.length - 1];
+        if (lastPart && /^\d+$/.test(lastPart)) {
+          currentSuffix = lastPart;
         } else {
           currentSuffix = getNextIncrementalSuffix(savedItems);
         }
 
         updated.group_code = newPrefix;
-        updated.sms_new_part_no = `${newPrefix}-${currentSuffix}`;
+        updated.sms_new_part_no = newPrefix ? `FG-${newPrefix}-${currentSuffix}` : `FG-${currentSuffix}`;
       }
 
       return updated;
@@ -319,9 +597,9 @@ export function ItemMasterFormPage({
   const handleImageUpload = (e) => {
     const file = e.target.files?.[0];
     if (file) {
-      const validTypes = ["image/jpeg", "image/png", "image/jpg"];
+      const validTypes = ["image/jpeg", "image/png", "image/jpg", "image/webp"];
       if (!validTypes.includes(file.type)) {
-        alert("Please upload an image file in JPG or PNG format only.");
+        alert("Please upload an image file (JPG, PNG, WEBP).");
         return;
       }
       const reader = new FileReader();
@@ -337,9 +615,32 @@ export function ItemMasterFormPage({
   };
 
   const handleRemoveImage = () => {
-    setFormData((prev) => ({ ...prev, image: null }));
+    setFormData((prev) => ({ ...prev, image: null, file_name: "" }));
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
+    }
+  };
+
+  const handleDrawingImageUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const validTypes = ["image/jpeg", "image/png", "image/jpg", "image/webp"];
+      if (!validTypes.includes(file.type)) {
+        alert("Please upload an image file (JPG, PNG, WEBP).");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setFormData((prev) => ({ ...prev, drawing_image: event.target.result }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleRemoveDrawingImage = () => {
+    setFormData((prev) => ({ ...prev, drawing_image: null }));
+    if (drawingFileInputRef.current) {
+      drawingFileInputRef.current.value = "";
     }
   };
 
@@ -347,28 +648,105 @@ export function ItemMasterFormPage({
   const handleSaveItem = (e) => {
     e.preventDefault();
     if (!formData.sms_new_part_no.trim()) {
-      alert("Please enter the New Code (SMS FINAL Part No.) - Required");
+      alert("Please enter the Item Code (SMS Part No.) - Required");
       return;
     }
+
+    const desc = (formData.description_size || "").trim().toLowerCase();
+    if (!desc) {
+      alert("Please enter the Item Description - Required");
+      return;
+    }
+
+    // Uniqueness validation for Item Description (case-insensitive)
+    const duplicate = savedItems.find((it) => {
+      if (editingId !== null && it.id === editingId) return false;
+      const itDesc = (it.description_size || it.item_name || it.item_description || "").trim().toLowerCase();
+      return itDesc === desc;
+    });
+
+    if (duplicate) {
+      alert(`Item Description "${formData.description_size.trim()}" already exists in record ${duplicate.sms_new_part_no}. Item description must be unique.`);
+      return;
+    }
+
+    const payload = {
+      item_code: formData.sms_new_part_no.trim(),
+      sms_new_part_no: formData.sms_new_part_no.trim(),
+      old_code: formData.old_code || formData.sms_old_part_no || "",
+      description_size: formData.description_size || "",
+      item_description: formData.description_size || "",
+      group_name: "FG",
+      category: "FG",
+      item_type: "FG",
+      subgroup: formData.product || "FG",
+      uom: formData.purchased_uom || "PCS",
+      purchased_uom: formData.purchased_uom || "PCS",
+      consumption_uom: formData.consumption_uom || formData.purchased_uom || "PCS",
+      price: formData.price || formData.rate || 0,
+      material: formData.material || "",
+      color: formData.color || "",
+      segment: formData.segment || "",
+      region: formData.region || "",
+      style: formData.style || "",
+      procurement_type: formData.procurement_type || "",
+      process_type: formData.process_type || "",
+      item_class: formData.item_class || "",
+      hsn_code: formData.hsn_code || "",
+      mrp: formData.mrp || "",
+      drawing_no: formData.drawing_no || "",
+      drawing_image: formData.drawing_image || null,
+      safety_lead_time: formData.safety_lead_time || "",
+      procurement_lead_time: formData.procurement_lead_time || "",
+      total_lead_time: (Number(formData.safety_lead_time) || 0) + (Number(formData.procurement_lead_time) || 0),
+      remark: formData.remark || formData.main_fg_code || "",
+      main_fg_code: formData.remark || formData.main_fg_code || "",
+      inner_diameter: formData.inner_diameter || "",
+      outer_diameter: formData.outer_diameter || "",
+      height: formData.height || "",
+      thickness: formData.thickness || "",
+      gross_wt: formData.gross_wt || "",
+      net_wt: formData.net_wt || "",
+      opening_balance: formData.opening_balance || "",
+      min_stock_lvl: formData.min_stock_lvl || "",
+      max_stock_lvl: formData.max_stock_lvl || "",
+      reorder_stock_lvl: formData.reorder_stock_lvl || "",
+      rej_tolerance: formData.rej_tolerance || "",
+      image: formData.image || null,
+      id: editingId || null
+    };
+
+    fetch("http://localhost:4000/api/inventory/items", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((saved) => {
+        window.dispatchEvent(new CustomEvent("SMS_ITEM_MASTER_UPDATED", { detail: saved || payload }));
+        fetchDbItems();
+      })
+      .catch((err) => console.warn("Could not sync FG item to backend:", err));
 
     if (editingId) {
       // Update existing item
       setSavedItems((prev) =>
-        prev.map((item) => (item.id === editingId ? { ...formData, id: editingId } : item))
+        prev.map((item) => (item.id === editingId ? { ...formData, ...payload, id: editingId } : item))
       );
       setIsModalOpen(false);
       setEditingId(null);
-      setToastMessage(`Item "${formData.sms_new_part_no}" updated successfully!`);
+      setToastMessage(`Item "${formData.sms_new_part_no}" updated successfully in PostgreSQL database!`);
       setTimeout(() => setToastMessage(null), 4000);
     } else {
       // Create new item
       const newItem = {
         ...formData,
+        ...payload,
         id: Date.now()
       };
       setSavedItems((prev) => [newItem, ...prev]);
       setIsModalOpen(false);
-      setToastMessage(`Item "${newItem.sms_new_part_no}" created successfully!`);
+      setToastMessage(`Item "${newItem.sms_new_part_no}" created successfully in PostgreSQL database!`);
       setTimeout(() => setToastMessage(null), 4000);
     }
   };
@@ -534,9 +912,9 @@ export function ItemMasterFormPage({
     const dataToExport = filteredItems.map((item) => ({
       "New Code": item.sms_new_part_no,
       "Old Code": item.old_code,
-      Product: item.product,
-      Segment: item.segment,
-      Region: item.region,
+      Group: item.product,
+      "sub-Group": item.segment,
+      "Sub-SubGroup": item.region,
       Dimensions: `${item.inner_diameter || "-"} x ${item.outer_diameter || "-"} x ${item.height || "-"} mm`,
       Material: `${item.material || ""} ${item.color || ""}`,
       Price: item.price
@@ -777,7 +1155,9 @@ export function ItemMasterFormPage({
               <span>Engineering</span>
             )}
             <span style={{ margin: "0 4px" }}>›</span>
-            <span style={{ color: "#0f172a", fontWeight: 700 }}>Item Master Catalog</span>
+            <span>Item Master</span>
+            <span style={{ margin: "0 4px" }}>›</span>
+            <span style={{ color: "#0f172a", fontWeight: 700 }}>FG</span>
           </div>
         </div>
 
@@ -801,7 +1181,7 @@ export function ItemMasterFormPage({
           <div style={{ width: 340, maxWidth: "100%", position: "relative" }}>
             <input
               type="text"
-              placeholder="Search by Part No, Old Code, Description, Product, OEM..."
+              placeholder="Search by Part No, Old Code, Description, Group, OEM..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               style={{
@@ -879,15 +1259,17 @@ export function ItemMasterFormPage({
             position: "relative"
           }}
         >
-          <table
+          <table className="resizable-table"
             style={{
               width: "100%",
               borderCollapse: "separate",
               borderSpacing: 0,
               fontSize: 12,
-              textAlign: "left"
+              textAlign: "left",
+              ...itemMasterFormPage1Resize.tableStyle,
             }}
           >
+            <ResizableColGroup columns={ITEM_MASTER_FORM_PAGE_1_COLUMNS} widths={itemMasterFormPage1Resize.widths} />
             <thead style={{ position: "sticky", top: 0, zIndex: 20 }}>
               {/* Header Row 1: Column Titles (STICKY AT TOP 0) */}
               <tr style={{ background: "#f1f5f9", height: 38 }}>
@@ -910,16 +1292,16 @@ export function ItemMasterFormPage({
                     style={{ cursor: "pointer", accentColor: "#2563eb" }}
                   />
                 </th>
-                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", whiteSpace: "nowrap" }}>Photo</th>
-                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", whiteSpace: "nowrap" }}>New Code (SMS FINAL)</th>
-                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", whiteSpace: "nowrap" }}>Old Code</th>
-                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", minWidth: 200, whiteSpace: "nowrap" }}>Description &amp; Size</th>
-                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", whiteSpace: "nowrap" }}>Product</th>
-                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", whiteSpace: "nowrap" }}>Segment</th>
-                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", whiteSpace: "nowrap" }}>Region</th>
-                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", whiteSpace: "nowrap" }}>Dimensions (ID × OD × H)</th>
-                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", whiteSpace: "nowrap" }}>Material</th>
-                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", whiteSpace: "nowrap" }}>Price</th>
+                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", whiteSpace: "nowrap" }}>Photo<ColumnResizeHandle colKey="photo" resize={itemMasterFormPage1Resize} /></th>
+                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", whiteSpace: "nowrap" }}>New Code (SMS FINAL)<ColumnResizeHandle colKey="new_code_sms_final" resize={itemMasterFormPage1Resize} /></th>
+                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", whiteSpace: "nowrap" }}>Old Code<ColumnResizeHandle colKey="old_code" resize={itemMasterFormPage1Resize} /></th>
+                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", minWidth: 200, whiteSpace: "nowrap" }}>Description &amp; Size<ColumnResizeHandle colKey="description_amp_size" resize={itemMasterFormPage1Resize} /></th>
+                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", whiteSpace: "nowrap" }}>Group<ColumnResizeHandle colKey="group" resize={itemMasterFormPage1Resize} /></th>
+                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", whiteSpace: "nowrap" }}>Sub-Group<ColumnResizeHandle colKey="sub_group" resize={itemMasterFormPage1Resize} /></th>
+                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", whiteSpace: "nowrap" }}>Sub-SubGroup<ColumnResizeHandle colKey="sub_subgroup" resize={itemMasterFormPage1Resize} /></th>
+                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", whiteSpace: "nowrap" }}>Dimensions (ID × OD × H)<ColumnResizeHandle colKey="dimensions_id_od_h" resize={itemMasterFormPage1Resize} /></th>
+                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", whiteSpace: "nowrap" }}>Material<ColumnResizeHandle colKey="material" resize={itemMasterFormPage1Resize} /></th>
+                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", whiteSpace: "nowrap" }}>Price<ColumnResizeHandle colKey="price" resize={itemMasterFormPage1Resize} /></th>
               </tr>
 
               {/* Header Row 2: Per-Column Filter Input Boxes (STICKY AT TOP 37) */}
@@ -1393,7 +1775,7 @@ export function ItemMasterFormPage({
       </div>
 
       {/* ========================================================================= */}
-      {/* "NEW ITEM MASTER" MODAL (EXACTLY 2 TABS - STRICT LINE-BY-LINE TAB 1) */}
+      {/* "NEW ITEM MASTER" CONCISE SPREADSHEET MODAL (SINGLE-SCREEN VIEW) */}
       {/* ========================================================================= */}
       {isModalOpen && (
         <div
@@ -1406,27 +1788,27 @@ export function ItemMasterFormPage({
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            padding: "16px"
+            padding: "12px"
           }}
         >
           <div
             style={{
               width: "100%",
-              maxWidth: 960,
-              maxHeight: "92vh",
+              maxWidth: 1140,
+              maxHeight: "96vh",
               background: cardBg,
               border: `1px solid ${borderCol}`,
-              borderRadius: 22,
+              borderRadius: 14,
               boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.55)",
               display: "flex",
               flexDirection: "column",
               overflow: "hidden"
             }}
           >
-            {/* Modal Top Header */}
+            {/* Modal Header */}
             <div
               style={{
-                padding: "18px 26px",
+                padding: "8px 16px",
                 borderBottom: `1px solid ${borderCol}`,
                 display: "flex",
                 alignItems: "center",
@@ -1434,28 +1816,26 @@ export function ItemMasterFormPage({
                 background: dark ? "rgba(30, 41, 59, 0.95)" : "#ffffff"
               }}
             >
-              <div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
-                  <span
-                    style={{
-                      background: editingId ? "#059669" : "#c51f28",
-                      color: "#fff",
-                      fontSize: 10,
-                      fontWeight: 800,
-                      padding: "2px 8px",
-                      borderRadius: 4,
-                      textTransform: "uppercase"
-                    }}
-                  >
-                    {editingId ? "Engineering • Edit Item" : "Engineering • Item Master"}
-                  </span>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: textSecondary }}>
-                    {editingId ? `Editing Part #${formData.sms_new_part_no || "Current"}` : "New Item Specification"}
-                  </span>
-                </div>
-                <h2 style={{ fontSize: 18, fontWeight: 800, color: textPrimary, margin: 0 }}>
-                  {editingId ? "Edit Item Master Record" : "Create New Item Master Record"}
-                </h2>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span
+                  style={{
+                    background: editingId ? "#059669" : "#c51f28",
+                    color: "#fff",
+                    fontSize: 10,
+                    fontWeight: 800,
+                    padding: "2px 8px",
+                    borderRadius: 4,
+                    textTransform: "uppercase"
+                  }}
+                >
+                  {editingId ? "Edit Item" : "New Item Creation"}
+                </span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: textPrimary }}>
+                  Item Master &bull; Finished Goods (FG)
+                </span>
+                <span style={{ fontSize: 11, color: textSecondary, fontWeight: 500 }}>
+                  ({formData.sms_new_part_no || "New Record"})
+                </span>
               </div>
 
               <button
@@ -1463,10 +1843,10 @@ export function ItemMasterFormPage({
                 style={{
                   background: "none",
                   border: "none",
-                  fontSize: 24,
+                  fontSize: 20,
                   color: textSecondary,
                   cursor: "pointer",
-                  padding: "4px 8px",
+                  padding: "2px 6px",
                   lineHeight: 1
                 }}
               >
@@ -1474,12 +1854,12 @@ export function ItemMasterFormPage({
               </button>
             </div>
 
-            {/* Exactly 2 Tabs as Requested */}
+            {/* TAB SELECTOR HEADER */}
             <div
               style={{
                 display: "flex",
-                background: dark ? "#0f172a" : "#f1f5f9",
-                borderBottom: `1px solid ${borderCol}`
+                borderBottom: `1px solid ${borderCol}`,
+                background: dark ? "rgba(15, 23, 42, 0.6)" : "#f8fafc"
               }}
             >
               <button
@@ -1487,481 +1867,910 @@ export function ItemMasterFormPage({
                 onClick={() => setActiveTab("tab1")}
                 style={{
                   flex: 1,
-                  padding: "14px 20px",
+                  padding: "8px 16px",
                   border: "none",
                   borderBottom: activeTab === "tab1" ? "3px solid #c51f28" : "3px solid transparent",
                   background: activeTab === "tab1" ? cardBg : "transparent",
                   color: activeTab === "tab1" ? "#c51f28" : textSecondary,
                   fontWeight: activeTab === "tab1" ? 800 : 600,
-                  fontSize: 13,
+                  fontSize: 12,
                   cursor: "pointer",
                   transition: "all 0.15s"
                 }}
               >
-                1. Core Specifications (Product, Codes, Dimensions)
+                1. Primary Specifications
               </button>
-
               <button
                 type="button"
                 onClick={() => setActiveTab("tab2")}
                 style={{
                   flex: 1,
-                  padding: "14px 20px",
+                  padding: "8px 16px",
                   border: "none",
                   borderBottom: activeTab === "tab2" ? "3px solid #c51f28" : "3px solid transparent",
                   background: activeTab === "tab2" ? cardBg : "transparent",
                   color: activeTab === "tab2" ? "#c51f28" : textSecondary,
                   fontWeight: activeTab === "tab2" ? 800 : 600,
-                  fontSize: 13,
+                  fontSize: 12,
                   cursor: "pointer",
                   transition: "all 0.15s"
                 }}
               >
-                2. Extended Attributes &amp; Media (OEM, Material, Image, Outsource)
+                2. Extended Attributes (OEM, References, Applications &amp; Outsource)
               </button>
             </div>
 
             {/* Modal Form */}
-            <form onSubmit={handleSaveItem} style={{ flex: 1, overflowY: "auto", padding: "26px 30px" }}>
-              
+            <form
+              onSubmit={handleSaveItem}
+              style={{
+                flex: 1,
+                overflowY: "auto",
+                padding: activeTab === "tab1" ? "10px 16px" : "18px 24px",
+                display: "flex",
+                flexDirection: "column",
+                gap: activeTab === "tab1" ? 6 : 16
+              }}
+            >
               {/* ========================================================================= */}
-              {/* TAB 1: CORE SPECIFICATIONS (MATCHING TAB 2 THEME & PATTERN) */}
+              {/* TAB 1: CONCISE SPREADSHEET VIEW (10 COMPACT ROWS) */}
               {/* ========================================================================= */}
               {activeTab === "tab1" && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-                  
-                  {/* Core Classification: product | segment | region */}
-                  <div>
-                    <span style={{ fontSize: 11, fontWeight: 800, color: textSecondary, textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 8 }}>
-                      Core Classification
-                    </span>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>
-                      {/* Product */}
-                      <div>
-                        <label style={{ fontSize: 12, fontWeight: 700, color: textPrimary, display: "block", marginBottom: 6 }}>
-                          Product *
-                        </label>
-                        <select
-                          value={formData.product}
-                          onChange={(e) => handleInputChange("product", e.target.value)}
-                          style={{
-                            width: "100%",
-                            padding: "9px 12px",
-                            borderRadius: 8,
-                            border: `1px solid ${borderCol}`,
-                            background: inputBg,
-                            color: textPrimary,
-                            fontSize: 12
-                          }}
-                        >
-                          {PRODUCT_OPTIONS.map((opt, idx) => (
-                            <option key={idx} value={opt.label}>
-                              {opt.no} - {opt.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {/* ROW 1: Group Classification (Clean, No Colored Background) */}
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr 1fr",
+                      gap: 12,
+                      background: "transparent",
+                      border: "none",
+                      borderRadius: 6,
+                      padding: "2px 0"
+                    }}
+                  >
+                    <div>
+                      <label style={{ fontSize: 10, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 2 }}>
+                        Group *
+                      </label>
+                      <select
+                        value={formData.group || formData.product}
+                        onChange={(e) => handleInputChange("group", e.target.value)}
+                        style={{
+                          width: "100%",
+                          height: 28,
+                          padding: "2px 8px",
+                          borderRadius: 6,
+                          border: `1px solid ${borderCol}`,
+                          background: inputBg,
+                          color: textPrimary,
+                          fontSize: 11,
+                          fontWeight: 600
+                        }}
+                      >
+                        <option value="">-- Select Group --</option>
+                        {GROUP_OPTIONS.map((opt, idx) => (
+                          <option key={idx} value={opt.name}>
+                            {opt.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 10, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 2 }}>
+                        Sub-Group *
+                      </label>
+                      <select
+                        value={formData.subgroup || formData.segment}
+                        onChange={(e) => handleInputChange("subgroup", e.target.value)}
+                        style={{
+                          width: "100%",
+                          height: 28,
+                          padding: "2px 8px",
+                          borderRadius: 6,
+                          border: `1px solid ${borderCol}`,
+                          background: inputBg,
+                          color: textPrimary,
+                          fontSize: 11,
+                          fontWeight: 600
+                        }}
+                      >
+                        <option value="">-- Select Sub-Group --</option>
+                        {SUBGROUP_OPTIONS.map((opt, idx) => (
+                          <option key={idx} value={opt.name}>
+                            {opt.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 10, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 2 }}>
+                        Sub-SubGroup *
+                      </label>
+                      <select
+                        value={formData.sub_subgroup || formData.region}
+                        onChange={(e) => handleInputChange("sub_subgroup", e.target.value)}
+                        style={{
+                          width: "100%",
+                          height: 28,
+                          padding: "2px 8px",
+                          borderRadius: 6,
+                          border: `1px solid ${borderCol}`,
+                          background: inputBg,
+                          color: textPrimary,
+                          fontSize: 11,
+                          fontWeight: 600
+                        }}
+                      >
+                        <option value="">-- Select Sub-SubGroup --</option>
+                        {SUBSUBGROUP_OPTIONS.map((opt, idx) => (
+                          <option key={idx} value={opt.name}>
+                            {opt.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
 
-                      {/* Segment */}
-                      <div>
-                        <label style={{ fontSize: 12, fontWeight: 700, color: textPrimary, display: "block", marginBottom: 6 }}>
-                          Segment *
-                        </label>
-                        <select
-                          value={formData.segment}
-                          onChange={(e) => handleInputChange("segment", e.target.value)}
-                          style={{
-                            width: "100%",
-                            padding: "9px 12px",
-                            borderRadius: 8,
-                            border: `1px solid ${borderCol}`,
-                            background: inputBg,
-                            color: textPrimary,
-                            fontSize: 12
-                          }}
-                        >
-                          {SEGMENT_OPTIONS.map((opt, idx) => (
-                            <option key={idx} value={opt.label}>
-                              {opt.no} - {opt.name}
-                            </option>
-                          ))}
-                        </select>
+                  {/* ROW 2: Code Hierarchy (Clean, No Colored Background) */}
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(4, 1fr)",
+                      gap: 12,
+                      background: "transparent",
+                      border: "none",
+                      borderRadius: 6,
+                      padding: "2px 0"
+                    }}
+                  >
+                    <div>
+                      <label style={{ fontSize: 10, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 2 }}>
+                        Main Group Code
+                      </label>
+                      <div
+                        style={{
+                          height: 26,
+                          display: "flex",
+                          alignItems: "center",
+                          padding: "0 8px",
+                          background: inputBg,
+                          border: `1px solid ${borderCol}`,
+                          borderRadius: 6,
+                          fontWeight: 800,
+                          fontSize: 11,
+                          color: textPrimary
+                        }}
+                      >
+                        FG
                       </div>
-
-                      {/* Region */}
-                      <div>
-                        <label style={{ fontSize: 12, fontWeight: 700, color: textPrimary, display: "block", marginBottom: 6 }}>
-                          Region *
-                        </label>
-                        <select
-                          value={formData.region}
-                          onChange={(e) => handleInputChange("region", e.target.value)}
-                          style={{
-                            width: "100%",
-                            padding: "9px 12px",
-                            borderRadius: 8,
-                            border: `1px solid ${borderCol}`,
-                            background: inputBg,
-                            color: textPrimary,
-                            fontSize: 12
-                          }}
-                        >
-                          {REGION_OPTIONS.map((opt, idx) => (
-                            <option key={idx} value={opt.label}>
-                              {opt.no} - {opt.name}
-                            </option>
-                          ))}
-                        </select>
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 10, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 2 }}>
+                        Group Code
+                      </label>
+                      <div
+                        style={{
+                          height: 26,
+                          display: "flex",
+                          alignItems: "center",
+                          padding: "0 8px",
+                          background: inputBg,
+                          border: `1px solid ${borderCol}`,
+                          borderRadius: 6,
+                          fontWeight: 800,
+                          fontSize: 11,
+                          color: textPrimary
+                        }}
+                      >
+                        {getGroupDigit(formData.group || formData.product) || "-"}
+                      </div>
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 10, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 2 }}>
+                        Sub Group Code
+                      </label>
+                      <div
+                        style={{
+                          height: 26,
+                          display: "flex",
+                          alignItems: "center",
+                          padding: "0 8px",
+                          background: inputBg,
+                          border: `1px solid ${borderCol}`,
+                          borderRadius: 6,
+                          fontWeight: 800,
+                          fontSize: 11,
+                          color: textPrimary
+                        }}
+                      >
+                        {getSubGroupDigit(formData.subgroup || formData.segment) || "-"}
+                      </div>
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 10, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 2 }}>
+                        Sub Sub Group Code
+                      </label>
+                      <div
+                        style={{
+                          height: 26,
+                          display: "flex",
+                          alignItems: "center",
+                          padding: "0 8px",
+                          background: inputBg,
+                          border: `1px solid ${borderCol}`,
+                          borderRadius: 6,
+                          fontWeight: 800,
+                          fontSize: 11,
+                          color: textPrimary
+                        }}
+                      >
+                        {getSubSubGroupDigit(formData.sub_subgroup || formData.region) || "-"}
                       </div>
                     </div>
                   </div>
 
-                  {/* Hierarchy & Groups: group | subgroup | sub-subgroup */}
-                  <div>
-                    <span style={{ fontSize: 11, fontWeight: 800, color: textSecondary, textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 8 }}>
-                      Hierarchy &amp; Groups
-                    </span>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>
-                      {/* Group */}
-                      <div>
-                        <label style={{ fontSize: 12, fontWeight: 700, color: textPrimary, display: "block", marginBottom: 6 }}>
-                          Group
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="e.g. FG, SFG, Raw Material"
-                          value={formData.group_name}
-                          onChange={(e) => handleInputChange("group_name", e.target.value)}
-                          style={{
-                            width: "100%",
-                            padding: "9px 12px",
-                            borderRadius: 8,
-                            border: `1px solid ${borderCol}`,
-                            background: inputBg,
-                            color: textPrimary,
-                            fontSize: 12
-                          }}
-                        />
-                      </div>
-
-                      {/* Subgroup */}
-                      <div>
-                        <label style={{ fontSize: 12, fontWeight: 700, color: textPrimary, display: "block", marginBottom: 6 }}>
-                          Subgroup
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="e.g. Oil Seal, O-Ring, Gasket"
-                          value={formData.subgroup}
-                          onChange={(e) => handleInputChange("subgroup", e.target.value)}
-                          style={{
-                            width: "100%",
-                            padding: "9px 12px",
-                            borderRadius: 8,
-                            border: `1px solid ${borderCol}`,
-                            background: inputBg,
-                            color: textPrimary,
-                            fontSize: 12
-                          }}
-                        />
-                      </div>
-
-                      {/* Sub-subgroup */}
-                      <div>
-                        <label style={{ fontSize: 12, fontWeight: 700, color: textPrimary, display: "block", marginBottom: 6 }}>
-                          Sub-subgroup
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="e.g. Rotary Shaft Seal, Hub Seal"
-                          value={formData.sub_subgroup}
-                          onChange={(e) => handleInputChange("sub_subgroup", e.target.value)}
-                          style={{
-                            width: "100%",
-                            padding: "9px 12px",
-                            borderRadius: 8,
-                            border: `1px solid ${borderCol}`,
-                            background: inputBg,
-                            color: textPrimary,
-                            fontSize: 12
-                          }}
-                        />
-                      </div>
+                  {/* ROW 3: ITEM Code, Old Code, Item Description */}
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "6px 12px" }}>
+                    <div>
+                      <label style={{ fontSize: 10, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 2 }}>
+                        ITEM Code *
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.sms_new_part_no}
+                        readOnly
+                        style={{
+                          width: "100%",
+                          height: 28,
+                          padding: "2px 8px",
+                          borderRadius: 6,
+                          border: `1px solid ${borderCol}`,
+                          background: dark ? "rgba(255, 255, 255, 0.05)" : "#f1f5f9",
+                          color: textPrimary,
+                          fontWeight: 800,
+                          fontSize: 11,
+                          cursor: "not-allowed"
+                        }}
+                      />
                     </div>
-                  </div>
+                    <div>
+                      <label style={{ fontSize: 10, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 2 }}>
+                        Old Code
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.old_code}
+                        onChange={(e) => handleInputChange("old_code", e.target.value)}
+                        placeholder="e.g. 12015"
+                        style={fieldInputStyle}
+                      />
+                    </div>
 
-                  {/* Part Codes: new code | old code */}
-                  <div>
-                    <span style={{ fontSize: 11, fontWeight: 800, color: textSecondary, textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 8 }}>
-                      Part Codes &amp; Identification
-                    </span>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16 }}>
-                      {/* New Code */}
-                      <div>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-                          <label style={{ fontSize: 12, fontWeight: 700, color: textPrimary, margin: 0 }}>
-                            New Code (SMS FINAL Part No.) *
-                          </label>
-                          <span
-                            style={{
-                              fontSize: 10,
-                              fontWeight: 700,
-                              background: dark ? "rgba(148, 163, 184, 0.15)" : "#f1f5f9",
-                              color: dark ? "#94a3b8" : "#64748b",
-                              padding: "2px 8px",
-                              borderRadius: 4,
-                              letterSpacing: "0.04em"
-                            }}
-                          >
-                            AUTO-GENERATED
+                    <div style={{ gridColumn: "span 2" }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 2 }}>
+                        <label style={{ fontSize: 10, fontWeight: 700, color: textSecondary, textTransform: "uppercase" }}>
+                          Item Description *
+                        </label>
+                        {isDuplicateDescription && (
+                          <span style={{ fontSize: 10, fontWeight: 800, color: "#ef4444" }}>
+                            &bull; Already exists (must be unique)
                           </span>
-                        </div>
-
-                        <input
-                          type="text"
-                          readOnly
-                          value={formData.sms_new_part_no}
-                          title="Auto-generated part code (non-editable)"
-                          style={{
-                            width: "100%",
-                            padding: "9px 12px",
-                            borderRadius: 8,
-                            border: `1.5px solid ${borderCol}`,
-                            background: dark ? "rgba(15, 23, 42, 0.65)" : "#f8fafc",
-                            color: dark ? "#38bdf8" : "#0284c7",
-                            fontSize: 13,
-                            fontWeight: 800,
-                            letterSpacing: "0.05em",
-                            cursor: "not-allowed",
-                            userSelect: "all"
-                          }}
-                        />
+                        )}
                       </div>
-
-                      {/* Old Code */}
-                      <div>
-                        <label style={{ fontSize: 12, fontWeight: 700, color: textPrimary, display: "block", marginBottom: 6 }}>
-                          Old Code (SMS Old Part)
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="e.g. 101, 102"
-                          value={formData.old_code}
-                          onChange={(e) => handleInputChange("old_code", e.target.value)}
-                          style={{
-                            width: "100%",
-                            padding: "9px 12px",
-                            borderRadius: 8,
-                            border: `1px solid ${borderCol}`,
-                            background: inputBg,
-                            color: textPrimary,
-                            fontSize: 12
-                          }}
-                        />
-                      </div>
+                      <input
+                        type="text"
+                        value={formData.description_size}
+                        onChange={(e) => handleInputChange("description_size", e.target.value)}
+                        placeholder="e.g. OIL SEAL 35*50*8 NBR"
+                        style={{
+                          ...fieldInputStyle,
+                          borderColor: isDuplicateDescription ? "#ef4444" : borderCol,
+                          background: isDuplicateDescription ? (dark ? "rgba(239, 68, 68, 0.15)" : "#fee2e2") : inputBg
+                        }}
+                      />
                     </div>
                   </div>
 
-                  {/* Dimensions [mm]: ID | OD | height | thickness */}
-                  <div>
-                    <span style={{ fontSize: 11, fontWeight: 800, color: textSecondary, textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 8 }}>
-                      Dimensions (mm)
-                    </span>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 16 }}>
-                      {/* ID */}
-                      <div>
-                        <label style={{ fontSize: 12, fontWeight: 700, color: textPrimary, display: "block", marginBottom: 6 }}>
-                          ID (Inner Diameter)
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="e.g. 95"
-                          value={formData.inner_diameter}
-                          onChange={(e) => handleInputChange("inner_diameter", e.target.value)}
-                          style={{
-                            width: "100%",
-                            padding: "9px 12px",
-                            borderRadius: 8,
-                            border: `1px solid ${borderCol}`,
-                            background: inputBg,
-                            color: textPrimary,
-                            fontSize: 12
-                          }}
-                        />
-                      </div>
-
-                      {/* OD */}
-                      <div>
-                        <label style={{ fontSize: 12, fontWeight: 700, color: textPrimary, display: "block", marginBottom: 6 }}>
-                          OD (Outer Diameter)
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="e.g. 130"
-                          value={formData.outer_diameter}
-                          onChange={(e) => handleInputChange("outer_diameter", e.target.value)}
-                          style={{
-                            width: "100%",
-                            padding: "9px 12px",
-                            borderRadius: 8,
-                            border: `1px solid ${borderCol}`,
-                            background: inputBg,
-                            color: textPrimary,
-                            fontSize: 12
-                          }}
-                        />
-                      </div>
-
-                      {/* Height */}
-                      <div>
-                        <label style={{ fontSize: 12, fontWeight: 700, color: textPrimary, display: "block", marginBottom: 6 }}>
-                          Height
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="e.g. 13"
-                          value={formData.height}
-                          onChange={(e) => handleInputChange("height", e.target.value)}
-                          style={{
-                            width: "100%",
-                            padding: "9px 12px",
-                            borderRadius: 8,
-                            border: `1px solid ${borderCol}`,
-                            background: inputBg,
-                            color: textPrimary,
-                            fontSize: 12
-                          }}
-                        />
-                      </div>
-
-                      {/* Thickness */}
-                      <div>
-                        <label style={{ fontSize: 12, fontWeight: 700, color: textPrimary, display: "block", marginBottom: 6 }}>
-                          Thickness
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="e.g. 13"
-                          value={formData.thickness}
-                          onChange={(e) => handleInputChange("thickness", e.target.value)}
-                          style={{
-                            width: "100%",
-                            padding: "9px 12px",
-                            borderRadius: 8,
-                            border: `1px solid ${borderCol}`,
-                            background: inputBg,
-                            color: textPrimary,
-                            fontSize: 12
-                          }}
-                        />
-                      </div>
+                  {/* ROW 4: Dimensions (ID, OD, Height, Thickness) - Numeric & Decimal only */}
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "6px 12px" }}>
+                    <div>
+                      <label style={{ fontSize: 10, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 2 }}>
+                        ID (in mm)
+                      </label>
+                      <input
+                        type="number"
+                        step="any"
+                        value={formData.inner_diameter}
+                        onChange={(e) => handleInputChange("inner_diameter", e.target.value)}
+                        placeholder="35"
+                        style={fieldInputStyle}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 10, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 2 }}>
+                        OD (in mm)
+                      </label>
+                      <input
+                        type="number"
+                        step="any"
+                        value={formData.outer_diameter}
+                        onChange={(e) => handleInputChange("outer_diameter", e.target.value)}
+                        placeholder="50"
+                        style={fieldInputStyle}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 10, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 2 }}>
+                        Height (in mm)
+                      </label>
+                      <input
+                        type="number"
+                        step="any"
+                        value={formData.height}
+                        onChange={(e) => handleInputChange("height", e.target.value)}
+                        placeholder="8"
+                        style={fieldInputStyle}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 10, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 2 }}>
+                        Thickness (in mm)
+                      </label>
+                      <input
+                        type="number"
+                        step="any"
+                        value={formData.thickness}
+                        onChange={(e) => handleInputChange("thickness", e.target.value)}
+                        placeholder="0"
+                        style={fieldInputStyle}
+                      />
                     </div>
                   </div>
 
-                  {/* Description & Unit: product description | UOM */}
-                  <div>
-                    <span style={{ fontSize: 11, fontWeight: 800, color: textSecondary, textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 8 }}>
-                      Description &amp; Unit
-                    </span>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>
-                      {/* Product Description */}
-                      <div style={{ gridColumn: "span 2" }}>
-                        <label style={{ fontSize: 12, fontWeight: 700, color: textPrimary, display: "block", marginBottom: 6 }}>
-                          Product Description
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="e.g. Oil Seal-NBR (Size:95x130x13) Double Lip with Garter Spring"
-                          value={formData.description_size}
-                          onChange={(e) => handleInputChange("description_size", e.target.value)}
-                          style={{
-                            width: "100%",
-                            padding: "9px 12px",
-                            borderRadius: 8,
-                            border: `1px solid ${borderCol}`,
-                            background: inputBg,
-                            color: textPrimary,
-                            fontSize: 12
-                          }}
-                        />
-                      </div>
+                  {/* ROW 5: COLOR, MTRL, STYLE */}
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "6px 12px" }}>
+                    <div>
+                      <label style={{ fontSize: 10, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 2 }}>
+                        Color
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.color}
+                        onChange={(e) => handleInputChange("color", e.target.value)}
+                        placeholder="Black"
+                        style={fieldInputStyle}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 10, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 2 }}>
+                        Mtrl
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.material}
+                        onChange={(e) => handleInputChange("material", e.target.value)}
+                        placeholder="NBR"
+                        style={fieldInputStyle}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 10, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 2 }}>
+                        Style
+                      </label>
+                      <select
+                        value={formData.style}
+                        onChange={(e) => handleInputChange("style", e.target.value)}
+                        style={fieldInputStyle}
+                      >
+                        <option value="">-- Select Style --</option>
+                        <option value="Rubber">1. Rubber</option>
+                        <option value="Metal">2. Metal</option>
+                        <option value="Other">3. Other</option>
+                      </select>
+                    </div>
+                  </div>
 
-                      {/* UOM */}
-                      <div>
-                        <label style={{ fontSize: 12, fontWeight: 700, color: textPrimary, display: "block", marginBottom: 6 }}>
-                          UOM
-                        </label>
-                        <select
-                          value={formData.uom}
-                          onChange={(e) => handleInputChange("uom", e.target.value)}
+                  {/* ROW 5B: DRAWING NO., DRAWING IMAGE, IMAGE */}
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "6px 12px" }}>
+                    <div>
+                      <label style={{ fontSize: 10, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 2 }}>
+                        Drawing No.
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.drawing_no}
+                        onChange={(e) => handleInputChange("drawing_no", e.target.value)}
+                        placeholder="DWG-001"
+                        style={fieldInputStyle}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 10, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 2 }}>
+                        Drawing Image
+                      </label>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, height: 28 }}>
+                        <input
+                          ref={drawingFileInputRef}
+                          type="file"
+                          accept="image/*"
+                          onChange={handleDrawingImageUpload}
+                          style={{ display: "none" }}
+                          id="drawing-file-upload-input"
+                        />
+                        <label
+                          htmlFor="drawing-file-upload-input"
                           style={{
-                            width: "100%",
-                            padding: "9px 12px",
-                            borderRadius: 8,
+                            cursor: "pointer",
+                            padding: "3px 8px",
+                            borderRadius: 6,
+                            background: dark ? "rgba(255,255,255,0.08)" : "#f1f5f9",
                             border: `1px solid ${borderCol}`,
-                            background: inputBg,
+                            fontSize: 11,
+                            fontWeight: 700,
                             color: textPrimary,
-                            fontSize: 12
+                            whiteSpace: "nowrap"
                           }}
                         >
-                          <option value="PCS">PCS (Pieces)</option>
-                          <option value="NOS">NOS (Numbers)</option>
-                          <option value="SET">SET (Kits / Sets)</option>
-                          <option value="MTR">MTR (Meters)</option>
-                          <option value="KGS">KGS (Kilograms)</option>
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Product Variant */}
-                  <div>
-                    <span style={{ fontSize: 11, fontWeight: 800, color: textSecondary, textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 8 }}>
-                      Product Variant
-                    </span>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 16 }}>
-                      {/* Product Type */}
-                      <div>
-                        <label style={{ fontSize: 12, fontWeight: 700, color: textPrimary, display: "block", marginBottom: 6 }}>
-                          Product Type
+                          &#128247; {formData.drawing_image ? "Change" : "Browse File"}
                         </label>
+                        {formData.drawing_image && (
+                          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                            <img
+                              src={formData.drawing_image}
+                              alt="drawing thumb"
+                              style={{ width: 22, height: 22, borderRadius: 4, objectFit: "cover", border: "1px solid #10b981" }}
+                            />
+                            <button
+                              type="button"
+                              onClick={handleRemoveDrawingImage}
+                              title="Remove drawing image"
+                              style={{
+                                background: "#ef4444",
+                                color: "#fff",
+                                border: "none",
+                                borderRadius: "50%",
+                                width: 16,
+                                height: 16,
+                                fontSize: 10,
+                                cursor: "pointer",
+                                lineHeight: 1
+                              }}
+                            >
+                              &times;
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 10, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 2 }}>
+                        Image
+                      </label>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, height: 28 }}>
                         <input
-                          type="text"
-                          placeholder="e.g. Rotary Oil Seal - TC Double Lip / Hydraulic Rod Seal"
-                          value={formData.product_type}
-                          onChange={(e) => handleInputChange("product_type", e.target.value)}
-                          style={{
-                            width: "100%",
-                            padding: "9px 12px",
-                            borderRadius: 8,
-                            border: `1px solid ${borderCol}`,
-                            background: inputBg,
-                            color: textPrimary,
-                            fontSize: 12
-                          }}
+                          ref={fileInputRef}
+                          type="file"
+                          accept="image/*"
+                          onChange={handleImageUpload}
+                          style={{ display: "none" }}
+                          id="item-file-upload-input"
                         />
+                        <label
+                          htmlFor="item-file-upload-input"
+                          style={{
+                            cursor: "pointer",
+                            padding: "3px 8px",
+                            borderRadius: 6,
+                            background: dark ? "rgba(255,255,255,0.08)" : "#f1f5f9",
+                            border: `1px solid ${borderCol}`,
+                            fontSize: 11,
+                            fontWeight: 700,
+                            color: textPrimary,
+                            whiteSpace: "nowrap"
+                          }}
+                        >
+                          &#128247; {formData.image ? "Change" : "Browse File"}
+                        </label>
+                        {formData.image && (
+                          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                            <img
+                              src={formData.image}
+                              alt="thumb"
+                              style={{ width: 22, height: 22, borderRadius: 4, objectFit: "cover", border: "1px solid #10b981" }}
+                            />
+                            <button
+                              type="button"
+                              onClick={handleRemoveImage}
+                              title="Remove image"
+                              style={{
+                                background: "#ef4444",
+                                color: "#fff",
+                                border: "none",
+                                borderRadius: "50%",
+                                width: 16,
+                                height: 16,
+                                fontSize: 10,
+                                cursor: "pointer",
+                                lineHeight: 1
+                              }}
+                            >
+                              &times;
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
 
+                  {/* ROW 5C: SAFETY, PROCUREMENT & TOTAL LEAD TIME */}
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "6px 12px" }}>
+                    <div>
+                      <label style={{ fontSize: 10, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 2 }}>
+                        Safety Lead Time
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={formData.safety_lead_time}
+                        onChange={(e) => handleInputChange("safety_lead_time", e.target.value)}
+                        placeholder="0"
+                        style={fieldInputStyle}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 10, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 2 }}>
+                        Procurement Lead Time
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={formData.procurement_lead_time}
+                        onChange={(e) => handleInputChange("procurement_lead_time", e.target.value)}
+                        placeholder="0"
+                        style={fieldInputStyle}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 10, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 2 }}>
+                        Total Lead Time
+                      </label>
+                      <input
+                        type="number"
+                        readOnly
+                        value={(Number(formData.safety_lead_time) || 0) + (Number(formData.procurement_lead_time) || 0)}
+                        style={{ ...fieldInputStyle, background: dark ? "#0f172a" : "#f1f5f9", cursor: "not-allowed", fontWeight: 700 }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* ROW 6: PURCHASE UOM, CONSUMED UOM, OPENING BALANCE */}
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "6px 12px" }}>
+                    <div>
+                      <label style={{ fontSize: 10, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 2 }}>
+                        Purchase UOM
+                      </label>
+                      <select
+                        value={formData.purchased_uom}
+                        onChange={(e) => handleInputChange("purchased_uom", e.target.value)}
+                        style={fieldInputStyle}
+                      >
+                        <option value="">-- Select UOM --</option>
+                        <option value="PCS">PCS</option>
+                        <option value="NOS">NOS</option>
+                        <option value="SET">SET</option>
+                        <option value="MTR">MTR</option>
+                        <option value="KGS">KGS</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 10, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 2 }}>
+                        Consumed UOM
+                      </label>
+                      <select
+                        value={formData.consumption_uom}
+                        onChange={(e) => handleInputChange("consumption_uom", e.target.value)}
+                        style={fieldInputStyle}
+                      >
+                        <option value="">-- Select UOM --</option>
+                        <option value="PCS">PCS</option>
+                        <option value="NOS">NOS</option>
+                        <option value="SET">SET</option>
+                        <option value="MTR">MTR</option>
+                        <option value="KGS">KGS</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 10, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 2 }}>
+                        Opening Balance
+                      </label>
+                      <input
+                        type="number"
+                        value={formData.opening_balance}
+                        onChange={(e) => handleInputChange("opening_balance", e.target.value)}
+                        placeholder="0"
+                        style={fieldInputStyle}
+                      />
+                    </div>
+                  </div>
+
+                  {/* ROW 7: GROSS WT, NET WT, CLASS, Rej % Tolerance */}
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "6px 12px" }}>
+                    <div>
+                      <label style={{ fontSize: 10, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 2 }}>
+                        Gross Wt (in gram)
+                      </label>
+                      <input
+                        type="number"
+                        step="any"
+                        value={formData.gross_wt}
+                        onChange={(e) => handleInputChange("gross_wt", e.target.value)}
+                        placeholder="0.00"
+                        style={fieldInputStyle}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 10, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 2 }}>
+                        Net Wt (in gram)
+                      </label>
+                      <input
+                        type="number"
+                        step="any"
+                        value={formData.net_wt}
+                        onChange={(e) => handleInputChange("net_wt", e.target.value)}
+                        placeholder="0.00"
+                        style={fieldInputStyle}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 10, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 2 }}>
+                        Class
+                      </label>
+                      <select
+                        value={formData.item_class}
+                        onChange={(e) => handleInputChange("item_class", e.target.value)}
+                        style={fieldInputStyle}
+                      >
+                        <option value="">-- Select Class --</option>
+                        <option value="High">1. High</option>
+                        <option value="Medium">2. Medium</option>
+                        <option value="Low">3. Low</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 10, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 2 }}>
+                        Rej % Tolerance
+                      </label>
+                      <input
+                        type="number"
+                        step="any"
+                        value={formData.rej_tolerance}
+                        onChange={(e) => handleInputChange("rej_tolerance", e.target.value)}
+                        placeholder="0%"
+                        style={fieldInputStyle}
+                      />
+                    </div>
+                  </div>
+
+                  {/* ROW 8: PROCUREMENT TYPE, PROCESS TYPE (span 2), MIN STOCK LVL */}
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "6px 12px" }}>
+                    <div>
+                      <label style={{ fontSize: 10, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 2 }}>
+                        Procurement Type
+                      </label>
+                      <select
+                        value={formData.procurement_type}
+                        onChange={(e) => handleInputChange("procurement_type", e.target.value)}
+                        style={fieldInputStyle}
+                      >
+                        <option value="">-- Select Procurement --</option>
+                        {procurementList.map((pt, idx) => (
+                          <option key={idx} value={pt}>
+                            {pt}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div style={{ gridColumn: "span 2" }}>
+                      <label style={{ fontSize: 10, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 2 }}>
+                        Process Type
+                      </label>
+                      <select
+                        value={formData.process_type}
+                        onChange={(e) => handleInputChange("process_type", e.target.value)}
+                        style={fieldInputStyle}
+                      >
+                        <option value="">-- Select Process --</option>
+                        {processList.map((proc, idx) => (
+                          <option key={idx} value={proc.code || proc.label}>
+                            {proc.label || proc.desc || proc.code}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 10, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 2 }}>
+                        Min Stock Lvl
+                      </label>
+                      <input
+                        type="number"
+                        value={formData.min_stock_lvl}
+                        onChange={(e) => handleInputChange("min_stock_lvl", e.target.value)}
+                        placeholder="100"
+                        style={fieldInputStyle}
+                      />
+                    </div>
+                  </div>
+
+                  {/* ROW 9: MAX STOCK LVL, REORDER STOCK LVL, HSN / SAC CODE */}
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "6px 12px" }}>
+                    <div>
+                      <label style={{ fontSize: 10, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 2 }}>
+                        Max Stock Lvl
+                      </label>
+                      <input
+                        type="number"
+                        value={formData.max_stock_lvl}
+                        onChange={(e) => handleInputChange("max_stock_lvl", e.target.value)}
+                        placeholder="1000"
+                        style={fieldInputStyle}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 10, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 2 }}>
+                        Reorder Stock Lvl
+                      </label>
+                      <input
+                        type="number"
+                        value={formData.reorder_stock_lvl}
+                        onChange={(e) => handleInputChange("reorder_stock_lvl", e.target.value)}
+                        placeholder="200"
+                        style={fieldInputStyle}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 10, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 2 }}>
+                        HSN / SAC Code
+                      </label>
+                      <select
+                        value={formData.hsn_code}
+                        onChange={(e) => handleInputChange("hsn_code", e.target.value)}
+                        style={fieldInputStyle}
+                      >
+                        <option value="">-- Select HSN --</option>
+                        {hsnList.map((h, idx) => (
+                          <option key={idx} value={h.code}>
+                            {h.code} {h.desc ? `- ${h.desc.substring(0, 24)}...` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* ROW 10: MRP, RATE, and Actions */}
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "6px 12px", alignItems: "flex-end" }}>
+                    <div>
+                      <label style={{ fontSize: 10, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 2 }}>
+                        MRP
+                      </label>
+                      <input
+                        type="number"
+                        step="any"
+                        value={formData.mrp}
+                        onChange={(e) => handleInputChange("mrp", e.target.value)}
+                        placeholder="0.00"
+                        style={fieldInputStyle}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 10, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 2 }}>
+                        Rate
+                      </label>
+                      <input
+                        type="number"
+                        step="any"
+                        value={formData.price}
+                        onChange={(e) => {
+                          handleInputChange("price", e.target.value);
+                          handleInputChange("rate", e.target.value);
+                        }}
+                        placeholder="0.00"
+                        style={fieldInputStyle}
+                      />
+                    </div>
+                    <div style={{ gridColumn: "span 2", display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, paddingTop: 4 }}>
+                      <button
+                        type="button"
+                        onClick={() => setIsModalOpen(false)}
+                        style={{
+                          background: "transparent",
+                          border: `1px solid ${borderCol}`,
+                          padding: "5px 12px",
+                          borderRadius: 6,
+                          fontSize: 11,
+                          fontWeight: 700,
+                          color: textSecondary,
+                          cursor: "pointer"
+                        }}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFormData(prev => ({
+                          ...INITIAL_ITEM_FORM,
+                          sms_new_part_no: prev.sms_new_part_no,
+                          main_group_code: "FG"
+                        }))}
+                        style={{
+                          background: "transparent",
+                          border: `1px solid ${borderCol}`,
+                          padding: "5px 12px",
+                          borderRadius: 6,
+                          fontSize: 11,
+                          fontWeight: 700,
+                          color: textSecondary,
+                          cursor: "pointer"
+                        }}
+                      >
+                        Clear
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab("tab2")}
+                        style={{
+                          background: dark ? "rgba(255,255,255,0.08)" : "#f1f5f9",
+                          border: `1px solid ${borderCol}`,
+                          padding: "5px 12px",
+                          borderRadius: 6,
+                          fontSize: 11,
+                          fontWeight: 700,
+                          color: textPrimary,
+                          cursor: "pointer"
+                        }}
+                      >
+                        Next: Extended &rarr;
+                      </button>
+                      <button
+                        type="submit"
+                        style={{
+                          background: editingId
+                            ? "linear-gradient(135deg, #059669 0%, #047857 100%)"
+                            : "linear-gradient(135deg, #c51f28 0%, #991b1b 100%)",
+                          color: "#ffffff",
+                          border: "none",
+                          borderRadius: 6,
+                          padding: "6px 18px",
+                          fontSize: 11,
+                          fontWeight: 800,
+                          cursor: "pointer",
+                          boxShadow: editingId
+                            ? "0 2px 8px rgba(5, 150, 105, 0.35)"
+                            : "0 2px 8px rgba(197, 31, 40, 0.35)"
+                        }}
+                      >
+                        &#10003; {editingId ? "Update Item" : "Save Item"}
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
 
               {/* ========================================================================= */}
-              {/* TAB 2: REST OF ALL ATTRIBUTES */}
-              {/* ========================================================================= */}
+              {/* TAB 2: EXTENDED ATTRIBUTES (UNIQUE FIELDS NOT IN TAB 1) */}
               {activeTab === "tab2" && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-                  
+                <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                   {/* Category, Domestic/Export & Application */}
                   <div>
                     <span style={{ fontSize: 11, fontWeight: 800, color: textSecondary, textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 8 }}>
                       Market &amp; Application
                     </span>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14 }}>
                       {/* Category */}
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 700, color: textPrimary, display: "block", marginBottom: 6 }}>
+                        <label style={{ fontSize: 11, fontWeight: 700, color: textPrimary, display: "block", marginBottom: 4 }}>
                           Category
                         </label>
                         <input
@@ -1969,20 +2778,21 @@ export function ItemMasterFormPage({
                           placeholder="e.g. Oil Seal, O-Ring, Gasket"
                           value={formData.category}
                           onChange={(e) => handleInputChange("category", e.target.value)}
-                          style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${borderCol}`, background: inputBg, color: textPrimary, fontSize: 12 }}
+                          style={{ width: "100%", padding: "6px 10px", borderRadius: 6, border: `1px solid ${borderCol}`, background: inputBg, color: textPrimary, fontSize: 11 }}
                         />
                       </div>
 
                       {/* Domestic / Exports */}
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 700, color: textPrimary, display: "block", marginBottom: 6 }}>
+                        <label style={{ fontSize: 11, fontWeight: 700, color: textPrimary, display: "block", marginBottom: 4 }}>
                           Domestic / Exports
                         </label>
                         <select
                           value={formData.domestic_exports}
                           onChange={(e) => handleInputChange("domestic_exports", e.target.value)}
-                          style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${borderCol}`, background: inputBg, color: textPrimary, fontSize: 12 }}
+                          style={{ width: "100%", padding: "6px 10px", borderRadius: 6, border: `1px solid ${borderCol}`, background: inputBg, color: textPrimary, fontSize: 11 }}
                         >
+                          <option value="">-- Select --</option>
                           <option value="Domestic">Domestic</option>
                           <option value="Export">Export</option>
                           <option value="Both">Both (Domestic &amp; Export)</option>
@@ -1991,7 +2801,7 @@ export function ItemMasterFormPage({
 
                       {/* Application */}
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 700, color: textPrimary, display: "block", marginBottom: 6 }}>
+                        <label style={{ fontSize: 11, fontWeight: 700, color: textPrimary, display: "block", marginBottom: 4 }}>
                           Application
                         </label>
                         <input
@@ -1999,7 +2809,7 @@ export function ItemMasterFormPage({
                           placeholder="e.g. Engine Crankshaft, Wheel Hub, Pinion"
                           value={formData.application}
                           onChange={(e) => handleInputChange("application", e.target.value)}
-                          style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${borderCol}`, background: inputBg, color: textPrimary, fontSize: 12 }}
+                          style={{ width: "100%", padding: "6px 10px", borderRadius: 6, border: `1px solid ${borderCol}`, background: inputBg, color: textPrimary, fontSize: 11 }}
                         />
                       </div>
                     </div>
@@ -2010,10 +2820,10 @@ export function ItemMasterFormPage({
                     <span style={{ fontSize: 11, fontWeight: 800, color: textSecondary, textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 8 }}>
                       References &amp; Cross Catalog
                     </span>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14 }}>
                       {/* REF. NO. */}
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 700, color: textPrimary, display: "block", marginBottom: 6 }}>
+                        <label style={{ fontSize: 11, fontWeight: 700, color: textPrimary, display: "block", marginBottom: 4 }}>
                           REF. NO.
                         </label>
                         <input
@@ -2021,13 +2831,13 @@ export function ItemMasterFormPage({
                           placeholder="e.g. Drawing / Catalog Ref"
                           value={formData.ref_no}
                           onChange={(e) => handleInputChange("ref_no", e.target.value)}
-                          style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${borderCol}`, background: inputBg, color: textPrimary, fontSize: 12 }}
+                          style={{ width: "100%", padding: "6px 10px", borderRadius: 6, border: `1px solid ${borderCol}`, background: inputBg, color: textPrimary, fontSize: 11 }}
                         />
                       </div>
 
                       {/* OEM */}
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 700, color: textPrimary, display: "block", marginBottom: 6 }}>
+                        <label style={{ fontSize: 11, fontWeight: 700, color: textPrimary, display: "block", marginBottom: 4 }}>
                           OEM Reference
                         </label>
                         <input
@@ -2035,13 +2845,13 @@ export function ItemMasterFormPage({
                           placeholder="e.g. Tata, Mahindra, Ashok Leyland"
                           value={formData.oem}
                           onChange={(e) => handleInputChange("oem", e.target.value)}
-                          style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${borderCol}`, background: inputBg, color: textPrimary, fontSize: 12 }}
+                          style={{ width: "100%", padding: "6px 10px", borderRadius: 6, border: `1px solid ${borderCol}`, background: inputBg, color: textPrimary, fontSize: 11 }}
                         />
                       </div>
 
                       {/* CORTECO NO */}
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 700, color: textPrimary, display: "block", marginBottom: 6 }}>
+                        <label style={{ fontSize: 11, fontWeight: 700, color: textPrimary, display: "block", marginBottom: 4 }}>
                           CORTECO NO
                         </label>
                         <input
@@ -2049,13 +2859,13 @@ export function ItemMasterFormPage({
                           placeholder="e.g. 12011145B"
                           value={formData.corteco_no}
                           onChange={(e) => handleInputChange("corteco_no", e.target.value)}
-                          style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${borderCol}`, background: inputBg, color: textPrimary, fontSize: 12 }}
+                          style={{ width: "100%", padding: "6px 10px", borderRadius: 6, border: `1px solid ${borderCol}`, background: inputBg, color: textPrimary, fontSize: 11 }}
                         />
                       </div>
 
                       {/* CROSS Reference */}
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 700, color: textPrimary, display: "block", marginBottom: 6 }}>
+                        <label style={{ fontSize: 11, fontWeight: 700, color: textPrimary, display: "block", marginBottom: 4 }}>
                           CROSS Reference
                         </label>
                         <input
@@ -2063,83 +2873,38 @@ export function ItemMasterFormPage({
                           placeholder="e.g. SKF, Parker, National, CR"
                           value={formData.cross_reference}
                           onChange={(e) => handleInputChange("cross_reference", e.target.value)}
-                          style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${borderCol}`, background: inputBg, color: textPrimary, fontSize: 12 }}
+                          style={{ width: "100%", padding: "6px 10px", borderRadius: 6, border: `1px solid ${borderCol}`, background: inputBg, color: textPrimary, fontSize: 11 }}
                         />
                       </div>
 
-                      {/* Group Code */}
+                      {/* Remark */}
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 700, color: textPrimary, display: "block", marginBottom: 6 }}>
-                          Group Code
+                        <label style={{ fontSize: 11, fontWeight: 700, color: textPrimary, display: "block", marginBottom: 4 }}>
+                          Remark
                         </label>
                         <input
                           type="text"
-                          placeholder="e.g. 945, 985"
-                          value={formData.group_code}
-                          onChange={(e) => handleInputChange("group_code", e.target.value)}
-                          style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${borderCol}`, background: inputBg, color: textPrimary, fontSize: 12 }}
-                        />
-                      </div>
-
-                      {/* Main FG Code */}
-                      <div>
-                        <label style={{ fontSize: 12, fontWeight: 700, color: textPrimary, display: "block", marginBottom: 6 }}>
-                          Main FG Code
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="e.g. FG-945-05745"
-                          value={formData.main_fg_code}
-                          onChange={(e) => handleInputChange("main_fg_code", e.target.value)}
-                          style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${borderCol}`, background: inputBg, color: textPrimary, fontSize: 12 }}
+                          placeholder="e.g. Special remarks or notes"
+                          value={formData.remark || formData.main_fg_code || ""}
+                          onChange={(e) => {
+                            handleInputChange("remark", e.target.value);
+                            handleInputChange("main_fg_code", e.target.value);
+                          }}
+                          style={{ width: "100%", padding: "6px 10px", borderRadius: 6, border: `1px solid ${borderCol}`, background: inputBg, color: textPrimary, fontSize: 11 }}
                         />
                       </div>
                     </div>
                   </div>
 
-                  {/* Material, Color, Fitting Position, Swirl, Price */}
+                  {/* Dynamics & Technical Details */}
                   <div>
                     <span style={{ fontSize: 11, fontWeight: 800, color: textSecondary, textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 8 }}>
-                      Material, Dynamics &amp; Commercial
+                      Dynamics &amp; Technical Details
                     </span>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16 }}>
-                      {/* Material */}
-                      <div>
-                        <label style={{ fontSize: 12, fontWeight: 700, color: textPrimary, display: "block", marginBottom: 6 }}>
-                          Material
-                        </label>
-                        <select
-                          value={formData.material}
-                          onChange={(e) => handleInputChange("material", e.target.value)}
-                          style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${borderCol}`, background: inputBg, color: textPrimary, fontSize: 12 }}
-                        >
-                          <option value="NBR">NBR (Nitrile Butadiene Rubber)</option>
-                          <option value="FKM">FKM / Viton</option>
-                          <option value="Silicone">Silicone (VMQ)</option>
-                          <option value="Polyacrylate">Polyacrylate (ACM)</option>
-                          <option value="EPDM">EPDM</option>
-                          <option value="PTFE">PTFE (Teflon)</option>
-                          <option value="PU">PU (Polyurethane)</option>
-                        </select>
-                      </div>
-
-                      {/* Color */}
-                      <div>
-                        <label style={{ fontSize: 12, fontWeight: 700, color: textPrimary, display: "block", marginBottom: 6 }}>
-                          Color
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="e.g. Black, Brown, Red, Blue"
-                          value={formData.color}
-                          onChange={(e) => handleInputChange("color", e.target.value)}
-                          style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${borderCol}`, background: inputBg, color: textPrimary, fontSize: 12 }}
-                        />
-                      </div>
-
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14 }}>
                       {/* Fitting Position */}
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 700, color: textPrimary, display: "block", marginBottom: 6 }}>
+                        <label style={{ fontSize: 11, fontWeight: 700, color: textPrimary, display: "block", marginBottom: 4 }}>
                           Fitting Position
                         </label>
                         <input
@@ -2147,20 +2912,21 @@ export function ItemMasterFormPage({
                           placeholder="e.g. Front Axle, Rear Hub, Crankcase"
                           value={formData.fitting_position}
                           onChange={(e) => handleInputChange("fitting_position", e.target.value)}
-                          style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${borderCol}`, background: inputBg, color: textPrimary, fontSize: 12 }}
+                          style={{ width: "100%", padding: "6px 10px", borderRadius: 6, border: `1px solid ${borderCol}`, background: inputBg, color: textPrimary, fontSize: 11 }}
                         />
                       </div>
 
                       {/* Swirl Type */}
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 700, color: textPrimary, display: "block", marginBottom: 6 }}>
+                        <label style={{ fontSize: 11, fontWeight: 700, color: textPrimary, display: "block", marginBottom: 4 }}>
                           Swirl Type
                         </label>
                         <select
                           value={formData.swirl_type}
                           onChange={(e) => handleInputChange("swirl_type", e.target.value)}
-                          style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${borderCol}`, background: inputBg, color: textPrimary, fontSize: 12 }}
+                          style={{ width: "100%", padding: "6px 10px", borderRadius: 6, border: `1px solid ${borderCol}`, background: inputBg, color: textPrimary, fontSize: 11 }}
                         >
+                          <option value="">-- Select Swirl --</option>
                           <option value="None">None (Plain Lip)</option>
                           <option value="Right Hand (RH)">Right Hand (RH)</option>
                           <option value="Left Hand (LH)">Left Hand (LH)</option>
@@ -2168,52 +2934,9 @@ export function ItemMasterFormPage({
                         </select>
                       </div>
 
-                      {/* Standard Unit Price */}
-                      <div>
-                        <label style={{ fontSize: 12, fontWeight: 700, color: textPrimary, display: "block", marginBottom: 6 }}>
-                          Standard Price (₹)
-                        </label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          placeholder="e.g. 185.00"
-                          value={formData.price}
-                          onChange={(e) => handleInputChange("price", e.target.value)}
-                          style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${borderCol}`, background: inputBg, color: textPrimary, fontSize: 12 }}
-                        />
-                      </div>
-
-                      {/* Purchased UOM */}
-                      <div>
-                        <label style={{ fontSize: 12, fontWeight: 700, color: textPrimary, display: "block", marginBottom: 6 }}>
-                          Purchased UOM
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="e.g. Pc, Box"
-                          value={formData.purchased_uom}
-                          onChange={(e) => handleInputChange("purchased_uom", e.target.value)}
-                          style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${borderCol}`, background: inputBg, color: textPrimary, fontSize: 12 }}
-                        />
-                      </div>
-
-                      {/* Consumption UOM */}
-                      <div>
-                        <label style={{ fontSize: 12, fontWeight: 700, color: textPrimary, display: "block", marginBottom: 6 }}>
-                          Consumption UOM
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="e.g. Pc"
-                          value={formData.consumption_uom}
-                          onChange={(e) => handleInputChange("consumption_uom", e.target.value)}
-                          style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${borderCol}`, background: inputBg, color: textPrimary, fontSize: 12 }}
-                        />
-                      </div>
-
                       {/* File Name */}
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 700, color: textPrimary, display: "block", marginBottom: 6 }}>
+                        <label style={{ fontSize: 11, fontWeight: 700, color: textPrimary, display: "block", marginBottom: 4 }}>
                           File Name (CAD / Drawing)
                         </label>
                         <input
@@ -2221,7 +2944,7 @@ export function ItemMasterFormPage({
                           placeholder="e.g. SMS-DWG-945-05745.dwg"
                           value={formData.file_name}
                           onChange={(e) => handleInputChange("file_name", e.target.value)}
-                          style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${borderCol}`, background: inputBg, color: textPrimary, fontSize: 12 }}
+                          style={{ width: "100%", padding: "6px 10px", borderRadius: 6, border: `1px solid ${borderCol}`, background: inputBg, color: textPrimary, fontSize: 11 }}
                         />
                       </div>
                     </div>
@@ -2232,17 +2955,18 @@ export function ItemMasterFormPage({
                     <span style={{ fontSize: 11, fontWeight: 800, color: textSecondary, textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 8 }}>
                       Outsourcing &amp; Manufacturing
                     </span>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14 }}>
                       {/* FG Outsource */}
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 700, color: textPrimary, display: "block", marginBottom: 6 }}>
+                        <label style={{ fontSize: 11, fontWeight: 700, color: textPrimary, display: "block", marginBottom: 4 }}>
                           FG Outsource
                         </label>
                         <select
                           value={formData.fg_outsource}
                           onChange={(e) => handleInputChange("fg_outsource", e.target.value)}
-                          style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${borderCol}`, background: inputBg, color: textPrimary, fontSize: 12 }}
+                          style={{ width: "100%", padding: "6px 10px", borderRadius: 6, border: `1px solid ${borderCol}`, background: inputBg, color: textPrimary, fontSize: 11 }}
                         >
+                          <option value="">-- Select --</option>
                           <option value="IH">IH (In-House)</option>
                           <option value="RING OS">RING OS (Ring Outsource)</option>
                           <option value="MOULDED OS">MOULDED OS (Moulded Outsource)</option>
@@ -2252,14 +2976,15 @@ export function ItemMasterFormPage({
 
                       {/* SFG Outsource */}
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 700, color: textPrimary, display: "block", marginBottom: 6 }}>
+                        <label style={{ fontSize: 11, fontWeight: 700, color: textPrimary, display: "block", marginBottom: 4 }}>
                           SFG Outsource
                         </label>
                         <select
                           value={formData.sfg_outsource}
                           onChange={(e) => handleInputChange("sfg_outsource", e.target.value)}
-                          style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${borderCol}`, background: inputBg, color: textPrimary, fontSize: 12 }}
+                          style={{ width: "100%", padding: "6px 10px", borderRadius: 6, border: `1px solid ${borderCol}`, background: inputBg, color: textPrimary, fontSize: 11 }}
                         >
+                          <option value="">-- Select --</option>
                           <option value="IH">IH (In-House)</option>
                           <option value="RING OS">RING OS</option>
                           <option value="MOULDED OS">MOULDED OS</option>
@@ -2269,14 +2994,15 @@ export function ItemMasterFormPage({
 
                       {/* Outsource Combo FG & SFG */}
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 700, color: textPrimary, display: "block", marginBottom: 6 }}>
+                        <label style={{ fontSize: 11, fontWeight: 700, color: textPrimary, display: "block", marginBottom: 4 }}>
                           Outsource Combo FG &amp; SFG
                         </label>
                         <select
                           value={formData.outsource_combo_fg_sfg}
                           onChange={(e) => handleInputChange("outsource_combo_fg_sfg", e.target.value)}
-                          style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${borderCol}`, background: inputBg, color: textPrimary, fontSize: 12 }}
+                          style={{ width: "100%", padding: "6px 10px", borderRadius: 6, border: `1px solid ${borderCol}`, background: inputBg, color: textPrimary, fontSize: 11 }}
                         >
+                          <option value="">-- Select --</option>
                           <option value="IH">IH (In-House)</option>
                           <option value="RING OS">RING OS</option>
                           <option value="MOULDED OS">MOULDED OS</option>
@@ -2286,209 +3012,100 @@ export function ItemMasterFormPage({
                     </div>
                   </div>
 
-                  {/* Image Upload (JPG & PNG) */}
-                  <div>
-                    <span style={{ fontSize: 11, fontWeight: 800, color: textSecondary, textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 8 }}>
-                      Item Image Upload (JPG / PNG)
-                    </span>
-                    <div
+                  {/* TAB 2 ACTION BUTTONS */}
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      marginTop: 14,
+                      paddingTop: 12,
+                      borderTop: `1px solid ${borderCol}`
+                    }}
+                  >
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab("tab1")}
+                        style={{
+                          background: dark ? "rgba(255,255,255,0.08)" : "#f1f5f9",
+                          border: `1px solid ${borderCol}`,
+                          padding: "6px 14px",
+                          borderRadius: 6,
+                          fontSize: 11,
+                          fontWeight: 700,
+                          color: textPrimary,
+                          cursor: "pointer"
+                        }}
+                      >
+                        &larr; Back to Primary Specs
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFormData(prev => ({
+                          ...INITIAL_ITEM_FORM,
+                          sms_new_part_no: prev.sms_new_part_no,
+                          main_group_code: "FG"
+                        }))}
+                        style={{
+                          background: "transparent",
+                          border: `1px solid ${borderCol}`,
+                          padding: "6px 14px",
+                          borderRadius: 6,
+                          fontSize: 11,
+                          fontWeight: 700,
+                          color: textSecondary,
+                          cursor: "pointer"
+                        }}
+                      >
+                        Clear
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIsModalOpen(false)}
+                        style={{
+                          background: "transparent",
+                          border: `1px solid ${borderCol}`,
+                          padding: "6px 14px",
+                          borderRadius: 6,
+                          fontSize: 11,
+                          fontWeight: 700,
+                          color: textSecondary,
+                          cursor: "pointer"
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+
+                    <button
+                      type="submit"
                       style={{
-                        border: `2px dashed ${borderCol}`,
-                        borderRadius: 14,
-                        padding: "20px",
-                        background: dark ? "rgba(15, 23, 42, 0.4)" : "#f8fafc",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 20
+                        background: editingId
+                          ? "linear-gradient(135deg, #059669 0%, #047857 100%)"
+                          : "linear-gradient(135deg, #c51f28 0%, #991b1b 100%)",
+                        color: "#ffffff",
+                        border: "none",
+                        borderRadius: 6,
+                        padding: "6px 18px",
+                        fontSize: 11,
+                        fontWeight: 800,
+                        cursor: "pointer",
+                        boxShadow: editingId
+                          ? "0 2px 8px rgba(5, 150, 105, 0.35)"
+                          : "0 2px 8px rgba(197, 31, 40, 0.35)"
                       }}
                     >
-                      {formData.image ? (
-                        <div style={{ position: "relative" }}>
-                          <img
-                            src={formData.image}
-                            alt="Item Preview"
-                            style={{
-                              width: 90,
-                              height: 90,
-                              objectFit: "cover",
-                              borderRadius: 12,
-                              border: `2px solid #10b981`
-                            }}
-                          />
-                          <button
-                            type="button"
-                            onClick={handleRemoveImage}
-                            title="Remove image"
-                            style={{
-                              position: "absolute",
-                              top: -6,
-                              right: -6,
-                              width: 22,
-                              height: 22,
-                              borderRadius: "50%",
-                              background: "#ef4444",
-                              color: "#fff",
-                              border: "none",
-                              cursor: "pointer",
-                              fontSize: 12,
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              fontWeight: 800
-                            }}
-                          >
-                            &times;
-                          </button>
-                        </div>
-                      ) : (
-                        <div
-                          style={{
-                            width: 90,
-                            height: 90,
-                            borderRadius: 12,
-                            background: dark ? "#1e293b" : "#e2e8f0",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            color: textSecondary,
-                            fontSize: 11,
-                            fontWeight: 700,
-                            textAlign: "center",
-                            padding: 8
-                          }}
-                        >
-                          No Image Uploaded
-                        </div>
-                      )}
-
-                      <div style={{ flex: 1 }}>
-                        <input
-                          ref={fileInputRef}
-                          type="file"
-                          accept="image/jpeg, image/png, image/jpg"
-                          onChange={handleImageUpload}
-                          style={{ display: "none" }}
-                          id="item-image-upload"
-                        />
-                        <label
-                          htmlFor="item-image-upload"
-                          style={{
-                            display: "inline-block",
-                            padding: "9px 18px",
-                            borderRadius: 10,
-                            background: dark ? "rgba(197, 31, 40, 0.2)" : "#fee2e2",
-                            color: "#c51f28",
-                            fontWeight: 800,
-                            fontSize: 12,
-                            cursor: "pointer",
-                            border: "1px solid rgba(197, 31, 40, 0.35)",
-                            marginBottom: 6
-                          }}
-                        >
-                          &#128247; Choose JPG / PNG File
-                        </label>
-                        <p style={{ fontSize: 11, color: textSecondary, margin: 0 }}>
-                          Select high-resolution JPG or PNG seal profile photo. Renders immediate thumbnail preview.
-                        </p>
-                      </div>
-                    </div>
+                      &#10003; {editingId ? "Update Item" : "Save Item"}
+                    </button>
                   </div>
-
                 </div>
               )}
-
-              {/* Modal Footer / Submit & Action Buttons */}
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  marginTop: 28,
-                  paddingTop: 18,
-                  borderTop: `1px solid ${borderCol}`
-                }}
-              >
-                <div style={{ display: "flex", gap: 10 }}>
-                  <button
-                    type="button"
-                    onClick={() => setFormData(INITIAL_ITEM_FORM)}
-                    style={{
-                      background: "transparent",
-                      border: `1px solid ${borderCol}`,
-                      borderRadius: 10,
-                      padding: "8px 16px",
-                      fontSize: 12,
-                      fontWeight: 700,
-                      color: textSecondary,
-                      cursor: "pointer"
-                    }}
-                  >
-                    Clear Form
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsModalOpen(false)}
-                    style={{
-                      background: "transparent",
-                      border: "none",
-                      padding: "8px 14px",
-                      fontSize: 12,
-                      fontWeight: 700,
-                      color: textSecondary,
-                      cursor: "pointer"
-                    }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-
-                <div style={{ display: "flex", gap: 10 }}>
-                  {activeTab === "tab1" && (
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab("tab2")}
-                      style={{
-                        background: dark ? "rgba(255,255,255,0.08)" : "#e2e8f0",
-                        color: textPrimary,
-                        border: "none",
-                        borderRadius: 10,
-                        padding: "10px 20px",
-                        fontSize: 12,
-                        fontWeight: 800,
-                        cursor: "pointer"
-                      }}
-                    >
-                      Next: Extended Attributes &rarr;
-                    </button>
-                  )}
-
-                  <button
-                    type="submit"
-                    style={{
-                      background: editingId
-                        ? "linear-gradient(135deg, #059669 0%, #047857 100%)"
-                        : "linear-gradient(135deg, #c51f28 0%, #991b1b 100%)",
-                      color: "#ffffff",
-                      border: "none",
-                      borderRadius: 10,
-                      padding: "10px 24px",
-                      fontSize: 13,
-                      fontWeight: 800,
-                      cursor: "pointer",
-                      boxShadow: editingId
-                        ? "0 4px 14px rgba(5, 150, 105, 0.4)"
-                        : "0 4px 14px rgba(197, 31, 40, 0.4)"
-                    }}
-                  >
-                    &#10003; {editingId ? "Update Item Master" : "Save to Item Master"}
-                  </button>
-                </div>
-              </div>
-
             </form>
           </div>
         </div>
       )}
+
 
       {/* ========================================================================= */}
       {/* FULL SPECS VIEW MODAL */}
@@ -2565,11 +3182,9 @@ export function ItemMasterFormPage({
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, fontSize: 12 }}>
                 <div><strong>New Code:</strong> <span style={{ color: "#c51f28", fontWeight: 800 }}>{detailItem.sms_new_part_no}</span></div>
                 <div><strong>Old Code:</strong> {detailItem.old_code || "-"}</div>
-                <div><strong>Product:</strong> {detailItem.product || "-"}</div>
-                <div><strong>Segment:</strong> {detailItem.segment || "-"}</div>
-                <div><strong>Region:</strong> {detailItem.region || "-"}</div>
-                <div><strong>Group:</strong> {detailItem.group_name || "-"} / {detailItem.subgroup || "-"}</div>
-                <div><strong>Sub-subgroup:</strong> {detailItem.sub_subgroup || "-"}</div>
+                <div><strong>Group:</strong> {detailItem.group || detailItem.product || "-"}</div>
+                <div><strong>Sub-Group:</strong> {detailItem.subgroup || detailItem.segment || "-"}</div>
+                <div><strong>Sub-SubGroup:</strong> {detailItem.sub_subgroup || detailItem.region || "-"}</div>
                 <div><strong>Product Type:</strong> {detailItem.product_type || "-"}</div>
                 <div><strong>Dimensions (ID &times; OD &times; H):</strong> {detailItem.inner_diameter || "-"} &times; {detailItem.outer_diameter || "-"} &times; {detailItem.height || detailItem.width || "-"} mm</div>
                 <div><strong>Thickness:</strong> {detailItem.thickness || "-"} mm</div>

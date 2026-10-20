@@ -1,3 +1,4 @@
+import { useResizableColumns, ResizableColGroup, ColumnResizeHandle } from "../../../shared/components/ResizableTable";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { Eye, Pencil, Trash2, Search, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Plus, RefreshCw, Download, Printer, Building2, ShieldCheck, MapPin, UserCheck } from "lucide-react";
 
@@ -6,19 +7,19 @@ const INITIAL_SUPPLIER_FORM = {
   supplierId: "",
   supplierName: "",
   companyId: "COMP-001",
-  supplierType: "MATERIAL", // MATERIAL, SERVICES, LOGISTICS, CONTRACTOR
+  supplierType: "", // MATERIAL, SERVICES, LOGISTICS, CONTRACTOR
   gstin: "",
   pan: "",
   udyamNo: "",
-  msmeCategory: "NOT_MSME", // NOT_MSME, MICRO, SMALL, MEDIUM
-  gstRegistrationType: "REGISTERED", // REGISTERED, UNREGISTERED, COMPOSITION, SEZ
+  msmeCategory: "", // NOT_MSME, MICRO, SMALL, MEDIUM
+  gstRegistrationType: "", // REGISTERED, UNREGISTERED, COMPOSITION, SEZ
   tdsSectionId: "TDS-194C",
   contactPerson: "",
   email: "",
   phone: "",
-  paymentTermsId: "PT-30",
+  paymentTermsId: "",
   currency: "INR",
-  status: "ACTIVE", // ACTIVE, INACTIVE, BLOCKED
+  status: "", // ACTIVE, INACTIVE, BLOCKED
   address: "",
   city: "",
   state: "",
@@ -55,6 +56,21 @@ const PAYMENT_TERMS_OPTIONS = [
   { value: "IMMEDIATE", label: "Advance / Immediate" }
 ];
 
+const SUPPLIER_MASTER_PAGE_1_COLUMNS = [
+  { key: "select", width: 38, min: 32 },
+  { key: "supplier_code", width: 131 },
+  { key: "supplier_name", width: 200 },
+  { key: "gstin", width: 140 },
+  { key: "pan", width: 110 },
+  { key: "contact_person", width: 140 },
+  { key: "phone_email", width: 131 },
+  { key: "city", width: 110 },
+  { key: "state", width: 120 },
+  { key: "gst_type", width: 120 },
+  { key: "status", width: 90 },
+  { key: "action", width: 70 },
+];
+
 export function SupplierMasterPage({
   dark = false,
   onBackToHome,
@@ -62,6 +78,7 @@ export function SupplierMasterPage({
   sidebarOpen = false,
   setPage
 }) {
+  const supplierMasterPage1Resize = useResizableColumns("supplier-master-page-1", SUPPLIER_MASTER_PAGE_1_COLUMNS);
   // Modal & Form State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("tab1"); // "tab1" or "tab2"
@@ -128,6 +145,7 @@ export function SupplierMasterPage({
     fetchSuppliers();
   }, []);
 
+
   // Styling theme tokens matching ItemMasterFormPage
   const bg = dark ? "#0a0f1d" : "#f4f6fb";
   const cardBg = dark ? "#111827" : "#ffffff";
@@ -153,9 +171,13 @@ export function SupplierMasterPage({
   // Open Edit Modal
   const handleOpenEditModal = (supplier) => {
     setEditingId(supplier.id);
+    // Null values from the API become "" so the dropdowns show their blank placeholder
+    const normalized = Object.fromEntries(
+      Object.entries(supplier).map(([key, value]) => [key, value ?? ""])
+    );
     setFormData({
       ...INITIAL_SUPPLIER_FORM,
-      ...supplier
+      ...normalized
     });
     setActiveTab("tab1");
     if (detailItem) setDetailItem(null);
@@ -762,15 +784,17 @@ export function SupplierMasterPage({
         {/* ========================================================================= */}
         <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column", minHeight: 0 }}>
           <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
-            <table
+            <table className="resizable-table"
               style={{
                 width: "100%",
                 borderCollapse: "separate",
                 borderSpacing: 0,
                 fontSize: 12.5,
-                textAlign: "left"
+                textAlign: "left",
+                ...supplierMasterPage1Resize.tableStyle,
               }}
             >
+              <ResizableColGroup columns={SUPPLIER_MASTER_PAGE_1_COLUMNS} widths={supplierMasterPage1Resize.widths} />
               <thead
                 style={{
                   position: "sticky",
@@ -789,17 +813,17 @@ export function SupplierMasterPage({
                       style={{ cursor: "pointer" }}
                     />
                   </th>
-                  <th style={{ padding: "10px 12px", minWidth: 110, borderBottom: "1px solid #cbd5e1" }}>Supplier Code</th>
-                  <th style={{ padding: "10px 12px", minWidth: 200, borderBottom: "1px solid #cbd5e1" }}>Supplier Name</th>
-                  <th style={{ padding: "10px 12px", minWidth: 140, borderBottom: "1px solid #cbd5e1" }}>GSTIN</th>
-                  <th style={{ padding: "10px 12px", minWidth: 110, borderBottom: "1px solid #cbd5e1" }}>PAN</th>
-                  <th style={{ padding: "10px 12px", minWidth: 140, borderBottom: "1px solid #cbd5e1" }}>Contact Person</th>
-                  <th style={{ padding: "10px 12px", minWidth: 130, borderBottom: "1px solid #cbd5e1" }}>Phone / Email</th>
-                  <th style={{ padding: "10px 12px", minWidth: 110, borderBottom: "1px solid #cbd5e1" }}>City</th>
-                  <th style={{ padding: "10px 12px", minWidth: 120, borderBottom: "1px solid #cbd5e1" }}>State</th>
-                  <th style={{ padding: "10px 12px", minWidth: 120, borderBottom: "1px solid #cbd5e1" }}>GST Type</th>
-                  <th style={{ padding: "10px 12px", minWidth: 90, borderBottom: "1px solid #cbd5e1" }}>Status</th>
-                  <th style={{ padding: "10px 12px", width: 70, borderBottom: "1px solid #cbd5e1", textAlign: "center" }}>Action</th>
+                  <th style={{ padding: "10px 12px", minWidth: 110, borderBottom: "1px solid #cbd5e1" }}>Supplier Code<ColumnResizeHandle colKey="supplier_code" resize={supplierMasterPage1Resize} /></th>
+                  <th style={{ padding: "10px 12px", minWidth: 200, borderBottom: "1px solid #cbd5e1" }}>Supplier Name<ColumnResizeHandle colKey="supplier_name" resize={supplierMasterPage1Resize} /></th>
+                  <th style={{ padding: "10px 12px", minWidth: 140, borderBottom: "1px solid #cbd5e1" }}>GSTIN<ColumnResizeHandle colKey="gstin" resize={supplierMasterPage1Resize} /></th>
+                  <th style={{ padding: "10px 12px", minWidth: 110, borderBottom: "1px solid #cbd5e1" }}>PAN<ColumnResizeHandle colKey="pan" resize={supplierMasterPage1Resize} /></th>
+                  <th style={{ padding: "10px 12px", minWidth: 140, borderBottom: "1px solid #cbd5e1" }}>Contact Person<ColumnResizeHandle colKey="contact_person" resize={supplierMasterPage1Resize} /></th>
+                  <th style={{ padding: "10px 12px", minWidth: 130, borderBottom: "1px solid #cbd5e1" }}>Phone / Email<ColumnResizeHandle colKey="phone_email" resize={supplierMasterPage1Resize} /></th>
+                  <th style={{ padding: "10px 12px", minWidth: 110, borderBottom: "1px solid #cbd5e1" }}>City<ColumnResizeHandle colKey="city" resize={supplierMasterPage1Resize} /></th>
+                  <th style={{ padding: "10px 12px", minWidth: 120, borderBottom: "1px solid #cbd5e1" }}>State<ColumnResizeHandle colKey="state" resize={supplierMasterPage1Resize} /></th>
+                  <th style={{ padding: "10px 12px", minWidth: 120, borderBottom: "1px solid #cbd5e1" }}>GST Type<ColumnResizeHandle colKey="gst_type" resize={supplierMasterPage1Resize} /></th>
+                  <th style={{ padding: "10px 12px", minWidth: 90, borderBottom: "1px solid #cbd5e1" }}>Status<ColumnResizeHandle colKey="status" resize={supplierMasterPage1Resize} /></th>
+                  <th style={{ padding: "10px 12px", width: 70, borderBottom: "1px solid #cbd5e1", textAlign: "center" }}>Action<ColumnResizeHandle colKey="action" resize={supplierMasterPage1Resize} /></th>
                 </tr>
 
                 {/* Per-Column Filter Inputs (STATIC HEADER ROW) */}
@@ -1288,6 +1312,7 @@ export function SupplierMasterPage({
                         boxSizing: "border-box"
                       }}
                     >
+                      <option value="">-- Select Supplier Type --</option>
                       {SUPPLIER_TYPE_OPTIONS.map((opt) => (
                         <option key={opt.value} value={opt.value}>
                           {opt.label}
@@ -1313,6 +1338,7 @@ export function SupplierMasterPage({
                         boxSizing: "border-box"
                       }}
                     >
+                      <option value="">-- Select GST Type --</option>
                       {GST_TYPE_OPTIONS.map((opt) => (
                         <option key={opt.value} value={opt.value}>
                           {opt.label}
@@ -1405,6 +1431,7 @@ export function SupplierMasterPage({
                         boxSizing: "border-box"
                       }}
                     >
+                      <option value="">-- Select MSME Category --</option>
                       {MSME_CATEGORY_OPTIONS.map((opt) => (
                         <option key={opt.value} value={opt.value}>
                           {opt.label}
@@ -1497,6 +1524,7 @@ export function SupplierMasterPage({
                         boxSizing: "border-box"
                       }}
                     >
+                      <option value="">-- Select Payment Terms --</option>
                       {PAYMENT_TERMS_OPTIONS.map((opt) => (
                         <option key={opt.value} value={opt.value}>
                           {opt.label}
@@ -1629,6 +1657,7 @@ export function SupplierMasterPage({
                         boxSizing: "border-box"
                       }}
                     >
+                      <option value="">-- Select Status --</option>
                       <option value="ACTIVE">ACTIVE</option>
                       <option value="INACTIVE">INACTIVE</option>
                       <option value="BLOCKED">BLOCKED / BLACKLISTED</option>

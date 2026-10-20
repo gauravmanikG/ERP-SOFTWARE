@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
+import { formatDisplayDate, formatDisplayDateTime } from "../utils/dateFormat";
 import { ModuleIcons } from "./modulesData";
+import ThemeToggle from "../components/ThemeToggle";
 
 export function GlobalTopHeader({
   sidebarOpen,
@@ -35,11 +37,7 @@ export function GlobalTopHeader({
 
   // Formatted date and time strings
   const dayName = currentTime.toLocaleDateString("en-IN", { weekday: "short" });
-  const dateStr = currentTime.toLocaleDateString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric"
-  });
+  const dateStr = formatDisplayDate(currentTime);
   const timeStr = currentTime.toLocaleTimeString("en-IN", {
     hour: "2-digit",
     minute: "2-digit"
@@ -48,13 +46,40 @@ export function GlobalTopHeader({
   // Dynamic breadcrumb label based on active screen
   const getScreenBreadcrumb = () => {
     if (currentView === "item-master") {
-      return { module: "Engineering", screen: "Item Master Specifications" };
+      return { module: "Engineering", screen: "Item Master · FG (Finished Goods)" };
+    }
+    if (currentView === "item-master-other") {
+      return { module: "Engineering", screen: "Item Master · Other (Non-FG)" };
     }
     if (currentView === "supplier-master") {
       return { module: "Purchase", screen: "Supplier Master Directory" };
     }
+    if (currentView === "vendor-quotations") {
+      return { module: "Purchase Module", screen: "Vendor Quotations (RFQ & Rates)" };
+    }
+    if (currentView === "purchase-orders") {
+      return { module: "Purchase Module", screen: "Purchase Orders (PO) Management" };
+    }
+    if (currentView === "purchase-processing") {
+      return { module: "Purchase Module", screen: "Purchase Processing & PO Proposal" };
+    }
+    if (currentView === "po-approval") {
+      return { module: "Purchase Module", screen: "Purchase Order (PO) Approval" };
+    }
+    if (currentView === "purchase-requisition") {
+      return { module: "Purchase Module", screen: "Purchase Requisition (PR) Management" };
+    }
+    if (currentView === "rfq") {
+      return { module: "Purchase Module", screen: "Request for Quotation (RFQ)" };
+    }
+    if (currentView === "grn") {
+      return { module: "Purchase Module", screen: "Goods Receipt Note (GRN)" };
+    }
     if (currentView === "customer-master") {
       return { module: "CRM & Sales", screen: "Customer Master Directory" };
+    }
+    if (currentView === "department-master") {
+      return { module: "Settings & Administration", screen: "Department Master Directory" };
     }
     if (currentView === "operations") {
       const slotMap = {
@@ -65,6 +90,10 @@ export function GlobalTopHeader({
         "entry-forms": "Entry Forms · Screen 1",
         "company-master-form": "Company & Supplier Master",
         "company-master-list": "Company Master List",
+        "vendor-quotations": "Vendor Quotations (RFQ & Rates)",
+        quotations: "Vendor Quotations (RFQ & Rates)",
+        rfq: "Request for Quotation (RFQ)",
+        grn: "Goods Receipt Note (GRN)",
         "supplier-master": "Supplier Master Directory",
         inventory: "Inventory Management",
         "moulding-bom": "BOM Moulding Transfer",
@@ -329,7 +358,10 @@ export function GlobalTopHeader({
         {/* Divider | */}
         <div style={{ width: 1, height: 26, background: "#cbd5e1" }} />
 
-        {/* 2. NOTIFICATION ICON & POPUP */}
+        {/* 2. DAY / NIGHT VIEW SWITCH */}
+        <ThemeToggle />
+
+        {/* 3. NOTIFICATION ICON & POPUP */}
         <div style={{ position: "relative" }}>
           <button
             onClick={() => setShowNotificationPopup((v) => !v)}

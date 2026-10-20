@@ -11,7 +11,8 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/inventory/departments")
+@CrossOrigin(origins = "*")
+@RequestMapping({"/api/inventory/departments", "/api/departments"})
 public class DepartmentController {
 
     private final DepartmentService departmentService;
@@ -28,14 +29,14 @@ public class DepartmentController {
     @PostMapping
     public ResponseEntity<DepartmentResponse> createDepartment(@Valid @RequestBody CreateDepartmentRequest body) {
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(departmentService.createDepartment(body.getDepartmentName(), body.getProcessSequence()));
+                .body(departmentService.createDepartment(body));
     }
 
     @PutMapping("/{id}")
     public ResponseEntity<DepartmentResponse> updateDepartment(
             @PathVariable Long id,
             @Valid @RequestBody CreateDepartmentRequest body) {
-        return ResponseEntity.ok(departmentService.updateDepartment(id, body.getDepartmentName(), body.getProcessSequence()));
+        return ResponseEntity.ok(departmentService.updateDepartment(id, body));
     }
 
     @DeleteMapping("/{id}")

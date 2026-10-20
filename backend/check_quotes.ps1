@@ -1,0 +1,2 @@
+$env:PGPASSWORD = 'postgres'
+& 'C:\Program Files\PostgreSQL\18\bin\psql.exe' -U postgres -p 5434 -d sms_seals -c "SELECT q.id, q.quotation_number, q.vendor_name, q.subtotal_amount, q.tax_amount, q.final_amount, qi.item_code, qi.quoted_quantity, qi.unit_rate, qi.discount_percent, qi.discount_amount, qi.line_total FROM vendor_quotations q LEFT JOIN vendor_quotation_items qi ON q.id = qi.quotation_id ORDER BY q.id DESC LIMIT 6;"

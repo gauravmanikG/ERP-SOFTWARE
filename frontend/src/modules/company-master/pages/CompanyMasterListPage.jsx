@@ -5,8 +5,15 @@ import { PageHero } from "../../../shared/components/PageHero";
 import { Section } from "../../../shared/components/Section";
 import { CompanyMasterSubNav } from "../components/CompanyMasterSubNav";
 import { exportRecordsToExcel, ALL_FIELDS_CONFIG } from "../../../shared/utils/excel";
+import { useResizableColumns, ResizableColGroup, ColumnResizeHandle } from "../../../shared/components/ResizableTable";
+
+const SHEET_COLUMNS = [
+  { key: "rowNo", width: 48, min: 40 },
+  ...ALL_FIELDS_CONFIG.map((f) => ({ key: f.key, width: 160 })),
+];
 
 export function CompanyMasterListPage({ cm, page, setPage }) {
+  const sheetResize = useResizableColumns("company-master-sheet", SHEET_COLUMNS);
   const { records, loading, loadError, search, setSearch, confirmId, setConfirmId, handleEdit, handleViewRecord, handleDelete, filtered, toast } = cm;
 
   // Excel Export & View State
@@ -404,13 +411,15 @@ export function CompanyMasterListPage({ cm, page, setPage }) {
 
             {/* Spreadsheet Table Grid */}
             <div className="flex-1 overflow-auto bg-slate-100">
-              <table className="w-full text-left border-collapse text-xs">
+              <table className="resizable-table w-full text-left border-collapse text-xs" style={{ ...sheetResize.tableStyle }}>
+                <ResizableColGroup columns={SHEET_COLUMNS} widths={sheetResize.widths} />
                 <thead className="sticky top-0 bg-slate-200 text-slate-700 font-bold z-10 shadow-xs">
                   <tr>
-                    <th className="p-2.5 border-b border-r text-center w-12 bg-slate-300">#</th>
+                    <th className="p-2.5 border-b border-r text-center w-12 bg-slate-300">#<ColumnResizeHandle colKey="rowNo" resize={sheetResize} /></th>
                     {ALL_FIELDS_CONFIG.map((f) => (
                       <th key={f.key} className="p-2.5 border-b border-r whitespace-nowrap bg-slate-200">
                         {f.label}
+                        <ColumnResizeHandle colKey={f.key} resize={sheetResize} />
                       </th>
                     ))}
                   </tr>

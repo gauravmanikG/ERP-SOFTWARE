@@ -1,6 +1,21 @@
+import { formatDisplayDate, formatDisplayDateTime } from "../../../shared/utils/dateFormat";
+import { useResizableColumns, ResizableColGroup, ColumnResizeHandle } from "../../../shared/components/ResizableTable";
 import { useState, useEffect, useMemo, useRef } from "react";
 
+const MOULDING_B_O_M_TRANSFER_PAGE_1_COLUMNS = [
+  { key: "transaction", width: 131 },
+  { key: "slip", width: 82 },
+  { key: "date_time", width: 117 },
+  { key: "from_dept", width: 103 },
+  { key: "to_dept", width: 89 },
+  { key: "item_code", width: 103 },
+  { key: "category", width: 96 },
+  { key: "quantity", width: 96 },
+  { key: "remarks", width: 89 },
+];
+
 export function MouldingBOMTransferPage({ dark, isActive }) {
+  const mouldingBOMTransferPage1Resize = useResizableColumns("moulding-b-o-m-transfer-page-1", MOULDING_B_O_M_TRANSFER_PAGE_1_COLUMNS);
   // Tabs: "form" | "history"
   const [activeTab, setActiveTab] = useState("form");
 
@@ -1130,7 +1145,8 @@ export function MouldingBOMTransferPage({ dark, isActive }) {
             </div>
           ) : (
             <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, textAlign: "left" }}>
+              <table className="resizable-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, textAlign: "left", ...mouldingBOMTransferPage1Resize.tableStyle }}>
+                <ResizableColGroup columns={MOULDING_B_O_M_TRANSFER_PAGE_1_COLUMNS} widths={mouldingBOMTransferPage1Resize.widths} />
                 <thead>
                   <tr
                     style={{
@@ -1141,27 +1157,21 @@ export function MouldingBOMTransferPage({ dark, isActive }) {
                       letterSpacing: "0.05em",
                     }}
                   >
-                    <th style={{ padding: "10px 12px" }}>Transaction #</th>
-                    <th style={{ padding: "10px 12px" }}>Slip #</th>
-                    <th style={{ padding: "10px 12px" }}>Date & Time</th>
-                    <th style={{ padding: "10px 12px" }}>From Dept</th>
-                    <th style={{ padding: "10px 12px" }}>To Dept</th>
-                    <th style={{ padding: "10px 12px" }}>Item Code</th>
-                    <th style={{ padding: "10px 12px" }}>Category</th>
-                    <th style={{ padding: "10px 12px", textAlign: "right" }}>Quantity</th>
-                    <th style={{ padding: "10px 12px" }}>Remarks</th>
+                    <th style={{ padding: "10px 12px" }}>Transaction #<ColumnResizeHandle colKey="transaction" resize={mouldingBOMTransferPage1Resize} /></th>
+                    <th style={{ padding: "10px 12px" }}>Slip #<ColumnResizeHandle colKey="slip" resize={mouldingBOMTransferPage1Resize} /></th>
+                    <th style={{ padding: "10px 12px" }}>Date & Time<ColumnResizeHandle colKey="date_time" resize={mouldingBOMTransferPage1Resize} /></th>
+                    <th style={{ padding: "10px 12px" }}>From Dept<ColumnResizeHandle colKey="from_dept" resize={mouldingBOMTransferPage1Resize} /></th>
+                    <th style={{ padding: "10px 12px" }}>To Dept<ColumnResizeHandle colKey="to_dept" resize={mouldingBOMTransferPage1Resize} /></th>
+                    <th style={{ padding: "10px 12px" }}>Item Code<ColumnResizeHandle colKey="item_code" resize={mouldingBOMTransferPage1Resize} /></th>
+                    <th style={{ padding: "10px 12px" }}>Category<ColumnResizeHandle colKey="category" resize={mouldingBOMTransferPage1Resize} /></th>
+                    <th style={{ padding: "10px 12px", textAlign: "right" }}>Quantity<ColumnResizeHandle colKey="quantity" resize={mouldingBOMTransferPage1Resize} /></th>
+                    <th style={{ padding: "10px 12px" }}>Remarks<ColumnResizeHandle colKey="remarks" resize={mouldingBOMTransferPage1Resize} /></th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredHistory.map((tx) => {
                     const dateStr = tx.transactionDate
-                      ? new Date(tx.transactionDate).toLocaleString("en-IN", {
-                          day: "2-digit",
-                          month: "short",
-                          year: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })
+                      ? formatDisplayDateTime(tx.transactionDate)
                       : "-";
 
                     return (

@@ -1,0 +1,22 @@
+sequenceDiagram
+    autonumber
+    actor User as Purchasing / Store User
+    participant PR as Purchase Requisition
+    participant Club as PR Clubbing Engine
+    participant RFQ as RFQ & Quotations
+    participant PO as Purchase Order
+    participant GRN as Goods Receipt (GRN)
+    participant QC as Quality Control
+    participant Inv as Inventory Transaction Ledger
+
+    User->>PR: Create Purchase Requisition (Status: DRAFT -> SUBMITTED)
+    PR->>Club: Consolidate eligible PR items across departments
+    Club->>RFQ: Generate RFQ for consolidated items
+    RFQ->>RFQ: Collect Vendor Quotations & Run Rate Comparison
+    User->>PO: Award & Generate PO from Quotation (Approval Workflow)
+    PO->>PO: Define Delivery Schedules & Payment Milestones
+    PO->>GRN: Material arrives at Gate -> Create GRN Draft
+    GRN->>QC: Record Received Qty -> Trigger Inspection
+    QC->>GRN: Save Accepted / Rejected / Rework Qty
+    GRN->>Inv: Insert INVENTORY_TRANSACTION (Type: BOM FG Transfer / Receipt)
+    Inv->>Inv: Stock balance updated for Master Item

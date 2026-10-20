@@ -1,0 +1,61 @@
+erDiagram
+    JOB_WORKERS ||--o{ JOB_WORKER_OPERATIONS : "job_worker_id"
+    JOB_WORK_OPERATIONS ||--o{ JOB_WORKER_OPERATIONS : "operation_id"
+    JOB_WORKERS ||--o{ JOB_WORK_RATE_CONTRACTS : "worker_id"
+    JOB_WORK_INDENTS ||--o{ JOB_WORK_INDENT_LINES : "indent_id"
+    JOB_WORKERS ||--o{ JOB_WORK_ORDERS : "worker_id"
+    JOB_WORK_ORDERS ||--o{ JOB_WORK_ORDER_LINES : "order_id"
+    JOB_WORK_ORDERS ||--o{ JOB_WORK_CHALLANS : "order_id"
+    JOB_WORK_ORDERS ||--o{ JOB_WORK_RECEIPTS : "order_id"
+    JOB_WORK_CHALLANS ||--o{ JOB_WORK_CHALLAN_LINES : "challan_id"
+    JOB_WORK_RECEIPTS ||--o{ JOB_WORK_RECEIPT_LINES : "receipt_id"
+    JOB_WORKERS ||--o{ JOB_WORK_STOCK_LEDGER : "worker_id"
+    JOB_WORK_ORDERS ||--o{ JOB_WORK_ADJUSTMENTS : "order_id"
+    JOB_WORK_CHALLANS ||--o{ INVENTORY_TRANSACTION : "inventory_transaction_id"
+    JOB_WORK_RECEIPTS ||--o{ INVENTORY_TRANSACTION : "inventory_transaction_id"
+
+    JOB_WORKERS {
+        BIGSERIAL id PK
+        VARCHAR_50 worker_code UK
+        VARCHAR_255 worker_name
+        VARCHAR_20 gstin
+        VARCHAR_20 pan_no
+        VARCHAR_20 status
+    }
+
+    JOB_WORK_ORDERS {
+        BIGSERIAL id PK
+        VARCHAR_50 order_number UK
+        BIGINT worker_id FK
+        VARCHAR_50 status
+        DATE issue_date
+        DATE expected_delivery_date
+    }
+
+    JOB_WORK_CHALLANS {
+        BIGSERIAL id PK
+        VARCHAR_50 challan_number UK
+        BIGINT order_id FK
+        BIGINT worker_id FK
+        VARCHAR_50 status
+        BIGINT inventory_transaction_id FK
+    }
+
+    JOB_WORK_RECEIPTS {
+        BIGSERIAL id PK
+        VARCHAR_50 receipt_number UK
+        BIGINT order_id FK
+        BIGINT worker_id FK
+        VARCHAR_50 status
+        BIGINT inventory_transaction_id FK
+    }
+
+    JOB_WORK_STOCK_LEDGER {
+        BIGSERIAL id PK
+        BIGINT worker_id FK
+        VARCHAR_100 item_code
+        BIGINT order_id FK
+        VARCHAR_50 entry_type
+        NUMERIC quantity
+        NUMERIC balance_after
+    }

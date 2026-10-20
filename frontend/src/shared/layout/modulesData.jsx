@@ -105,7 +105,14 @@ export const MODULES_LIST = [
     name: "Engineering",
     iconKey: "Engineering",
     submodules: [
-      { name: "Item Master", targetPage: "item-master", ready: true },
+      {
+        name: "Item Master",
+        isParent: true,
+        children: [
+          { name: "FG", targetPage: "item-master", ready: true },
+          { name: "Other", targetPage: "item-master-other", ready: true }
+        ]
+      },
       { name: "BOM", targetPage: "moulding-bom", ready: true },
       { name: "Routing" },
       { name: "Operations" },
@@ -121,11 +128,50 @@ export const MODULES_LIST = [
     iconKey: "Purchase",
     submodules: [
       { name: "Suppliers", targetPage: "supplier-master", ready: true },
-      { name: "Purchase Requisition" },
-      { name: "RFQ" },
-      { name: "Quotations" },
-      { name: "Purchase Orders" },
-      { name: "GRN" },
+      { name: "Purchase Requisition", targetPage: "purchase-requisition", ready: true },
+      { name: "Purchase Processing", targetPage: "purchase-processing", ready: true },
+      { name: "PO Approval", targetPage: "po-approval", ready: true },
+      {
+        name: "Purchase Orders",
+        isParent: true,
+        children: [
+          { name: "Standard PO", targetPage: "purchase-orders", ready: true },
+          { name: "Service PO", targetPage: "service-po", ready: true },
+          { name: "Capital PO", targetPage: "capital-po", ready: true }
+        ]
+      },
+      {
+        name: "New Purchase Order",
+        isParent: true,
+        children: [
+          { name: "Vendor Rate Master", targetPage: "new-po-vendor-rates", ready: true },
+          { name: "PO by PR", targetPage: "new-po-po-by-pr", ready: true },
+          { name: "Direct PO", targetPage: "new-po-direct-po", ready: true },
+          { name: "PO Register", targetPage: "new-po-po-register", ready: true },
+          { name: "PO vs PR Report", targetPage: "new-po-report-po-vs-pr", ready: true },
+          { name: "PO vs PR vs MRN/GRN Report", targetPage: "new-po-report-po-vs-pr-grn", ready: true },
+          { name: "Legacy Reconciliation", targetPage: "new-po-reconciliation", ready: true }
+        ]
+      },
+      {
+        name: "Job Work",
+        isParent: true,
+        children: [
+          { name: "Dashboard", targetPage: "job-work-dashboard", ready: true },
+          { name: "Job Workers", targetPage: "job-work-workers", ready: true },
+          { name: "Indents", targetPage: "job-work-indents", ready: true },
+          { name: "Job Work Orders", targetPage: "job-work-orders", ready: true },
+          { name: "Challans", targetPage: "job-work-challans", ready: true },
+          { name: "Receipts & Inspection", targetPage: "job-work-receipts", ready: true },
+          { name: "Worker Stock Ledger", targetPage: "job-work-ledger", ready: true },
+          { name: "Reconciliation & Scrap", targetPage: "job-work-recon", ready: true },
+          { name: "Job Work Invoices" },
+          { name: "Compliance & Reports", targetPage: "job-work-reports", ready: true }
+        ]
+      },
+      { name: "RFQ", targetPage: "rfq", ready: true },
+      { name: "Quotations", targetPage: "vendor-quotations", ready: true },
+      { name: "GRN", targetPage: "grn", ready: true },
       { name: "Purchase Returns" },
       { name: "Purchase Invoices" }
     ]
@@ -256,7 +302,7 @@ export const MODULES_LIST = [
     name: "Maintenance",
     iconKey: "Maintenance",
     submodules: [
-      { name: "Machines" },
+      { name: "Machines", targetPage: "machine-master", ready: true },
       { name: "Maintenance Requests" },
       { name: "Preventive Maintenance" },
       { name: "Breakdown" },
@@ -268,47 +314,12 @@ export const MODULES_LIST = [
     ]
   },
   {
-    id: "reports",
-    name: "Reports & Analysis",
-    iconKey: "Reports",
-    submodules: [
-      { name: "Production", targetPage: "dashboard", ready: true },
-      { name: "Inventory", targetPage: "dept-wise-cb", ready: true },
-      { name: "Purchase" },
-      { name: "Sales" },
-      { name: "Quality" },
-      { name: "Maintenance" },
-      { name: "Finance" }
-    ]
-  },
-  {
-    id: "help",
-    name: "Help & Support",
-    iconKey: "Help",
-    submodules: [
-      { name: "Help Center" },
-      { name: "User Manual", targetPage: "docs", ready: true },
-      { name: "Support Tickets" },
-      { name: "FAQ" },
-      { name: "AI Assistant", targetPage: "ai-chatbot", ready: true }
-    ]
-  },
-  {
     id: "settings",
     name: "Settings",
     iconKey: "Settings",
     submodules: [
       { name: "Company", targetPage: "company-master-form", ready: true },
-      { name: "Departments", targetPage: "dept-wise-cb", ready: true },
-      { name: "Users", targetPage: "users", ready: true },
-      { name: "Roles & Permissions", targetPage: "users", ready: true },
-      { name: "Approval Workflows" },
-      { name: "Document Numbering" },
-      { name: "Tax / GST" },
-      { name: "Notifications", targetPage: "notifications", ready: true },
-      { name: "Integrations" },
-      { name: "Backup" },
-      { name: "Audit Logs" }
+      { name: "Departments", targetPage: "department-master", ready: true }
     ]
   }
 ];

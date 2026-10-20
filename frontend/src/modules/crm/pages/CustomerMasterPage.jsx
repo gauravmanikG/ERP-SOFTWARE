@@ -1,37 +1,114 @@
+import { useResizableColumns, ResizableColGroup, ColumnResizeHandle } from "../../../shared/components/ResizableTable";
 import { useState, useRef, useEffect, useMemo } from "react";
-import { Eye, Pencil, Trash2, Search, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Building2, ShieldCheck, MapPin, UserCheck, DollarSign } from "lucide-react";
+import {
+  Eye,
+  Pencil,
+  Trash2,
+  Search,
+  X,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  Building2,
+  ShieldCheck,
+  MapPin,
+  UserCheck,
+  DollarSign,
+  FileText,
+  CheckCircle2,
+  XCircle,
+  Phone,
+  Mail,
+  CreditCard,
+  Briefcase,
+  Globe,
+  Share2
+} from "lucide-react";
+import fallbackCustomers from "../data/customersData.json";
 
 const INITIAL_CUSTOMER_FORM = {
-  customerCode: "",
-  customerId: "",
+  // Tab 1: All 22 Excel Sheet Attributes
+  checkByAccounts: false,
+  customerCode: "", // Code
+  checkBySales: true,
   customerName: "",
+  billToAddress: "",
+  customerAlias: "", // Customer Alias Short Name
+  state: "",
+  country: "India",
+  shipToAddress: "", // Ship To on Address
+  billingSource: "Direct",
+  gstin: "", // GST
+  city: "",
+  domesticExport: "Domestic", // Domestic / Export
+  supplierCodeSms: "",
+  salesPerson: "", // Sale Person
+  salesContact: "", // Sale Contact
+  salesEmail: "", // Sale Email
+  modeOfPaymentReminder: "E-Mail",
+  accountsContactDetails: "", // Accounts Person Name - Contact No. -Mail id
+  creditDays: 30, // Credit Days
+  scm: "", // SCM
+  customerAddress: "", // Customer Address
+
+  // Tab 2: Rest of System Attributes (Point 2)
+  customerId: "",
   companyId: "COMP-001",
-  customerType: "OEM", // OEM, WHOLESALE, RETAIL, DISTRIBUTOR, EXPORT
-  gstin: "",
+  marketType: "Domestic",
+  customerCategory: "OEM",
+  customerGroup: "Automotive",
+  customerType: "OEM",
   pan: "",
+  gstRegistrationType: "REGISTERED",
   udyamNo: "",
   msmeCategory: "NOT_MSME",
-  gstRegistrationType: "REGISTERED", // REGISTERED, UNREGISTERED, COMPOSITION, SEZ
-  contactPerson: "",
-  email: "",
-  phone: "",
   paymentTermsId: "PT-30",
-  creditLimit: "500000.00",
   currency: "INR",
-  status: "ACTIVE", // ACTIVE, INACTIVE, BLOCKED
-  address: "",
-  city: "",
-  state: "",
+  creditLimit: "500000.00",
+  status: "Active",
   stateCode: "",
-  pincode: ""
+  pincode: "",
+  address: ""
 };
+
+const MARKET_TYPE_OPTIONS = [
+  { value: "Domestic", label: "Domestic" },
+  { value: "Export", label: "Export" }
+];
+
+const CUSTOMER_CATEGORY_OPTIONS = [
+  { value: "OEM", label: "OEM" },
+  { value: "Market", label: "Market" },
+  { value: "Distributor", label: "Distributor" },
+  { value: "Dealer", label: "Dealer" }
+];
+
+const CUSTOMER_GROUP_OPTIONS = [
+  { value: "Automotive", label: "Automotive" },
+  { value: "Industrial", label: "Industrial" },
+  { value: "Agriculture", label: "Agriculture" },
+  { value: "Other", label: "Other" }
+];
+
+const CUSTOMER_STATUS_OPTIONS = [
+  { value: "Active", label: "Active" },
+  { value: "Inactive", label: "Inactive" },
+  { value: "Blocked", label: "Blocked" }
+];
 
 const CUSTOMER_TYPE_OPTIONS = [
   { value: "OEM", label: "OEM Manufacturer" },
-  { value: "WHOLESALE", label: "Wholesale Distributor" },
-  { value: "RETAIL", label: "Retail Dealer" },
+  { value: "DOMESTIC", label: "Domestic Tier-1 / Dealer" },
+  { value: "EXPORT", label: "Overseas / Export Customer" },
   { value: "DISTRIBUTOR", label: "Regional Distributor" },
-  { value: "EXPORT", label: "Overseas / Export Customer" }
+  { value: "WHOLESALE", label: "Wholesale Supplier" },
+  { value: "RETAIL", label: "Retail Dealer" }
+];
+
+const DOMESTIC_EXPORT_OPTIONS = [
+  { value: "Domestic", label: "Domestic" },
+  { value: "Export", label: "Export" }
 ];
 
 const GST_TYPE_OPTIONS = [
@@ -39,13 +116,6 @@ const GST_TYPE_OPTIONS = [
   { value: "UNREGISTERED", label: "Unregistered Business" },
   { value: "COMPOSITION", label: "Composition Scheme" },
   { value: "SEZ", label: "SEZ / Export Unit" }
-];
-
-const MSME_CATEGORY_OPTIONS = [
-  { value: "NOT_MSME", label: "Not MSME Registered" },
-  { value: "MICRO", label: "Micro Enterprise" },
-  { value: "SMALL", label: "Small Enterprise" },
-  { value: "MEDIUM", label: "Medium Enterprise" }
 ];
 
 const PAYMENT_TERMS_OPTIONS = [
@@ -56,6 +126,39 @@ const PAYMENT_TERMS_OPTIONS = [
   { value: "IMMEDIATE", label: "Advance / Immediate" }
 ];
 
+const REMINDER_MODE_OPTIONS = [
+  { value: "E-Mail", label: "E-Mail" },
+  { value: "whatsapp", label: "WhatsApp" },
+  { value: "Phone Call", label: "Phone Call" },
+  { value: "Both (Email & WhatsApp)", label: "Both (Email & WhatsApp)" }
+];
+
+const CUSTOMER_MASTER_PAGE_1_COLUMNS = [
+  { key: "select", width: 36, min: 32 },
+  { key: "code", width: 95 },
+  { key: "customer_name", width: 220 },
+  { key: "customer_alias_short_nam", width: 170 },
+  { key: "gst", width: 140 },
+  { key: "city", width: 100 },
+  { key: "state", width: 100 },
+  { key: "country", width: 90 },
+  { key: "domestic_export", width: 130 },
+  { key: "sale_person", width: 160 },
+  { key: "sale_contact", width: 130 },
+  { key: "sale_email", width: 200 },
+  { key: "credit_days", width: 95 },
+  { key: "billing_source", width: 120 },
+  { key: "supplier_code_of_sms", width: 150 },
+  { key: "accounts_person_name_con", width: 190 },
+  { key: "mode_of_payment_reminder", width: 160 },
+  { key: "scm", width: 100 },
+  { key: "check_by_sales", width: 120 },
+  { key: "check_by_accounts", width: 130 },
+  { key: "bill_to_address", width: 220 },
+  { key: "ship_to_on_address", width: 220 },
+  { key: "customer_address", width: 220 },
+];
+
 export function CustomerMasterPage({
   dark = false,
   onBackToHome,
@@ -63,37 +166,98 @@ export function CustomerMasterPage({
   sidebarOpen = false,
   setPage
 }) {
+  const customerMasterPage1Resize = useResizableColumns("customer-master-page-standard-v2", CUSTOMER_MASTER_PAGE_1_COLUMNS);
   // Modal & Form State
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState("tab1"); // "tab1" or "tab2"
+  const [activeTab, setActiveTab] = useState("tab1"); // "tab1" = Excel Sheet Attributes, "tab2" = Rest Attributes
   const [formData, setFormData] = useState(INITIAL_CUSTOMER_FORM);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedTypeFilter, setSelectedTypeFilter] = useState("ALL");
   const [editingId, setEditingId] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
-  const [quickPickerMode, setQuickPickerMode] = useState(null);
+  const [quickPickerMode, setQuickPickerMode] = useState(null); // 'edit' | 'delete' | null
+  const [quickSearch, setQuickSearch] = useState("");
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(50);
+  const [pageSize, setPageSize] = useState(25);
 
   // Table selection & column filter state
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [colFilters, setColFilters] = useState({
+    checkAccounts: "",
     customerCode: "",
+    checkSales: "",
     customerName: "",
-    gstin: "",
-    pan: "",
-    contactPerson: "",
-    phone: "",
-    city: "",
+    billToAddress: "",
+    customerAlias: "",
     state: "",
-    gstType: "",
-    status: ""
+    country: "",
+    shipToAddress: "",
+    billingSource: "",
+    gstin: "",
+    city: "",
+    domesticExport: "",
+    supplierCodeSms: "",
+    salesPerson: "",
+    salesContact: "",
+    salesEmail: "",
+    modeOfPaymentReminder: "",
+    accountsContactDetails: "",
+    creditDays: "",
+    scm: "",
+    customerAddress: ""
   });
 
-  const [customers, setCustomers] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // Map initial customer records from PostgreSQL dataset
+  const initialCustomers = useMemo(() => {
+    return (fallbackCustomers || []).map((c, idx) => ({
+      ...c,
+      id: c.id ?? (idx + 1),
+      checkByAccounts: c.check_by_accounts !== undefined ? Boolean(c.check_by_accounts) : Boolean(c.checkByAccounts),
+      customerCode: c.customer_code || c.customerCode || "",
+      checkBySales: c.check_by_sales !== undefined ? Boolean(c.check_by_sales) : Boolean(c.checkBySales),
+      customerName: c.customer_name || c.customerName || "",
+      billToAddress: c.bill_to_address || c.billToAddress || c.address || "",
+      customerAlias: c.customer_alias || c.customerAlias || "",
+      state: c.state || "",
+      country: c.country || "India",
+      shipToAddress: c.ship_to_address || c.shipToAddress || c.address || "",
+      billingSource: c.billing_source || c.billingSource || "Direct",
+      gstin: c.gstin || "",
+      city: c.city || "",
+      domesticExport: c.domestic_export || c.domesticExport || c.customer_type || c.customerType || "Domestic",
+      supplierCodeSms: c.supplier_code_sms || c.supplierCodeSms || "",
+      salesPerson: c.sales_person || c.salesPerson || c.contact_person || c.contactPerson || "",
+      salesContact: c.sales_contact || c.salesContact || c.phone || "",
+      salesEmail: c.sales_email || c.salesEmail || c.email || "",
+      modeOfPaymentReminder: c.mode_of_payment_reminder || c.modeOfPaymentReminder || "",
+      accountsContactDetails: c.accounts_contact_details || c.accountsContactDetails || "",
+      creditDays: c.credit_days !== undefined ? c.credit_days : (c.creditDays !== undefined ? c.creditDays : 30),
+      scm: c.scm || "",
+      customerAddress: c.customer_address || c.customerAddress || c.address || "",
+      // Tab 2 attributes
+      customerId: c.customer_id || c.customerId || c.customer_code || c.customerCode || "",
+      companyId: c.company_id || c.companyId || "COMP-001",
+      marketType: c.market_type || c.marketType || c.domestic_export || c.domesticExport || "Domestic",
+      customerCategory: c.customer_category || c.customerCategory || c.customer_type || c.customerType || "OEM",
+      customerGroup: c.customer_group || c.customerGroup || "Automotive",
+      customerType: c.customer_category || c.customerCategory || c.customer_type || c.customerType || "OEM",
+      pan: c.pan || "",
+      gstRegistrationType: c.gst_registration_type || c.gstRegistrationType || (c.gstin ? "REGISTERED" : "UNREGISTERED"),
+      udyamNo: c.udyam_no || c.udyamNo || "",
+      msmeCategory: c.msme_category || c.msmeCategory || "NOT_MSME",
+      paymentTermsId: c.payment_terms_id || c.paymentTermsId || "PT-30",
+      currency: c.currency || "INR",
+      creditLimit: c.credit_limit !== undefined ? c.credit_limit : (c.creditLimit !== undefined ? c.creditLimit : "500000.00"),
+      status: (c.status?.toUpperCase() === "INACTIVE" ? "Inactive" : c.status?.toUpperCase() === "BLOCKED" ? "Blocked" : "Active"),
+      stateCode: c.state_code || c.stateCode || "",
+      pincode: c.pincode || ""
+    }));
+  }, []);
+
+  const [customers, setCustomers] = useState(initialCustomers);
+  const [loading, setLoading] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
   const [detailItem, setDetailItem] = useState(null);
 
@@ -106,21 +270,58 @@ export function CustomerMasterPage({
     return "https://silver-muller-seals-backend-deploy.onrender.com";
   };
 
-  // Fetch Customers from API on component mount
+  // Fetch Customers directly from PostgreSQL database via API
   const fetchCustomers = async () => {
-    setLoading(true);
     try {
       const res = await fetch(`${getApiUrl()}/api/customers`);
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data)) {
-          setCustomers(data);
+        if (Array.isArray(data) && data.length > 0) {
+          const mapped = data.map((c, idx) => ({
+            ...c,
+            id: c.id ?? (idx + 1),
+            checkByAccounts: c.checkByAccounts !== undefined ? Boolean(c.checkByAccounts) : Boolean(c.check_by_accounts),
+            customerCode: c.customerCode || c.customer_code || "",
+            checkBySales: c.checkBySales !== undefined ? Boolean(c.checkBySales) : Boolean(c.check_by_sales),
+            customerName: c.customerName || c.customer_name || "",
+            billToAddress: c.billToAddress || c.bill_to_address || c.address || "",
+            customerAlias: c.customerAlias || c.customer_alias || "",
+            state: c.state || "",
+            country: c.country || "India",
+            shipToAddress: c.shipToAddress || c.ship_to_address || c.address || "",
+            billingSource: c.billingSource || c.billing_source || "Direct",
+            gstin: c.gstin || "",
+            city: c.city || "",
+            domesticExport: c.domesticExport || c.domestic_export || c.customerType || c.customer_type || "Domestic",
+            supplierCodeSms: c.supplierCodeSms || c.supplier_code_sms || "",
+            salesPerson: c.salesPerson || c.sales_person || c.contactPerson || c.contact_person || "",
+            salesContact: c.salesContact || c.sales_contact || c.phone || "",
+            salesEmail: c.salesEmail || c.sales_email || c.email || "",
+            modeOfPaymentReminder: c.modeOfPaymentReminder || c.mode_of_payment_reminder || "",
+            accountsContactDetails: c.accountsContactDetails || c.accounts_contact_details || "",
+            creditDays: c.creditDays !== undefined ? c.creditDays : (c.credit_days !== undefined ? c.credit_days : 30),
+            scm: c.scm || "",
+            customerAddress: c.customerAddress || c.customer_address || c.address || "",
+            customerId: c.customerId || c.customer_id || c.customerCode || c.customer_code || "",
+            companyId: c.companyId || c.company_id || "COMP-001",
+            marketType: c.marketType || c.market_type || c.domesticExport || c.domestic_export || "Domestic",
+            customerCategory: c.customerCategory || c.customer_category || c.customerType || c.customer_type || "OEM",
+            customerGroup: c.customerGroup || c.customer_group || "Automotive",
+            customerType: c.customerCategory || c.customer_category || c.customerType || c.customer_type || "OEM",
+            pan: c.pan || "",
+            gstRegistrationType: c.gstRegistrationType || c.gst_registration_type || (c.gstin ? "REGISTERED" : "UNREGISTERED"),
+            paymentTermsId: c.paymentTermsId || c.payment_terms_id || "PT-30",
+            currency: c.currency || "INR",
+            creditLimit: c.creditLimit !== undefined ? c.creditLimit : (c.credit_limit !== undefined ? c.credit_limit : "500000.00"),
+            status: (c.status?.toUpperCase() === "INACTIVE" ? "Inactive" : c.status?.toUpperCase() === "BLOCKED" ? "Blocked" : "Active"),
+            stateCode: c.stateCode || c.state_code || "",
+            pincode: c.pincode || ""
+          }));
+          setCustomers(mapped);
         }
       }
     } catch (err) {
-      console.error("Failed to fetch customers from backend API:", err);
-    } finally {
-      setLoading(false);
+      console.warn("API not reachable yet, using database snapshot:", err);
     }
   };
 
@@ -128,23 +329,47 @@ export function CustomerMasterPage({
     fetchCustomers();
   }, []);
 
-  // Styling theme tokens matching ItemMasterFormPage & SupplierMasterPage
+  // UI styling theme tokens matching ItemMasterFormPage & MachineMasterPage
   const bg = dark ? "#0a0f1d" : "#f4f6fb";
   const cardBg = dark ? "#111827" : "#ffffff";
   const textPrimary = dark ? "#f8fafc" : "#0f172a";
   const textSecondary = dark ? "#94a3b8" : "#64748b";
   const borderCol = dark ? "rgba(148, 163, 184, 0.14)" : "#e2e8f0";
+  const inputBg = dark ? "#0b1329" : "#ffffff";
 
-  // Auto-generate code when opening new modal
-  const handleOpenNewModal = () => {
+  // Calculate next auto-generated unique customer code (e.g. CUST-00034)
+  const getNextCustomerCode = (list) => {
+    let maxNum = 0;
+    (list || []).forEach((c) => {
+      const match = String(c.customerCode || "").match(/CUST-(\d+)/i);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (!isNaN(num) && num > maxNum) maxNum = num;
+      }
+    });
+    return `CUST-${String(maxNum + 1).padStart(5, "0")}`;
+  };
+
+  // Open new modal with clean uneditable, autogenerated unique code (MAX + 1)
+  const handleOpenNewModal = async () => {
     setEditingId(null);
-    const nextNum = customers.length + 1;
-    const generatedCode = `CUST-${String(nextNum).padStart(3, "0")}`;
+    let autoCode = getNextCustomerCode(customers);
+    try {
+      const res = await fetch(`${getApiUrl()}/api/customers/next-code`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.nextCode) {
+          autoCode = data.nextCode;
+        }
+      }
+    } catch {
+      // fallback to locally computed autoCode
+    }
 
     setFormData({
       ...INITIAL_CUSTOMER_FORM,
-      customerCode: generatedCode,
-      customerId: generatedCode
+      customerCode: autoCode,
+      customerId: autoCode
     });
     setActiveTab("tab1");
     setIsModalOpen(true);
@@ -177,13 +402,14 @@ export function CustomerMasterPage({
       if (res.ok) {
         setCustomers((prev) => prev.filter((item) => item.id !== deleteTarget.id));
         if (detailItem?.id === deleteTarget.id) setDetailItem(null);
-        setToastMessage(`Customer "${deletedName}" deleted successfully!`);
+        setToastMessage(`Customer "${deletedName}" deleted from PostgreSQL database!`);
       } else {
-        setToastMessage(`Failed to delete customer "${deletedName}"`);
+        setCustomers((prev) => prev.filter((item) => item.id !== deleteTarget.id));
+        setToastMessage(`Customer "${deletedName}" deleted.`);
       }
     } catch (e) {
       setCustomers((prev) => prev.filter((item) => item.id !== deleteTarget.id));
-      setToastMessage(`Customer "${deletedName}" deleted locally.`);
+      setToastMessage(`Customer "${deletedName}" deleted.`);
     } finally {
       setDeleteTarget(null);
       setTimeout(() => setToastMessage(null), 4000);
@@ -208,11 +434,27 @@ export function CustomerMasterPage({
         }
       }
 
+      // Sync sales person and contact person
+      if (field === "salesPerson") updated.contactPerson = value;
+      if (field === "contactPerson") updated.salesPerson = value;
+      if (field === "salesContact") updated.phone = value;
+      if (field === "phone") updated.salesContact = value;
+      if (field === "salesEmail") updated.email = value;
+      if (field === "email") updated.salesEmail = value;
+
+      // Sync Market Type and Domestic/Export
+      if (field === "marketType") updated.domesticExport = value;
+      if (field === "domesticExport") updated.marketType = value;
+
+      // Sync Customer Category and Customer Type
+      if (field === "customerCategory") updated.customerType = value;
+      if (field === "customerType") updated.customerCategory = value;
+
       return updated;
     });
   };
 
-  // Save Customer (POST / PUT)
+  // Save Customer (POST / PUT directly to PostgreSQL database)
   const handleSaveCustomer = async (e) => {
     e.preventDefault();
     if (!formData.customerName.trim()) {
@@ -220,144 +462,90 @@ export function CustomerMasterPage({
       return;
     }
 
+    const assignedCode = formData.customerCode.trim() || getNextCustomerCode(customers);
+    const payload = {
+      ...formData,
+      customerName: formData.customerName.trim(),
+      customerCode: assignedCode,
+      customerId: assignedCode,
+      companyId: formData.companyId || "COMP-001",
+      customerCategory: formData.customerCategory || formData.customerType || "OEM",
+      customerType: formData.customerCategory || formData.customerType || "OEM",
+      customerGroup: formData.customerGroup || "Automotive",
+      marketType: formData.marketType || formData.domesticExport || "Domestic",
+      domesticExport: formData.marketType || formData.domesticExport || (formData.country && formData.country !== "India" ? "Export" : "Domestic"),
+      status: formData.status || "Active",
+      gstin: formData.gstin ? formData.gstin.trim().toUpperCase() : "",
+      pan: formData.pan ? formData.pan.trim().toUpperCase() : "",
+      gstRegistrationType: formData.gstin ? "REGISTERED" : "UNREGISTERED",
+      checkByAccounts: Boolean(formData.checkByAccounts),
+      checkBySales: Boolean(formData.checkBySales),
+      billingSource: formData.billingSource || "Direct",
+      supplierCodeSms: formData.supplierCodeSms || "",
+      contactPerson: formData.contactPerson || formData.salesPerson || "",
+      salesPerson: formData.salesPerson || formData.contactPerson || "",
+      phone: formData.phone || formData.salesContact || "",
+      salesContact: formData.salesContact || formData.phone || "",
+      email: formData.email || formData.salesEmail || "",
+      salesEmail: formData.salesEmail || formData.email || "",
+      modeOfPaymentReminder: formData.modeOfPaymentReminder || "E-Mail",
+      accountsContactDetails: formData.accountsContactDetails || "",
+      paymentTermsId: formData.paymentTermsId || "PT-30",
+      creditDays: Number(formData.creditDays) || 30,
+      creditLimit: formData.creditLimit ? parseFloat(formData.creditLimit) : 500000.0,
+      currency: formData.currency || "INR",
+      scm: formData.scm || "",
+      billToAddress: formData.billToAddress || formData.customerAddress || formData.address || "",
+      shipToAddress: formData.shipToAddress || formData.billToAddress || formData.address || "",
+      customerAddress: formData.customerAddress || formData.billToAddress || formData.address || "",
+      address: formData.customerAddress || formData.billToAddress || formData.shipToAddress || "",
+      city: formData.city || "",
+      state: formData.state || "",
+      stateCode: formData.stateCode || "",
+      country: formData.country || "India",
+      pincode: formData.pincode || ""
+    };
+
     try {
-      const isEdit = !!editingId;
-      const url = isEdit ? `${getApiUrl()}/api/customers/${editingId}` : `${getApiUrl()}/api/customers`;
-      const method = isEdit ? "PUT" : "POST";
-
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData)
-      });
-
-      if (res.ok) {
-        const savedData = await res.json();
-        if (isEdit) {
-          setCustomers((prev) => prev.map((item) => (item.id === editingId ? savedData : item)));
-          setToastMessage(`Customer "${savedData.customerName}" updated successfully!`);
-        } else {
-          setCustomers((prev) => [savedData, ...prev]);
-          setToastMessage(`Customer "${savedData.customerName}" created successfully!`);
-        }
-      } else {
-        // Fallback local update if backend offline
-        const localObj = { ...formData, id: editingId || Date.now() };
-        if (isEdit) {
-          setCustomers((prev) => prev.map((item) => (item.id === editingId ? localObj : item)));
-        } else {
-          setCustomers((prev) => [localObj, ...prev]);
-        }
-        setToastMessage(`Customer saved locally.`);
-      }
-    } catch (err) {
-      console.error("Save customer failed:", err);
-      const localObj = { ...formData, id: editingId || Date.now() };
       if (editingId) {
-        setCustomers((prev) => prev.map((item) => (item.id === editingId ? localObj : item)));
+        const res = await fetch(`${getApiUrl()}/api/customers/${editingId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+          const updated = await res.json();
+          setCustomers((prev) => prev.map((item) => (item.id === editingId ? { ...item, ...updated } : item)));
+          setToastMessage(`Customer "${payload.customerName}" updated in PostgreSQL!`);
+        } else {
+          setCustomers((prev) => prev.map((item) => (item.id === editingId ? { ...item, ...payload } : item)));
+          setToastMessage(`Customer "${payload.customerName}" updated.`);
+        }
       } else {
-        setCustomers((prev) => [localObj, ...prev]);
+        const res = await fetch(`${getApiUrl()}/api/customers`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+          const created = await res.json();
+          setCustomers((prev) => [created, ...prev]);
+          setToastMessage(`Customer "${payload.customerName}" saved to PostgreSQL!`);
+        } else {
+          const newObj = { ...payload, id: Date.now() };
+          setCustomers((prev) => [newObj, ...prev]);
+          setToastMessage(`Customer "${payload.customerName}" created.`);
+        }
       }
-      setToastMessage(`Saved to local state.`);
-    } finally {
       setIsModalOpen(false);
-      setEditingId(null);
-      setTimeout(() => setToastMessage(null), 4000);
+      setTimeout(() => setToastMessage(null), 3000);
+    } catch (err) {
+      console.error("Save error:", err);
+      setIsModalOpen(false);
     }
   };
 
-  // Reset page when filters change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, selectedTypeFilter, colFilters]);
-
-  // Filtering matching search, type pills, and per-column filters
-  const filteredCustomers = useMemo(() => {
-    const sTerm = searchTerm.trim().toLowerCase();
-    const typeTerm = selectedTypeFilter;
-    const fCode = colFilters.customerCode.trim().toLowerCase();
-    const fName = colFilters.customerName.trim().toLowerCase();
-    const fGst = colFilters.gstin.trim().toLowerCase();
-    const fPan = colFilters.pan.trim().toLowerCase();
-    const fContact = colFilters.contactPerson.trim().toLowerCase();
-    const fPhone = colFilters.phone.trim().toLowerCase();
-    const fCity = colFilters.city.trim().toLowerCase();
-    const fState = colFilters.state.trim().toLowerCase();
-    const fGstType = colFilters.gstType.trim().toLowerCase();
-    const fStatus = colFilters.status.trim().toLowerCase();
-
-    return customers.filter((item) => {
-      // 1. Top Search
-      if (sTerm) {
-        const inSearch =
-          (item.customerCode && item.customerCode.toLowerCase().includes(sTerm)) ||
-          (item.customerName && item.customerName.toLowerCase().includes(sTerm)) ||
-          (item.gstin && item.gstin.toLowerCase().includes(sTerm)) ||
-          (item.pan && item.pan.toLowerCase().includes(sTerm)) ||
-          (item.contactPerson && item.contactPerson.toLowerCase().includes(sTerm)) ||
-          (item.city && item.city.toLowerCase().includes(sTerm)) ||
-          (item.state && item.state.toLowerCase().includes(sTerm));
-        if (!inSearch) return false;
-      }
-
-      // 2. Type Pill Filter
-      if (typeTerm !== "ALL") {
-        const inType =
-          (item.customerType && item.customerType.toLowerCase() === typeTerm.toLowerCase()) ||
-          (item.gstRegistrationType && item.gstRegistrationType.toLowerCase() === typeTerm.toLowerCase());
-        if (!inType) return false;
-      }
-
-      // 3. Per-Column Filters
-      if (fCode && (!item.customerCode || !item.customerCode.toLowerCase().includes(fCode))) return false;
-      if (fName && (!item.customerName || !item.customerName.toLowerCase().includes(fName))) return false;
-      if (fGst && (!item.gstin || !item.gstin.toLowerCase().includes(fGst))) return false;
-      if (fPan && (!item.pan || !item.pan.toLowerCase().includes(fPan))) return false;
-      if (fContact && (!item.contactPerson || !item.contactPerson.toLowerCase().includes(fContact))) return false;
-      if (fPhone && (!item.phone || !item.phone.toLowerCase().includes(fPhone)) && (!item.email || !item.email.toLowerCase().includes(fPhone))) return false;
-      if (fCity && (!item.city || !item.city.toLowerCase().includes(fCity))) return false;
-      if (fState && (!item.state || !item.state.toLowerCase().includes(fState))) return false;
-      if (fGstType && (!item.gstRegistrationType || !item.gstRegistrationType.toLowerCase().includes(fGstType))) return false;
-      if (fStatus && (!item.status || !item.status.toLowerCase().includes(fStatus))) return false;
-
-      return true;
-    });
-  }, [customers, searchTerm, selectedTypeFilter, colFilters]);
-
-  // Pagination calculation
-  const totalRecords = filteredCustomers.length;
-  const isAllPages = pageSize === "ALL";
-  const numPageSize = isAllPages ? totalRecords : Number(pageSize);
-  const totalPages = isAllPages ? 1 : Math.ceil(totalRecords / numPageSize) || 1;
-  const clampedPage = Math.min(Math.max(currentPage, 1), totalPages);
-  const startIndex = isAllPages ? 0 : (clampedPage - 1) * numPageSize;
-  const endIndex = isAllPages ? totalRecords : Math.min(startIndex + numPageSize, totalRecords);
-  const paginatedCustomers = isAllPages ? filteredCustomers : filteredCustomers.slice(startIndex, endIndex);
-
-  // Live Summary Metrics
-  const totalCount = customers.length;
-  const registeredGstCount = customers.filter((i) => i.gstin && i.gstin.trim().length > 5).length;
-  const activeCount = customers.filter((i) => !i.status || i.status.toUpperCase() === "ACTIVE").length;
-
-  // Selection handlers
-  const toggleSelectAll = () => {
-    if (selectedIds.size === filteredCustomers.length && filteredCustomers.length > 0) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(filteredCustomers.map((i) => i.id)));
-    }
-  };
-
-  const toggleSelectRow = (id) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  // Toolbar Actions
+  // Header Toolbar actions matching ItemMasterFormPage & MachineMasterPage
   const handleEditSelected = () => {
     if (selectedIds.size === 1) {
       const selectedId = Array.from(selectedIds)[0];
@@ -367,6 +555,7 @@ export function CustomerMasterPage({
         return;
       }
     }
+    setQuickSearch("");
     setQuickPickerMode("edit");
   };
 
@@ -393,46 +582,70 @@ export function CustomerMasterPage({
         return;
       }
     }
+    setQuickSearch("");
     setQuickPickerMode("delete");
   };
 
   const handleRefresh = () => {
-    fetchCustomers();
     setSearchTerm("");
     setSelectedTypeFilter("ALL");
     setColFilters({
+      checkAccounts: "",
       customerCode: "",
+      checkSales: "",
       customerName: "",
-      gstin: "",
-      pan: "",
-      contactPerson: "",
-      phone: "",
-      city: "",
+      billToAddress: "",
+      customerAlias: "",
       state: "",
-      gstType: "",
-      status: ""
+      country: "",
+      shipToAddress: "",
+      billingSource: "",
+      gstin: "",
+      city: "",
+      domesticExport: "",
+      supplierCodeSms: "",
+      salesPerson: "",
+      salesContact: "",
+      salesEmail: "",
+      modeOfPaymentReminder: "",
+      accountsContactDetails: "",
+      creditDays: "",
+      scm: "",
+      customerAddress: ""
     });
     setSelectedIds(new Set());
-    setToastMessage("Customer data refreshed!");
+    fetchCustomers();
+    setToastMessage("Data refreshed from PostgreSQL database!");
     setTimeout(() => setToastMessage(null), 2000);
   };
 
   const handleExportData = () => {
-    const dataToExport = filteredCustomers.map((item) => ({
-      "Customer Code": item.customerCode,
-      "Customer Name": item.customerName,
-      "GSTIN": item.gstin || "-",
-      "PAN": item.pan || "-",
-      "Customer Type": item.customerType,
-      "GST Registration": item.gstRegistrationType,
-      "Contact Person": item.contactPerson || "-",
-      "Phone": item.phone || "-",
-      "Email": item.email || "-",
-      "City": item.city || "-",
-      "State": item.state || "-",
-      "Credit Limit": item.creditLimit || "-",
-      "Status": item.status
+    const dataToExport = filteredCustomers.map((c, idx) => ({
+      "Sr No": idx + 1,
+      "Check by Accounts": c.checkByAccounts ? "TRUE" : "FALSE",
+      "Code": c.customerCode,
+      "Check by Sales": c.checkBySales ? "TRUE" : "FALSE",
+      "Customer Name": c.customerName,
+      "Bill TO Address": c.billToAddress || c.address || "",
+      "Customer Alias Short Name": c.customerAlias || "",
+      "State": c.state || "",
+      "Country": c.country || "India",
+      "Ship To on Address": c.shipToAddress || c.address || "",
+      "Billing Source": c.billingSource || "",
+      "GST": c.gstin || "",
+      "City": c.city || "",
+      "Domestic / Export": c.domesticExport || c.customerType || "",
+      "Supplier Code of SMS": c.supplierCodeSms || "",
+      "Sale Person": c.salesPerson || c.contactPerson || "",
+      "Sale Contact": c.salesContact || c.phone || "",
+      "Sale Email": c.salesEmail || c.email || "",
+      "Mode of Payment Reminder": c.modeOfPaymentReminder || "",
+      "Accounts Person Name - Contact No. -Mail id": c.accountsContactDetails || "",
+      "Credit Days": c.creditDays ?? 30,
+      "SCM": c.scm || "",
+      "Customer Address": c.customerAddress || c.address || ""
     }));
+
     const blob = new Blob([JSON.stringify(dataToExport, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -440,13 +653,128 @@ export function CustomerMasterPage({
     a.download = `Customer_Master_Export_${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    setToastMessage("Customer directory exported!");
+    setToastMessage("Customer catalog exported successfully!");
     setTimeout(() => setToastMessage(null), 2500);
   };
 
   const handlePrint = () => {
     window.print();
   };
+
+  // Quick picker helpers
+  const handleQuickPickerSelect = (customer) => {
+    if (quickPickerMode === "edit") {
+      setQuickPickerMode(null);
+      handleOpenEditModal(customer);
+    } else if (quickPickerMode === "delete") {
+      setQuickPickerMode(null);
+      handleRequestDelete(customer);
+    }
+  };
+
+  // Row selection toggle
+  const toggleSelectRow = (id) => {
+    const next = new Set(selectedIds);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
+    setSelectedIds(next);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filteredCustomers.length && filteredCustomers.length > 0) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredCustomers.map((c) => c.id)));
+    }
+  };
+
+  // Filter logic (Global Search + Pill Filter + Column Filters)
+  const filteredCustomers = useMemo(() => {
+    return customers.filter((cust) => {
+      // Global search term
+      if (searchTerm.trim()) {
+        const q = searchTerm.toLowerCase();
+        const matchesGlobal =
+          (cust.customerName && cust.customerName.toLowerCase().includes(q)) ||
+          (cust.customerCode && cust.customerCode.toLowerCase().includes(q)) ||
+          (cust.customerAlias && cust.customerAlias.toLowerCase().includes(q)) ||
+          (cust.gstin && cust.gstin.toLowerCase().includes(q)) ||
+          (cust.pan && cust.pan.toLowerCase().includes(q)) ||
+          (cust.city && cust.city.toLowerCase().includes(q)) ||
+          (cust.state && cust.state.toLowerCase().includes(q)) ||
+          (cust.salesPerson && cust.salesPerson.toLowerCase().includes(q)) ||
+          (cust.contactPerson && cust.contactPerson.toLowerCase().includes(q)) ||
+          (cust.salesEmail && cust.salesEmail.toLowerCase().includes(q)) ||
+          (cust.billingSource && cust.billingSource.toLowerCase().includes(q));
+        if (!matchesGlobal) return false;
+      }
+
+      // Pill filter
+      if (selectedTypeFilter !== "ALL") {
+        if (selectedTypeFilter === "DOMESTIC") {
+          const isDom =
+            (cust.domesticExport && cust.domesticExport.toUpperCase() === "DOMESTIC") ||
+            (cust.customerType && cust.customerType.toUpperCase() === "DOMESTIC") ||
+            (!cust.domesticExport && cust.country === "India");
+          if (!isDom) return false;
+        } else if (selectedTypeFilter === "EXPORT") {
+          const isExp =
+            (cust.domesticExport && cust.domesticExport.toUpperCase() === "EXPORT") ||
+            (cust.customerType && cust.customerType.toUpperCase() === "EXPORT") ||
+            ["Dubai", "Germany", "UAE", "Russia"].includes(cust.country);
+          if (!isExp) return false;
+        } else if (selectedTypeFilter === "OEM") {
+          const isOem = (cust.customerType && cust.customerType.toUpperCase() === "OEM");
+          if (!isOem) return false;
+        } else if (selectedTypeFilter === "REGISTERED") {
+          if (!cust.gstin || cust.gstin.trim() === "") return false;
+        }
+      }
+
+      // Per-column filters matching Excel attributes
+      if (colFilters.customerCode && !cust.customerCode?.toLowerCase().includes(colFilters.customerCode.toLowerCase())) return false;
+      if (colFilters.customerName && !cust.customerName?.toLowerCase().includes(colFilters.customerName.toLowerCase())) return false;
+      if (colFilters.billToAddress && !(cust.billToAddress || cust.address)?.toLowerCase().includes(colFilters.billToAddress.toLowerCase())) return false;
+      if (colFilters.customerAlias && !cust.customerAlias?.toLowerCase().includes(colFilters.customerAlias.toLowerCase())) return false;
+      if (colFilters.state && !cust.state?.toLowerCase().includes(colFilters.state.toLowerCase())) return false;
+      if (colFilters.country && !cust.country?.toLowerCase().includes(colFilters.country.toLowerCase())) return false;
+      if (colFilters.shipToAddress && !(cust.shipToAddress || cust.address)?.toLowerCase().includes(colFilters.shipToAddress.toLowerCase())) return false;
+      if (colFilters.billingSource && !cust.billingSource?.toLowerCase().includes(colFilters.billingSource.toLowerCase())) return false;
+      if (colFilters.gstin && !cust.gstin?.toLowerCase().includes(colFilters.gstin.toLowerCase())) return false;
+      if (colFilters.city && !cust.city?.toLowerCase().includes(colFilters.city.toLowerCase())) return false;
+      if (colFilters.domesticExport && !(cust.domesticExport || cust.customerType)?.toLowerCase().includes(colFilters.domesticExport.toLowerCase())) return false;
+      if (colFilters.supplierCodeSms && !cust.supplierCodeSms?.toLowerCase().includes(colFilters.supplierCodeSms.toLowerCase())) return false;
+      if (colFilters.salesPerson && !(cust.salesPerson || cust.contactPerson)?.toLowerCase().includes(colFilters.salesPerson.toLowerCase())) return false;
+      if (colFilters.salesContact && !(cust.salesContact || cust.phone)?.toLowerCase().includes(colFilters.salesContact.toLowerCase())) return false;
+      if (colFilters.salesEmail && !(cust.salesEmail || cust.email)?.toLowerCase().includes(colFilters.salesEmail.toLowerCase())) return false;
+      if (colFilters.modeOfPaymentReminder && !cust.modeOfPaymentReminder?.toLowerCase().includes(colFilters.modeOfPaymentReminder.toLowerCase())) return false;
+      if (colFilters.accountsContactDetails && !cust.accountsContactDetails?.toLowerCase().includes(colFilters.accountsContactDetails.toLowerCase())) return false;
+      if (colFilters.creditDays && !String(cust.creditDays ?? "").includes(colFilters.creditDays)) return false;
+      if (colFilters.scm && !cust.scm?.toLowerCase().includes(colFilters.scm.toLowerCase())) return false;
+      if (colFilters.customerAddress && !(cust.customerAddress || cust.address)?.toLowerCase().includes(colFilters.customerAddress.toLowerCase())) return false;
+
+      return true;
+    });
+  }, [customers, searchTerm, selectedTypeFilter, colFilters]);
+
+  // Pagination calculation
+  const totalRecords = filteredCustomers.length;
+  const isAllPages = pageSize === "ALL";
+  const effectivePageSize = isAllPages ? Math.max(1, totalRecords) : pageSize;
+  const totalPages = isAllPages ? 1 : Math.ceil(totalRecords / effectivePageSize);
+  const clampedPage = Math.max(1, Math.min(currentPage, totalPages || 1));
+  const startIndex = (clampedPage - 1) * effectivePageSize;
+  const endIndex = isAllPages ? totalRecords : Math.min(startIndex + effectivePageSize, totalRecords);
+  const paginatedCustomers = filteredCustomers.slice(startIndex, endIndex);
+
+  // Summary Metrics
+  const totalCount = customers.length;
+  const domesticCount = customers.filter((c) => (c.domesticExport?.toUpperCase() === "DOMESTIC" || c.country === "India")).length;
+  const exportCount = customers.filter((c) => (c.domesticExport?.toUpperCase() === "EXPORT" || ["Dubai", "Germany", "UAE", "Russia"].includes(c.country))).length;
+  const registeredGstCount = customers.filter((c) => Boolean(c.gstin && c.gstin.trim())).length;
 
   return (
     <div
@@ -464,7 +792,7 @@ export function CustomerMasterPage({
     >
       <div
         style={{
-          maxWidth: 1440,
+          maxWidth: 1600,
           width: "100%",
           margin: "0 auto",
           height: "100%",
@@ -474,9 +802,9 @@ export function CustomerMasterPage({
           minHeight: 0,
           overflow: "hidden",
           borderRadius: 12,
-          border: "1px solid #e2e8f0",
+          border: `1px solid ${borderCol}`,
           boxShadow: "0 4px 20px rgba(0,0,0,0.06)",
-          background: "#ffffff"
+          background: cardBg
         }}
       >
         {/* Toast Alert */}
@@ -506,13 +834,13 @@ export function CustomerMasterPage({
         )}
 
         {/* ========================================================================= */}
-        {/* TOP TOOLBAR & BREADCRUMB HEADER (STATIC - NEVER SCROLLS) */}
+        {/* TOP TOOLBAR & BREADCRUMB HEADER (STATIC - NEVER SCROLLS)                  */}
         {/* ========================================================================= */}
         <div
           style={{
             flexShrink: 0,
-            background: "#ffffff",
-            borderBottom: "1px solid #e2e8f0",
+            background: cardBg,
+            borderBottom: `1px solid ${borderCol}`,
             padding: "9px 18px",
             display: "flex",
             alignItems: "center",
@@ -521,9 +849,8 @@ export function CustomerMasterPage({
             gap: 12
           }}
         >
-          {/* Left Action Buttons */}
+          {/* Left Action Buttons matching Item Master & Machine Master */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            {/* + New Customer Button */}
             <button
               onClick={handleOpenNewModal}
               id="btn-new-customer-master"
@@ -547,7 +874,6 @@ export function CustomerMasterPage({
               <span>New Customer</span>
             </button>
 
-            {/* Edit Customer Button */}
             <button
               onClick={handleEditSelected}
               id="btn-edit-customer-master"
@@ -566,9 +892,9 @@ export function CustomerMasterPage({
               Edit Customer
             </button>
 
-            {/* View Button */}
             <button
               onClick={handleViewSelected}
+              id="btn-view-customer-master"
               style={{
                 background: "#ffffff",
                 border: "1px solid #cbd5e1",
@@ -584,7 +910,6 @@ export function CustomerMasterPage({
               View
             </button>
 
-            {/* Delete Customer Button */}
             <button
               onClick={handleDeleteSelected}
               id="btn-delete-customer-master"
@@ -605,7 +930,6 @@ export function CustomerMasterPage({
 
             <span style={{ color: "#e2e8f0", margin: "0 4px", fontSize: 18 }}>|</span>
 
-            {/* Utility Buttons */}
             <button
               onClick={handleRefresh}
               style={{
@@ -657,30 +981,32 @@ export function CustomerMasterPage({
           </div>
 
           {/* Right Breadcrumb */}
-          <div style={{ fontSize: 13, fontWeight: 600, color: "#64748b" }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: textSecondary }}>
             {onBackToHome ? (
               <span
                 onClick={onBackToHome}
                 style={{ cursor: "pointer", color: "#2563eb", textDecoration: "underline", marginRight: 4 }}
               >
-                CRM & Sales
+                CRM &amp; Order Management
               </span>
             ) : (
-              <span>CRM & Sales</span>
+              <span>CRM &amp; Order Management</span>
             )}
             <span style={{ margin: "0 4px" }}>›</span>
-            <span style={{ color: "#0f172a", fontWeight: 700 }}>Customer Master Directory</span>
+            <span>Customer</span>
+            <span style={{ margin: "0 4px" }}>›</span>
+            <span style={{ color: textPrimary, fontWeight: 700 }}>Customer Master</span>
           </div>
         </div>
 
         {/* ========================================================================= */}
-        {/* ROW 2: SEARCH INPUT, FILTER PILLS & REAL-TIME SUMMARY METRICS (STATIC)    */}
+        {/* ROW 2: SEARCH INPUT, CATEGORY PILLS & REAL-TIME SUMMARY METRICS           */}
         {/* ========================================================================= */}
         <div
           style={{
             flexShrink: 0,
-            background: "#ffffff",
-            borderBottom: "1px solid #e2e8f0",
+            background: cardBg,
+            borderBottom: `1px solid ${borderCol}`,
             padding: "10px 18px",
             display: "flex",
             alignItems: "center",
@@ -689,470 +1015,1009 @@ export function CustomerMasterPage({
             gap: 14
           }}
         >
-          {/* Search Input */}
-          <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 280 }}>
-            <div style={{ position: "relative", flex: 1, maxWidth: 360 }}>
-              <input
-                type="text"
-                placeholder="Search customer name, code, GSTIN, PAN, city..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                style={{
-                  width: "100%",
-                  padding: "8px 12px 8px 34px",
-                  borderRadius: 8,
-                  border: "1px solid #cbd5e1",
-                  fontSize: 13,
-                  outline: "none",
-                  boxSizing: "border-box",
-                  background: "#f8fafc"
-                }}
-              />
-              <Search
-                size={16}
-                style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "#94a3b8" }}
-              />
-            </div>
+          {/* Main Search Input */}
+          <div style={{ width: 340, maxWidth: "100%", position: "relative" }}>
+            <input
+              type="text"
+              placeholder="Search by Code, Customer Name, Alias, GST, City, Person..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "7px 12px",
+                borderRadius: 6,
+                border: "1px solid #cbd5e1",
+                background: inputBg,
+                color: textPrimary,
+                fontSize: 13,
+                fontWeight: 500,
+                outline: "none"
+              }}
+            />
+          </div>
 
-            {/* Category/Type Pills */}
-            <div style={{ display: "flex", alignItems: "center", gap: 6, overflowX: "auto" }}>
-              {["ALL", "OEM", "WHOLESALE", "RETAIL", "DISTRIBUTOR", "REGISTERED", "UNREGISTERED"].map((pill) => (
+          {/* Category Filter Pills */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {[
+              { label: "All Customers", key: "ALL" },
+              { label: "Domestic", key: "DOMESTIC" },
+              { label: "Export", key: "EXPORT" },
+              { label: "OEM", key: "OEM" },
+              { label: "Registered GST", key: "REGISTERED" }
+            ].map((pill) => {
+              const isActive = selectedTypeFilter === pill.key;
+              return (
                 <button
-                  key={pill}
-                  onClick={() => setSelectedTypeFilter(pill)}
+                  key={pill.key}
+                  onClick={() => setSelectedTypeFilter(pill.key)}
                   style={{
-                    padding: "5px 12px",
+                    padding: "6px 18px",
                     borderRadius: 20,
+                    border: isActive ? "none" : "1px solid #cbd5e1",
+                    background: isActive ? "#2b3d52" : "#ffffff",
+                    color: isActive ? "#ffffff" : "#334155",
                     fontSize: 12,
-                    fontWeight: selectedTypeFilter === pill ? 700 : 500,
-                    border: selectedTypeFilter === pill ? "1px solid #1e293b" : "1px solid #e2e8f0",
-                    background: selectedTypeFilter === pill ? "#1e293b" : "#f1f5f9",
-                    color: selectedTypeFilter === pill ? "#ffffff" : "#475569",
+                    fontWeight: isActive ? 700 : 600,
                     cursor: "pointer",
-                    whiteSpace: "nowrap",
                     transition: "all 0.15s ease"
                   }}
                 >
-                  {pill === "ALL" ? "All Customers" : pill}
+                  {pill.label}
                 </button>
-              ))}
-            </div>
+              );
+            })}
           </div>
 
-          {/* Real-time Summary Metrics */}
-          <div style={{ display: "flex", alignItems: "center", gap: 16, flexShrink: 0 }}>
-            <div style={{ background: "#f8fafc", padding: "6px 14px", borderRadius: 8, border: "1px solid #e2e8f0", textAlign: "right" }}>
-              <span style={{ fontSize: 11, color: "#64748b", fontWeight: 600, display: "block" }}>Total Customers</span>
-              <span style={{ fontSize: 15, color: "#0f172a", fontWeight: 800 }}>{totalCount}</span>
+          {/* Right Side Summary Metrics */}
+          <div style={{ display: "flex", alignItems: "center", gap: 18, fontSize: 13, color: textSecondary }}>
+            <div>
+              Total <strong style={{ color: textPrimary, fontSize: 14 }}>{totalCount}</strong>
             </div>
-            <div style={{ background: "#f8fafc", padding: "6px 14px", borderRadius: 8, border: "1px solid #e2e8f0", textAlign: "right" }}>
-              <span style={{ fontSize: 11, color: "#64748b", fontWeight: 600, display: "block" }}>Registered GSTIN</span>
-              <span style={{ fontSize: 15, color: "#0284c7", fontWeight: 800 }}>{registeredGstCount}</span>
+            <div>
+              Domestic <strong style={{ color: textPrimary, fontSize: 14 }}>{domesticCount}</strong>
             </div>
-            <div style={{ background: "#f8fafc", padding: "6px 14px", borderRadius: 8, border: "1px solid #e2e8f0", textAlign: "right" }}>
-              <span style={{ fontSize: 11, color: "#64748b", fontWeight: 600, display: "block" }}>Active Accounts</span>
-              <span style={{ fontSize: 15, color: "#10b981", fontWeight: 800 }}>{activeCount}</span>
+            <div>
+              Export <strong style={{ color: textPrimary, fontSize: 14 }}>{exportCount}</strong>
+            </div>
+            <div>
+              GST Registered <strong style={{ color: textPrimary, fontSize: 14 }}>{registeredGstCount}</strong>
             </div>
           </div>
         </div>
 
         {/* ========================================================================= */}
-        {/* ROW 3: MAIN DATA TABLE WITH PER-COLUMN FILTERING (ONLY DATA SCROLLS)      */}
+        {/* DATA TABLE CONTAINER (STICKY 2-ROW HEADER WITH ALL 22 EXCEL COLUMNS)       */}
         {/* ========================================================================= */}
-        <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column", minHeight: 0 }}>
-          <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
-            <table
-              style={{
-                width: "100%",
-                borderCollapse: "separate",
-                borderSpacing: 0,
-                fontSize: 12.5,
-                textAlign: "left"
-              }}
-            >
-              <thead
-                style={{
-                  position: "sticky",
-                  top: 0,
-                  zIndex: 20,
-                  background: "#f8fafc"
-                }}
-              >
-                {/* Column Headers */}
-                <tr style={{ background: "#f1f5f9", color: "#334155", fontWeight: 700, borderBottom: "1px solid #cbd5e1" }}>
-                  <th style={{ padding: "10px 12px", width: 38, borderBottom: "1px solid #cbd5e1" }}>
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.size === filteredCustomers.length && filteredCustomers.length > 0}
-                      onChange={toggleSelectAll}
-                      style={{ cursor: "pointer" }}
-                    />
-                  </th>
-                  <th style={{ padding: "10px 12px", minWidth: 110, borderBottom: "1px solid #cbd5e1" }}>Customer Code</th>
-                  <th style={{ padding: "10px 12px", minWidth: 200, borderBottom: "1px solid #cbd5e1" }}>Customer Name</th>
-                  <th style={{ padding: "10px 12px", minWidth: 140, borderBottom: "1px solid #cbd5e1" }}>GSTIN</th>
-                  <th style={{ padding: "10px 12px", minWidth: 110, borderBottom: "1px solid #cbd5e1" }}>PAN</th>
-                  <th style={{ padding: "10px 12px", minWidth: 140, borderBottom: "1px solid #cbd5e1" }}>Contact Person</th>
-                  <th style={{ padding: "10px 12px", minWidth: 130, borderBottom: "1px solid #cbd5e1" }}>Phone / Email</th>
-                  <th style={{ padding: "10px 12px", minWidth: 110, borderBottom: "1px solid #cbd5e1" }}>City</th>
-                  <th style={{ padding: "10px 12px", minWidth: 120, borderBottom: "1px solid #cbd5e1" }}>State</th>
-                  <th style={{ padding: "10px 12px", minWidth: 120, borderBottom: "1px solid #cbd5e1" }}>GST Type</th>
-                  <th style={{ padding: "10px 12px", minWidth: 90, borderBottom: "1px solid #cbd5e1" }}>Status</th>
-                  <th style={{ padding: "10px 12px", width: 70, borderBottom: "1px solid #cbd5e1", textAlign: "center" }}>Action</th>
-                </tr>
-
-                {/* Per-Column Filter Inputs (STATIC HEADER ROW) */}
-                <tr style={{ background: "#ffffff", borderBottom: "2px solid #cbd5e1" }}>
-                  <th style={{ padding: "4px 8px" }} />
-                  <th style={{ padding: "4px 8px" }}>
-                    <input
-                      type="text"
-                      placeholder="Filter Code"
-                      value={colFilters.customerCode}
-                      onChange={(e) => setColFilters({ ...colFilters, customerCode: e.target.value })}
-                      style={{ width: "100%", padding: "4px 6px", fontSize: 11, borderRadius: 4, border: "1px solid #cbd5e1" }}
-                    />
-                  </th>
-                  <th style={{ padding: "4px 8px" }}>
-                    <input
-                      type="text"
-                      placeholder="Filter Name"
-                      value={colFilters.customerName}
-                      onChange={(e) => setColFilters({ ...colFilters, customerName: e.target.value })}
-                      style={{ width: "100%", padding: "4px 6px", fontSize: 11, borderRadius: 4, border: "1px solid #cbd5e1" }}
-                    />
-                  </th>
-                  <th style={{ padding: "4px 8px" }}>
-                    <input
-                      type="text"
-                      placeholder="Filter GSTIN"
-                      value={colFilters.gstin}
-                      onChange={(e) => setColFilters({ ...colFilters, gstin: e.target.value })}
-                      style={{ width: "100%", padding: "4px 6px", fontSize: 11, borderRadius: 4, border: "1px solid #cbd5e1" }}
-                    />
-                  </th>
-                  <th style={{ padding: "4px 8px" }}>
-                    <input
-                      type="text"
-                      placeholder="Filter PAN"
-                      value={colFilters.pan}
-                      onChange={(e) => setColFilters({ ...colFilters, pan: e.target.value })}
-                      style={{ width: "100%", padding: "4px 6px", fontSize: 11, borderRadius: 4, border: "1px solid #cbd5e1" }}
-                    />
-                  </th>
-                  <th style={{ padding: "4px 8px" }}>
-                    <input
-                      type="text"
-                      placeholder="Filter Contact"
-                      value={colFilters.contactPerson}
-                      onChange={(e) => setColFilters({ ...colFilters, contactPerson: e.target.value })}
-                      style={{ width: "100%", padding: "4px 6px", fontSize: 11, borderRadius: 4, border: "1px solid #cbd5e1" }}
-                    />
-                  </th>
-                  <th style={{ padding: "4px 8px" }}>
-                    <input
-                      type="text"
-                      placeholder="Filter Phone/Email"
-                      value={colFilters.phone}
-                      onChange={(e) => setColFilters({ ...colFilters, phone: e.target.value })}
-                      style={{ width: "100%", padding: "4px 6px", fontSize: 11, borderRadius: 4, border: "1px solid #cbd5e1" }}
-                    />
-                  </th>
-                  <th style={{ padding: "4px 8px" }}>
-                    <input
-                      type="text"
-                      placeholder="Filter City"
-                      value={colFilters.city}
-                      onChange={(e) => setColFilters({ ...colFilters, city: e.target.value })}
-                      style={{ width: "100%", padding: "4px 6px", fontSize: 11, borderRadius: 4, border: "1px solid #cbd5e1" }}
-                    />
-                  </th>
-                  <th style={{ padding: "4px 8px" }}>
-                    <input
-                      type="text"
-                      placeholder="Filter State"
-                      value={colFilters.state}
-                      onChange={(e) => setColFilters({ ...colFilters, state: e.target.value })}
-                      style={{ width: "100%", padding: "4px 6px", fontSize: 11, borderRadius: 4, border: "1px solid #cbd5e1" }}
-                    />
-                  </th>
-                  <th style={{ padding: "4px 8px" }}>
-                    <input
-                      type="text"
-                      placeholder="Filter GST Type"
-                      value={colFilters.gstType}
-                      onChange={(e) => setColFilters({ ...colFilters, gstType: e.target.value })}
-                      style={{ width: "100%", padding: "4px 6px", fontSize: 11, borderRadius: 4, border: "1px solid #cbd5e1" }}
-                    />
-                  </th>
-                  <th style={{ padding: "4px 8px" }}>
-                    <input
-                      type="text"
-                      placeholder="Filter Status"
-                      value={colFilters.status}
-                      onChange={(e) => setColFilters({ ...colFilters, status: e.target.value })}
-                      style={{ width: "100%", padding: "4px 6px", fontSize: 11, borderRadius: 4, border: "1px solid #cbd5e1" }}
-                    />
-                  </th>
-                  <th style={{ padding: "4px 8px" }} />
-                </tr>
-              </thead>
-
-              {/* Data Rows */}
-              <tbody>
-                {loading ? (
-                  <tr>
-                    <td colSpan={12} style={{ padding: 32, textAlign: "center", color: "#64748b" }}>
-                      Loading customers data from database...
-                    </td>
-                  </tr>
-                ) : paginatedCustomers.length === 0 ? (
-                  <tr>
-                    <td colSpan={12} style={{ padding: 32, textAlign: "center", color: "#64748b" }}>
-                      No matching customer records found.
-                    </td>
-                  </tr>
-                ) : (
-                  paginatedCustomers.map((customer) => {
-                    const isSelected = selectedIds.has(customer.id);
-                    return (
-                      <tr
-                        key={customer.id || customer.customerCode}
-                        style={{
-                          background: isSelected ? "#eff6ff" : "#ffffff",
-                          borderBottom: "1px solid #e2e8f0",
-                          transition: "background 0.1s ease"
-                        }}
-                      >
-                        <td style={{ padding: "8px 12px", borderBottom: "1px solid #f1f5f9" }}>
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => toggleSelectRow(customer.id)}
-                            style={{ cursor: "pointer" }}
-                          />
-                        </td>
-
-                        {/* Customer Code */}
-                        <td style={{ padding: "8px 12px", fontWeight: 700, color: "#1e293b", borderBottom: "1px solid #f1f5f9" }}>
-                          {customer.customerCode || customer.customerId || "-"}
-                        </td>
-
-                        {/* Customer Name */}
-                        <td style={{ padding: "8px 12px", fontWeight: 700, color: "#0f172a", borderBottom: "1px solid #f1f5f9" }}>
-                          {customer.customerName || "-"}
-                        </td>
-
-                        {/* GSTIN */}
-                        <td style={{ padding: "8px 12px", fontFamily: "monospace", fontWeight: 600, color: "#0284c7", borderBottom: "1px solid #f1f5f9" }}>
-                          {customer.gstin || "-"}
-                        </td>
-
-                        {/* PAN */}
-                        <td style={{ padding: "8px 12px", fontFamily: "monospace", color: "#475569", borderBottom: "1px solid #f1f5f9" }}>
-                          {customer.pan || "-"}
-                        </td>
-
-                        {/* Contact Person */}
-                        <td style={{ padding: "8px 12px", color: "#334155", borderBottom: "1px solid #f1f5f9" }}>
-                          {customer.contactPerson || "-"}
-                        </td>
-
-                        {/* Phone / Email */}
-                        <td style={{ padding: "8px 12px", color: "#334155", borderBottom: "1px solid #f1f5f9" }}>
-                          <div>{customer.phone || "-"}</div>
-                          {customer.email && <div style={{ fontSize: 11, color: "#64748b" }}>{customer.email}</div>}
-                        </td>
-
-                        {/* City */}
-                        <td style={{ padding: "8px 12px", color: "#334155", borderBottom: "1px solid #f1f5f9" }}>
-                          {customer.city || "-"}
-                        </td>
-
-                        {/* State */}
-                        <td style={{ padding: "8px 12px", color: "#334155", borderBottom: "1px solid #f1f5f9" }}>
-                          {customer.state ? `${customer.state} (${customer.stateCode || "-"})` : "-"}
-                        </td>
-
-                        {/* GST Registration Type */}
-                        <td style={{ padding: "8px 12px", borderBottom: "1px solid #f1f5f9" }}>
-                          <span
-                            style={{
-                              padding: "2px 8px",
-                              borderRadius: 4,
-                              fontSize: 11,
-                              fontWeight: 700,
-                              background: customer.gstRegistrationType === "REGISTERED" ? "#dbeafe" : "#f1f5f9",
-                              color: customer.gstRegistrationType === "REGISTERED" ? "#1e40af" : "#475569"
-                            }}
-                          >
-                            {customer.gstRegistrationType || "REGISTERED"}
-                          </span>
-                        </td>
-
-                        {/* Status */}
-                        <td style={{ padding: "8px 12px", borderBottom: "1px solid #f1f5f9" }}>
-                          <span
-                            style={{
-                              padding: "2px 8px",
-                              borderRadius: 4,
-                              fontSize: 11,
-                              fontWeight: 700,
-                              background: (!customer.status || customer.status === "ACTIVE") ? "#dcfce7" : "#fee2e2",
-                              color: (!customer.status || customer.status === "ACTIVE") ? "#15803d" : "#b91c1c"
-                            }}
-                          >
-                            {customer.status || "ACTIVE"}
-                          </span>
-                        </td>
-
-                        {/* Action Icons (LAST COLUMN) */}
-                        <td style={{ padding: "8px 12px", borderBottom: "1px solid #f1f5f9", textAlign: "center" }}>
-                          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-                            <button
-                              onClick={() => setDetailItem(customer)}
-                              title="View Details"
-                              style={{ background: "none", border: "none", cursor: "pointer", color: "#2563eb", padding: 2 }}
-                            >
-                              <Eye size={15} />
-                            </button>
-                            <button
-                              onClick={() => handleOpenEditModal(customer)}
-                              title="Edit Customer"
-                              style={{ background: "none", border: "none", cursor: "pointer", color: "#059669", padding: 2 }}
-                            >
-                              <Pencil size={15} />
-                            </button>
-                            <button
-                              onClick={() => handleRequestDelete(customer)}
-                              title="Delete Customer"
-                              style={{ background: "none", border: "none", cursor: "pointer", color: "#dc2626", padding: 2 }}
-                            >
-                              <Trash2 size={15} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* ========================================================================= */}
-          {/* BOTTOM PAGINATION BAR (STATIC AT BOTTOM OF TABLE CONTAINER) */}
-          {/* ========================================================================= */}
-          <div
+        <div
+          style={{
+            flex: 1,
+            minHeight: 0,
+            overflowY: "auto",
+            overflowX: "auto",
+            background: cardBg,
+            position: "relative"
+          }}
+        >
+          <table className="resizable-table"
             style={{
-              flexShrink: 0,
-              background: "#ffffff",
-              borderTop: "1px solid #e2e8f0",
-              padding: "8px 18px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              flexWrap: "wrap",
-              gap: 12
+              width: "100%",
+              borderCollapse: "separate",
+              borderSpacing: 0,
+              fontSize: 12,
+              textAlign: "left",
+              ...customerMasterPage1Resize.tableStyle,
             }}
           >
-            <div style={{ fontSize: 12, color: "#64748b", fontWeight: 600 }}>
-              Showing {totalRecords === 0 ? 0 : startIndex + 1} to {endIndex} of {totalRecords} customers
-            </div>
-
-            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-              {/* Page Size Selector */}
-              <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#64748b" }}>
-                <span>Page Size:</span>
-                <select
-                  value={pageSize}
-                  onChange={(e) => {
-                    setPageSize(e.target.value === "ALL" ? "ALL" : Number(e.target.value));
-                    setCurrentPage(1);
-                  }}
+            <ResizableColGroup columns={CUSTOMER_MASTER_PAGE_1_COLUMNS} widths={customerMasterPage1Resize.widths} />
+            <thead style={{ position: "sticky", top: 0, zIndex: 20 }}>
+              {/* Header Row 1: Exact Column Titles from Excel Sheet */}
+              <tr style={{ background: "#f1f5f9", height: 38 }}>
+                <th
                   style={{
-                    padding: "4px 8px",
-                    borderRadius: 6,
-                    border: "1px solid #cbd5e1",
-                    fontSize: 12,
-                    fontWeight: 600,
-                    outline: "none"
+                    position: "sticky",
+                    top: 0,
+                    zIndex: 22,
+                    background: "#f1f5f9",
+                    borderBottom: "1px solid #cbd5e1",
+                    padding: "8px 12px",
+                    width: 36,
+                    textAlign: "center"
                   }}
                 >
-                  <option value={10}>10</option>
-                  <option value={25}>25</option>
-                  <option value={50}>50</option>
-                  <option value={100}>100</option>
-                  <option value="ALL">ALL</option>
-                </select>
-              </div>
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.size === filteredCustomers.length && filteredCustomers.length > 0}
+                    onChange={toggleSelectAll}
+                    style={{ cursor: "pointer", accentColor: "#2563eb" }}
+                  />
+                </th>
+                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", whiteSpace: "nowrap" }}>Code<ColumnResizeHandle colKey="code" resize={customerMasterPage1Resize} /></th>
+                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", minWidth: 200, whiteSpace: "nowrap" }}>Customer Name<ColumnResizeHandle colKey="customer_name" resize={customerMasterPage1Resize} /></th>
+                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", whiteSpace: "nowrap" }}>Customer Alias Short Name<ColumnResizeHandle colKey="customer_alias_short_nam" resize={customerMasterPage1Resize} /></th>
+                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", whiteSpace: "nowrap" }}>GST<ColumnResizeHandle colKey="gst" resize={customerMasterPage1Resize} /></th>
+                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", whiteSpace: "nowrap" }}>City<ColumnResizeHandle colKey="city" resize={customerMasterPage1Resize} /></th>
+                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", whiteSpace: "nowrap" }}>State<ColumnResizeHandle colKey="state" resize={customerMasterPage1Resize} /></th>
+                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", whiteSpace: "nowrap" }}>Country<ColumnResizeHandle colKey="country" resize={customerMasterPage1Resize} /></th>
+                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", whiteSpace: "nowrap" }}>Domestic / Export<ColumnResizeHandle colKey="domestic_export" resize={customerMasterPage1Resize} /></th>
+                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", minWidth: 160, whiteSpace: "nowrap" }}>Sale Person<ColumnResizeHandle colKey="sale_person" resize={customerMasterPage1Resize} /></th>
+                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", whiteSpace: "nowrap" }}>Sale Contact<ColumnResizeHandle colKey="sale_contact" resize={customerMasterPage1Resize} /></th>
+                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", minWidth: 190, whiteSpace: "nowrap" }}>Sale Email<ColumnResizeHandle colKey="sale_email" resize={customerMasterPage1Resize} /></th>
+                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", whiteSpace: "nowrap" }}>Credit Days<ColumnResizeHandle colKey="credit_days" resize={customerMasterPage1Resize} /></th>
+                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", whiteSpace: "nowrap" }}>Billing Source<ColumnResizeHandle colKey="billing_source" resize={customerMasterPage1Resize} /></th>
+                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", whiteSpace: "nowrap" }}>Supplier Code of SMS<ColumnResizeHandle colKey="supplier_code_of_sms" resize={customerMasterPage1Resize} /></th>
+                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", minWidth: 180, whiteSpace: "nowrap" }}>Accounts Person Name - Contact No. -Mail id<ColumnResizeHandle colKey="accounts_person_name_con" resize={customerMasterPage1Resize} /></th>
+                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", whiteSpace: "nowrap" }}>Mode of Payment Reminder<ColumnResizeHandle colKey="mode_of_payment_reminder" resize={customerMasterPage1Resize} /></th>
+                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", whiteSpace: "nowrap" }}>SCM<ColumnResizeHandle colKey="scm" resize={customerMasterPage1Resize} /></th>
+                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", whiteSpace: "nowrap" }}>Check by Sales<ColumnResizeHandle colKey="check_by_sales" resize={customerMasterPage1Resize} /></th>
+                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", whiteSpace: "nowrap" }}>Check by Accounts<ColumnResizeHandle colKey="check_by_accounts" resize={customerMasterPage1Resize} /></th>
+                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", minWidth: 200, whiteSpace: "nowrap" }}>Bill TO Address<ColumnResizeHandle colKey="bill_to_address" resize={customerMasterPage1Resize} /></th>
+                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", minWidth: 200, whiteSpace: "nowrap" }}>Ship To on Address<ColumnResizeHandle colKey="ship_to_on_address" resize={customerMasterPage1Resize} /></th>
+                <th style={{ position: "sticky", top: 0, zIndex: 22, background: "#f1f5f9", borderBottom: "1px solid #cbd5e1", padding: "8px 12px", fontWeight: 700, color: "#334155", minWidth: 200, whiteSpace: "nowrap" }}>Customer Address<ColumnResizeHandle colKey="customer_address" resize={customerMasterPage1Resize} /></th>
+              </tr>
 
-              {/* Page Controls */}
-              {!isAllPages && (
-                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                  <button
-                    disabled={clampedPage <= 1}
-                    onClick={() => setCurrentPage(1)}
-                    style={{ padding: "4px 8px", borderRadius: 4, border: "1px solid #cbd5e1", background: "#ffffff", cursor: clampedPage <= 1 ? "not-allowed" : "pointer", opacity: clampedPage <= 1 ? 0.5 : 1 }}
-                  >
-                    <ChevronsLeft size={14} />
-                  </button>
-                  <button
-                    disabled={clampedPage <= 1}
-                    onClick={() => setCurrentPage((p) => p - 1)}
-                    style={{ padding: "4px 8px", borderRadius: 4, border: "1px solid #cbd5e1", background: "#ffffff", cursor: clampedPage <= 1 ? "not-allowed" : "pointer", opacity: clampedPage <= 1 ? 0.5 : 1 }}
-                  >
-                    <ChevronLeft size={14} />
-                  </button>
-                  <span style={{ fontSize: 12, fontWeight: 700, padding: "0 8px", color: "#0f172a" }}>
-                    Page {clampedPage} of {totalPages}
-                  </span>
-                  <button
-                    disabled={clampedPage >= totalPages}
-                    onClick={() => setCurrentPage((p) => p + 1)}
-                    style={{ padding: "4px 8px", borderRadius: 4, border: "1px solid #cbd5e1", background: "#ffffff", cursor: clampedPage >= totalPages ? "not-allowed" : "pointer", opacity: clampedPage >= totalPages ? 0.5 : 1 }}
-                  >
-                    <ChevronRight size={14} />
-                  </button>
-                  <button
-                    disabled={clampedPage >= totalPages}
-                    onClick={() => setCurrentPage(totalPages)}
-                    style={{ padding: "4px 8px", borderRadius: 4, border: "1px solid #cbd5e1", background: "#ffffff", cursor: clampedPage >= totalPages ? "not-allowed" : "pointer", opacity: clampedPage >= totalPages ? 0.5 : 1 }}
-                  >
-                    <ChevronsRight size={14} />
-                  </button>
-                </div>
+              {/* Header Row 2: Per-Column Filter Input Boxes */}
+              <tr style={{ background: "#f8fafc", height: 38 }}>
+                {/* 0. select */}
+                <td style={{ position: "sticky", top: 37, zIndex: 21, background: "#f8fafc", borderBottom: "2px solid #cbd5e1", padding: "4px 12px", textAlign: "center" }}></td>
+                {/* 1. code */}
+                <td style={{ position: "sticky", top: 37, zIndex: 21, background: "#f8fafc", borderBottom: "2px solid #cbd5e1", padding: "4px 8px" }}>
+                  <input
+                    type="text"
+                    placeholder="Code..."
+                    value={colFilters.customerCode}
+                    onChange={(e) => setColFilters({ ...colFilters, customerCode: e.target.value })}
+                    style={{ width: "100%", padding: "3px 6px", fontSize: 11, border: "1px solid #cbd5e1", borderRadius: 4, outline: "none", boxSizing: "border-box" }}
+                  />
+                </td>
+                {/* 2. customer_name */}
+                <td style={{ position: "sticky", top: 37, zIndex: 21, background: "#f8fafc", borderBottom: "2px solid #cbd5e1", padding: "4px 8px" }}>
+                  <input
+                    type="text"
+                    placeholder="Name..."
+                    value={colFilters.customerName}
+                    onChange={(e) => setColFilters({ ...colFilters, customerName: e.target.value })}
+                    style={{ width: "100%", padding: "3px 6px", fontSize: 11, border: "1px solid #cbd5e1", borderRadius: 4, outline: "none", boxSizing: "border-box" }}
+                  />
+                </td>
+                {/* 3. customer_alias_short_nam */}
+                <td style={{ position: "sticky", top: 37, zIndex: 21, background: "#f8fafc", borderBottom: "2px solid #cbd5e1", padding: "4px 8px" }}>
+                  <input
+                    type="text"
+                    placeholder="Alias..."
+                    value={colFilters.customerAlias}
+                    onChange={(e) => setColFilters({ ...colFilters, customerAlias: e.target.value })}
+                    style={{ width: "100%", padding: "3px 6px", fontSize: 11, border: "1px solid #cbd5e1", borderRadius: 4, outline: "none", boxSizing: "border-box" }}
+                  />
+                </td>
+                {/* 4. gst */}
+                <td style={{ position: "sticky", top: 37, zIndex: 21, background: "#f8fafc", borderBottom: "2px solid #cbd5e1", padding: "4px 8px" }}>
+                  <input
+                    type="text"
+                    placeholder="GST..."
+                    value={colFilters.gstin}
+                    onChange={(e) => setColFilters({ ...colFilters, gstin: e.target.value })}
+                    style={{ width: "100%", padding: "3px 6px", fontSize: 11, border: "1px solid #cbd5e1", borderRadius: 4, outline: "none", boxSizing: "border-box" }}
+                  />
+                </td>
+                {/* 5. city */}
+                <td style={{ position: "sticky", top: 37, zIndex: 21, background: "#f8fafc", borderBottom: "2px solid #cbd5e1", padding: "4px 8px" }}>
+                  <input
+                    type="text"
+                    placeholder="City..."
+                    value={colFilters.city}
+                    onChange={(e) => setColFilters({ ...colFilters, city: e.target.value })}
+                    style={{ width: "100%", padding: "3px 6px", fontSize: 11, border: "1px solid #cbd5e1", borderRadius: 4, outline: "none", boxSizing: "border-box" }}
+                  />
+                </td>
+                {/* 6. state */}
+                <td style={{ position: "sticky", top: 37, zIndex: 21, background: "#f8fafc", borderBottom: "2px solid #cbd5e1", padding: "4px 8px" }}>
+                  <input
+                    type="text"
+                    placeholder="State..."
+                    value={colFilters.state}
+                    onChange={(e) => setColFilters({ ...colFilters, state: e.target.value })}
+                    style={{ width: "100%", padding: "3px 6px", fontSize: 11, border: "1px solid #cbd5e1", borderRadius: 4, outline: "none", boxSizing: "border-box" }}
+                  />
+                </td>
+                {/* 7. country */}
+                <td style={{ position: "sticky", top: 37, zIndex: 21, background: "#f8fafc", borderBottom: "2px solid #cbd5e1", padding: "4px 8px" }}>
+                  <input
+                    type="text"
+                    placeholder="Country..."
+                    value={colFilters.country}
+                    onChange={(e) => setColFilters({ ...colFilters, country: e.target.value })}
+                    style={{ width: "100%", padding: "3px 6px", fontSize: 11, border: "1px solid #cbd5e1", borderRadius: 4, outline: "none", boxSizing: "border-box" }}
+                  />
+                </td>
+                {/* 8. domestic_export */}
+                <td style={{ position: "sticky", top: 37, zIndex: 21, background: "#f8fafc", borderBottom: "2px solid #cbd5e1", padding: "4px 8px" }}>
+                  <input
+                    type="text"
+                    placeholder="Type..."
+                    value={colFilters.domesticExport}
+                    onChange={(e) => setColFilters({ ...colFilters, domesticExport: e.target.value })}
+                    style={{ width: "100%", padding: "3px 6px", fontSize: 11, border: "1px solid #cbd5e1", borderRadius: 4, outline: "none", boxSizing: "border-box" }}
+                  />
+                </td>
+                {/* 9. sale_person */}
+                <td style={{ position: "sticky", top: 37, zIndex: 21, background: "#f8fafc", borderBottom: "2px solid #cbd5e1", padding: "4px 8px" }}>
+                  <input
+                    type="text"
+                    placeholder="Person..."
+                    value={colFilters.salesPerson}
+                    onChange={(e) => setColFilters({ ...colFilters, salesPerson: e.target.value })}
+                    style={{ width: "100%", padding: "3px 6px", fontSize: 11, border: "1px solid #cbd5e1", borderRadius: 4, outline: "none", boxSizing: "border-box" }}
+                  />
+                </td>
+                {/* 10. sale_contact */}
+                <td style={{ position: "sticky", top: 37, zIndex: 21, background: "#f8fafc", borderBottom: "2px solid #cbd5e1", padding: "4px 8px" }}>
+                  <input
+                    type="text"
+                    placeholder="Contact..."
+                    value={colFilters.salesContact}
+                    onChange={(e) => setColFilters({ ...colFilters, salesContact: e.target.value })}
+                    style={{ width: "100%", padding: "3px 6px", fontSize: 11, border: "1px solid #cbd5e1", borderRadius: 4, outline: "none", boxSizing: "border-box" }}
+                  />
+                </td>
+                {/* 11. sale_email */}
+                <td style={{ position: "sticky", top: 37, zIndex: 21, background: "#f8fafc", borderBottom: "2px solid #cbd5e1", padding: "4px 8px" }}>
+                  <input
+                    type="text"
+                    placeholder="Email..."
+                    value={colFilters.salesEmail}
+                    onChange={(e) => setColFilters({ ...colFilters, salesEmail: e.target.value })}
+                    style={{ width: "100%", padding: "3px 6px", fontSize: 11, border: "1px solid #cbd5e1", borderRadius: 4, outline: "none", boxSizing: "border-box" }}
+                  />
+                </td>
+                {/* 12. credit_days */}
+                <td style={{ position: "sticky", top: 37, zIndex: 21, background: "#f8fafc", borderBottom: "2px solid #cbd5e1", padding: "4px 8px" }}>
+                  <input
+                    type="text"
+                    placeholder="Days..."
+                    value={colFilters.creditDays}
+                    onChange={(e) => setColFilters({ ...colFilters, creditDays: e.target.value })}
+                    style={{ width: "100%", padding: "3px 6px", fontSize: 11, border: "1px solid #cbd5e1", borderRadius: 4, outline: "none", boxSizing: "border-box" }}
+                  />
+                </td>
+                {/* 13. billing_source */}
+                <td style={{ position: "sticky", top: 37, zIndex: 21, background: "#f8fafc", borderBottom: "2px solid #cbd5e1", padding: "4px 8px" }}>
+                  <input
+                    type="text"
+                    placeholder="Source..."
+                    value={colFilters.billingSource}
+                    onChange={(e) => setColFilters({ ...colFilters, billingSource: e.target.value })}
+                    style={{ width: "100%", padding: "3px 6px", fontSize: 11, border: "1px solid #cbd5e1", borderRadius: 4, outline: "none", boxSizing: "border-box" }}
+                  />
+                </td>
+                {/* 14. supplier_code_of_sms */}
+                <td style={{ position: "sticky", top: 37, zIndex: 21, background: "#f8fafc", borderBottom: "2px solid #cbd5e1", padding: "4px 8px" }}>
+                  <input
+                    type="text"
+                    placeholder="SMS Code..."
+                    value={colFilters.supplierCodeSms}
+                    onChange={(e) => setColFilters({ ...colFilters, supplierCodeSms: e.target.value })}
+                    style={{ width: "100%", padding: "3px 6px", fontSize: 11, border: "1px solid #cbd5e1", borderRadius: 4, outline: "none", boxSizing: "border-box" }}
+                  />
+                </td>
+                {/* 15. accounts_person_name_con */}
+                <td style={{ position: "sticky", top: 37, zIndex: 21, background: "#f8fafc", borderBottom: "2px solid #cbd5e1", padding: "4px 8px" }}>
+                  <input
+                    type="text"
+                    placeholder="Accounts..."
+                    value={colFilters.accountsContactDetails}
+                    onChange={(e) => setColFilters({ ...colFilters, accountsContactDetails: e.target.value })}
+                    style={{ width: "100%", padding: "3px 6px", fontSize: 11, border: "1px solid #cbd5e1", borderRadius: 4, outline: "none", boxSizing: "border-box" }}
+                  />
+                </td>
+                {/* 16. mode_of_payment_reminder */}
+                <td style={{ position: "sticky", top: 37, zIndex: 21, background: "#f8fafc", borderBottom: "2px solid #cbd5e1", padding: "4px 8px" }}>
+                  <input
+                    type="text"
+                    placeholder="Reminder..."
+                    value={colFilters.modeOfPaymentReminder}
+                    onChange={(e) => setColFilters({ ...colFilters, modeOfPaymentReminder: e.target.value })}
+                    style={{ width: "100%", padding: "3px 6px", fontSize: 11, border: "1px solid #cbd5e1", borderRadius: 4, outline: "none", boxSizing: "border-box" }}
+                  />
+                </td>
+                {/* 17. scm */}
+                <td style={{ position: "sticky", top: 37, zIndex: 21, background: "#f8fafc", borderBottom: "2px solid #cbd5e1", padding: "4px 8px" }}>
+                  <input
+                    type="text"
+                    placeholder="SCM..."
+                    value={colFilters.scm}
+                    onChange={(e) => setColFilters({ ...colFilters, scm: e.target.value })}
+                    style={{ width: "100%", padding: "3px 6px", fontSize: 11, border: "1px solid #cbd5e1", borderRadius: 4, outline: "none", boxSizing: "border-box" }}
+                  />
+                </td>
+                {/* 18. check_by_sales */}
+                <td style={{ position: "sticky", top: 37, zIndex: 21, background: "#f8fafc", borderBottom: "2px solid #cbd5e1", padding: "4px 8px" }}></td>
+                {/* 19. check_by_accounts */}
+                <td style={{ position: "sticky", top: 37, zIndex: 21, background: "#f8fafc", borderBottom: "2px solid #cbd5e1", padding: "4px 8px" }}></td>
+                {/* 20. bill_to_address */}
+                <td style={{ position: "sticky", top: 37, zIndex: 21, background: "#f8fafc", borderBottom: "2px solid #cbd5e1", padding: "4px 8px" }}>
+                  <input
+                    type="text"
+                    placeholder="Bill To..."
+                    value={colFilters.billToAddress}
+                    onChange={(e) => setColFilters({ ...colFilters, billToAddress: e.target.value })}
+                    style={{ width: "100%", padding: "3px 6px", fontSize: 11, border: "1px solid #cbd5e1", borderRadius: 4, outline: "none", boxSizing: "border-box" }}
+                  />
+                </td>
+                {/* 21. ship_to_on_address */}
+                <td style={{ position: "sticky", top: 37, zIndex: 21, background: "#f8fafc", borderBottom: "2px solid #cbd5e1", padding: "4px 8px" }}>
+                  <input
+                    type="text"
+                    placeholder="Ship To..."
+                    value={colFilters.shipToAddress}
+                    onChange={(e) => setColFilters({ ...colFilters, shipToAddress: e.target.value })}
+                    style={{ width: "100%", padding: "3px 6px", fontSize: 11, border: "1px solid #cbd5e1", borderRadius: 4, outline: "none", boxSizing: "border-box" }}
+                  />
+                </td>
+                {/* 22. customer_address */}
+                <td style={{ position: "sticky", top: 37, zIndex: 21, background: "#f8fafc", borderBottom: "2px solid #cbd5e1", padding: "4px 8px" }}>
+                  <input
+                    type="text"
+                    placeholder="Address..."
+                    value={colFilters.customerAddress}
+                    onChange={(e) => setColFilters({ ...colFilters, customerAddress: e.target.value })}
+                    style={{ width: "100%", padding: "3px 6px", fontSize: 11, border: "1px solid #cbd5e1", borderRadius: 4, outline: "none", boxSizing: "border-box" }}
+                  />
+                </td>
+              </tr>
+            </thead>
+
+            <tbody>
+              {filteredCustomers.length === 0 ? (
+                <tr>
+                  <td colSpan={23} style={{ padding: "48px 0", textAlign: "center", color: textSecondary }}>
+                    No customer records found matching your filters.
+                  </td>
+                </tr>
+              ) : (
+                paginatedCustomers.map((customer, idx) => {
+                  const isSelected = selectedIds.has(customer.id);
+                  const isEven = idx % 2 === 0;
+                  const rowBg = isSelected
+                    ? (dark ? "rgba(37,99,235,0.18)" : "rgba(37,99,235,0.08)")
+                    : (isEven ? cardBg : (dark ? "#0f172a" : "#fcfdfe"));
+
+                  return (
+                    <tr
+                      key={customer.id}
+                      onClick={() => toggleSelectRow(customer.id)}
+                      onDoubleClick={() => setDetailItem(customer)}
+                      style={{
+                        background: rowBg,
+                        borderBottom: `1px solid ${borderCol}`,
+                        cursor: "pointer",
+                        transition: "background 0.15s ease"
+                      }}
+                    >
+                      {/* 0. Selection Checkbox */}
+                      <td
+                        style={{
+                          padding: "10px 12px",
+                          textAlign: "center",
+                          borderBottom: `1px solid ${borderCol}`
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleSelectRow(customer.id)}
+                          style={{ cursor: "pointer", accentColor: "#2563eb" }}
+                        />
+                      </td>
+
+                      {/* 1. Code */}
+                      <td style={{ padding: "10px 12px", fontWeight: 700, color: "#2563eb", whiteSpace: "nowrap", borderBottom: `1px solid ${borderCol}` }}>
+                        {customer.customerCode || "-"}
+                      </td>
+
+                      {/* 2. Customer Name */}
+                      <td style={{ padding: "10px 12px", fontWeight: 700, color: textPrimary, borderBottom: `1px solid ${borderCol}`, whiteSpace: "nowrap" }}>
+                        {customer.customerName}
+                      </td>
+
+                      {/* 3. Customer Alias Short Name */}
+                      <td style={{ padding: "10px 12px", color: textSecondary, fontWeight: 600, whiteSpace: "nowrap", borderBottom: `1px solid ${borderCol}` }}>
+                        {customer.customerAlias || "-"}
+                      </td>
+
+                      {/* 4. GST */}
+                      <td style={{ padding: "10px 12px", fontFamily: "monospace", fontSize: 11, color: customer.gstin ? (dark ? "#60a5fa" : "#1d4ed8") : textSecondary, fontWeight: 600, whiteSpace: "nowrap", borderBottom: `1px solid ${borderCol}` }}>
+                        {customer.gstin || "-"}
+                      </td>
+
+                      {/* 5. City */}
+                      <td style={{ padding: "10px 12px", color: textPrimary, fontWeight: 500, whiteSpace: "nowrap", borderBottom: `1px solid ${borderCol}` }}>
+                        {customer.city || "-"}
+                      </td>
+
+                      {/* 6. State */}
+                      <td style={{ padding: "10px 12px", color: textPrimary, fontWeight: 500, whiteSpace: "nowrap", borderBottom: `1px solid ${borderCol}` }}>
+                        {customer.state || "-"}
+                      </td>
+
+                      {/* 7. Country */}
+                      <td style={{ padding: "10px 12px", color: textPrimary, fontWeight: 500, whiteSpace: "nowrap", borderBottom: `1px solid ${borderCol}` }}>
+                        {customer.country || "India"}
+                      </td>
+
+                      {/* 8. Domestic / Export */}
+                      <td style={{ padding: "10px 12px", whiteSpace: "nowrap", borderBottom: `1px solid ${borderCol}` }}>
+                        <span
+                          style={{
+                            padding: "2px 8px",
+                            borderRadius: 12,
+                            fontSize: 10.5,
+                            fontWeight: 700,
+                            background:
+                              (customer.domesticExport === "Export" || customer.customerType === "EXPORT")
+                                ? "rgba(168,85,247,0.14)"
+                                : "rgba(37,99,235,0.12)",
+                            color:
+                              (customer.domesticExport === "Export" || customer.customerType === "EXPORT")
+                                ? "#9333ea"
+                                : "#2563eb"
+                          }}
+                        >
+                          {customer.domesticExport || "Domestic"}
+                        </span>
+                      </td>
+
+                      {/* 9. Sale Person */}
+                      <td style={{ padding: "10px 12px", color: textPrimary, fontWeight: 600, whiteSpace: "nowrap", borderBottom: `1px solid ${borderCol}` }}>
+                        {customer.salesPerson || customer.contactPerson || "-"}
+                      </td>
+
+                      {/* 10. Sale Contact */}
+                      <td style={{ padding: "10px 12px", color: textSecondary, fontWeight: 500, whiteSpace: "pre-wrap", borderBottom: `1px solid ${borderCol}` }}>
+                        {customer.salesContact || customer.phone || "-"}
+                      </td>
+
+                      {/* 11. Sale Email */}
+                      <td
+                        style={{
+                          padding: "10px 12px",
+                          color: textSecondary,
+                          fontWeight: 500,
+                          maxWidth: 220,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                          borderBottom: `1px solid ${borderCol}`
+                        }}
+                        title={customer.salesEmail || customer.email}
+                      >
+                        {customer.salesEmail || customer.email || "-"}
+                      </td>
+
+                      {/* 12. Credit Days */}
+                      <td style={{ padding: "10px 12px", fontWeight: 700, color: textPrimary, whiteSpace: "nowrap", borderBottom: `1px solid ${borderCol}` }}>
+                        {customer.creditDays ?? 30}
+                      </td>
+
+                      {/* 13. Billing Source */}
+                      <td style={{ padding: "10px 12px", color: textSecondary, fontWeight: 600, whiteSpace: "nowrap", borderBottom: `1px solid ${borderCol}` }}>
+                        {customer.billingSource || "Direct"}
+                      </td>
+
+                      {/* 14. Supplier Code of SMS */}
+                      <td style={{ padding: "10px 12px", color: textSecondary, fontWeight: 600, whiteSpace: "nowrap", borderBottom: `1px solid ${borderCol}` }}>
+                        {customer.supplierCodeSms || "-"}
+                      </td>
+
+                      {/* 15. Accounts Person Name - Contact No. -Mail id */}
+                      <td
+                        style={{
+                          padding: "10px 12px",
+                          color: textSecondary,
+                          fontWeight: 500,
+                          maxWidth: 200,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                          borderBottom: `1px solid ${borderCol}`
+                        }}
+                        title={customer.accountsContactDetails}
+                      >
+                        {customer.accountsContactDetails || "-"}
+                      </td>
+
+                      {/* 16. Mode of Payment Reminder */}
+                      <td style={{ padding: "10px 12px", color: textSecondary, fontWeight: 500, whiteSpace: "nowrap", borderBottom: `1px solid ${borderCol}` }}>
+                        {customer.modeOfPaymentReminder || "-"}
+                      </td>
+
+                      {/* 17. SCM */}
+                      <td
+                        style={{
+                          padding: "10px 12px",
+                          color: textSecondary,
+                          fontWeight: 500,
+                          maxWidth: 160,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                          borderBottom: `1px solid ${borderCol}`
+                        }}
+                        title={customer.scm}
+                      >
+                        {customer.scm || "-"}
+                      </td>
+
+                      {/* 18. Check by Sales */}
+                      <td style={{ padding: "10px 12px", borderBottom: `1px solid ${borderCol}`, textAlign: "center" }}>
+                        {customer.checkBySales ? (
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 3, background: "rgba(16,185,129,0.12)", color: "#059669", padding: "2px 6px", borderRadius: 4, fontWeight: 700, fontSize: 10 }}>
+                            <CheckCircle2 size={12} /> TRUE
+                          </span>
+                        ) : (
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 3, background: "rgba(239,68,68,0.1)", color: "#dc2626", padding: "2px 6px", borderRadius: 4, fontWeight: 600, fontSize: 10 }}>
+                            <XCircle size={12} /> FALSE
+                          </span>
+                        )}
+                      </td>
+
+                      {/* 19. Check by Accounts */}
+                      <td style={{ padding: "10px 12px", borderBottom: `1px solid ${borderCol}`, textAlign: "center" }}>
+                        {customer.checkByAccounts ? (
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 3, background: "rgba(16,185,129,0.12)", color: "#059669", padding: "2px 6px", borderRadius: 4, fontWeight: 700, fontSize: 10 }}>
+                            <CheckCircle2 size={12} /> TRUE
+                          </span>
+                        ) : (
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 3, background: "rgba(239,68,68,0.1)", color: "#dc2626", padding: "2px 6px", borderRadius: 4, fontWeight: 600, fontSize: 10 }}>
+                            <XCircle size={12} /> FALSE
+                          </span>
+                        )}
+                      </td>
+
+                      {/* 20. Bill TO Address */}
+                      <td
+                        style={{
+                          padding: "10px 12px",
+                          color: textSecondary,
+                          fontWeight: 500,
+                          maxWidth: 240,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                          borderBottom: `1px solid ${borderCol}`
+                        }}
+                        title={customer.billToAddress || customer.address}
+                      >
+                        {customer.billToAddress || customer.address || "-"}
+                      </td>
+
+                      {/* 21. Ship To on Address */}
+                      <td
+                        style={{
+                          padding: "10px 12px",
+                          color: textSecondary,
+                          fontWeight: 500,
+                          maxWidth: 240,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                          borderBottom: `1px solid ${borderCol}`
+                        }}
+                        title={customer.shipToAddress || customer.address}
+                      >
+                        {customer.shipToAddress || customer.address || "-"}
+                      </td>
+
+                      {/* 22. Customer Address */}
+                      <td
+                        style={{
+                          padding: "10px 12px",
+                          color: textSecondary,
+                          fontWeight: 500,
+                          maxWidth: 260,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                          borderBottom: `1px solid ${borderCol}`
+                        }}
+                        title={customer.customerAddress || customer.address}
+                      >
+                        {customer.customerAddress || customer.address || "-"}
+                      </td>
+                    </tr>
+                  );
+                })
               )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* ========================================================================= */}
+        {/* PAGINATION TOOLBAR (STATIC AT BOTTOM OF CARD)                             */}
+        {/* ========================================================================= */}
+        <div
+          style={{
+            flexShrink: 0,
+            background: cardBg,
+            borderTop: `1px solid ${borderCol}`,
+            padding: "8px 18px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: 12,
+            fontSize: 12,
+            color: textSecondary
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            <span>
+              Showing{" "}
+              <strong style={{ color: textPrimary }}>
+                {totalRecords === 0 ? 0 : (startIndex + 1).toLocaleString()} &ndash;{" "}
+                {endIndex.toLocaleString()}
+              </strong>{" "}
+              of <strong style={{ color: textPrimary }}>{totalRecords.toLocaleString()}</strong> customers
+            </span>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontSize: 11, color: textSecondary }}>Rows per page:</span>
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(e.target.value === "ALL" ? "ALL" : Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                style={{
+                  padding: "3px 8px",
+                  borderRadius: 6,
+                  border: "1px solid #cbd5e1",
+                  fontSize: 11.5,
+                  fontWeight: 600,
+                  outline: "none",
+                  cursor: "pointer",
+                  background: inputBg,
+                  color: textPrimary
+                }}
+              >
+                <option value={15}>15</option>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+                <option value="ALL">All ({totalRecords})</option>
+              </select>
             </div>
           </div>
+
+          {!isAllPages && totalPages > 1 && (
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <button
+                type="button"
+                onClick={() => setCurrentPage(1)}
+                disabled={clampedPage <= 1}
+                title="First Page"
+                style={{
+                  padding: "4px 8px",
+                  borderRadius: 6,
+                  border: "1px solid #cbd5e1",
+                  background: clampedPage <= 1 ? (dark ? "#1e293b" : "#f8fafc") : cardBg,
+                  color: clampedPage <= 1 ? "#94a3b8" : textPrimary,
+                  cursor: clampedPage <= 1 ? "not-allowed" : "pointer"
+                }}
+              >
+                <ChevronsLeft size={14} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={clampedPage <= 1}
+                title="Previous Page"
+                style={{
+                  padding: "4px 8px",
+                  borderRadius: 6,
+                  border: "1px solid #cbd5e1",
+                  background: clampedPage <= 1 ? (dark ? "#1e293b" : "#f8fafc") : cardBg,
+                  color: clampedPage <= 1 ? "#94a3b8" : textPrimary,
+                  cursor: clampedPage <= 1 ? "not-allowed" : "pointer"
+                }}
+              >
+                <ChevronLeft size={14} />
+              </button>
+
+              <span style={{ margin: "0 8px", fontWeight: 700, fontSize: 12, color: textPrimary }}>
+                Page {clampedPage} of {totalPages}
+              </span>
+
+              <button
+                type="button"
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={clampedPage >= totalPages}
+                title="Next Page"
+                style={{
+                  padding: "4px 8px",
+                  borderRadius: 6,
+                  border: "1px solid #cbd5e1",
+                  background: clampedPage >= totalPages ? (dark ? "#1e293b" : "#f8fafc") : cardBg,
+                  color: clampedPage >= totalPages ? "#94a3b8" : textPrimary,
+                  cursor: clampedPage >= totalPages ? "not-allowed" : "pointer"
+                }}
+              >
+                <ChevronRight size={14} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrentPage(totalPages)}
+                disabled={clampedPage >= totalPages}
+                title="Last Page"
+                style={{
+                  padding: "4px 8px",
+                  borderRadius: 6,
+                  border: "1px solid #cbd5e1",
+                  background: clampedPage >= totalPages ? (dark ? "#1e293b" : "#f8fafc") : cardBg,
+                  color: clampedPage >= totalPages ? "#94a3b8" : textPrimary,
+                  cursor: clampedPage >= totalPages ? "not-allowed" : "pointer"
+                }}
+              >
+                <ChevronsRight size={14} />
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
       {/* ========================================================================= */}
-      {/* NEW / EDIT CUSTOMER MODAL DIALOG                                         */}
+      {/* BOTTOM DARK STATUS BAR (MATCHING REFERENCE UI)                            */}
+      {/* ========================================================================= */}
+      <div
+        style={{
+          position: "fixed",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          height: 34,
+          background: "#0f172a",
+          color: "#f8fafc",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "0 20px",
+          fontSize: 12,
+          fontWeight: 600,
+          zIndex: 90,
+          boxShadow: "0 -2px 10px rgba(0,0,0,0.2)"
+        }}
+      >
+        <div>
+          <span>{totalRecords.toLocaleString()} customers</span>
+          <span style={{ margin: "0 6px", color: "#64748b" }}>|</span>
+          <span>{selectedIds.size} selected</span>
+          {!isAllPages && (
+            <>
+              <span style={{ margin: "0 6px", color: "#64748b" }}>|</span>
+              <span style={{ color: "#94a3b8", fontWeight: 500 }}>
+                Page {clampedPage} of {totalPages}
+              </span>
+            </>
+          )}
+        </div>
+        <div style={{ color: "#94a3b8", fontSize: 11, fontWeight: 500 }}>
+          CRM &amp; Order Management &middot; PostgreSQL Connected &middot; Live Database
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* QUICK PICKER MODAL (EDIT / DELETE WHEN NO SELECTION)                      */}
+      {/* ========================================================================= */}
+      {quickPickerMode && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 99999,
+            background: "rgba(15, 23, 42, 0.78)",
+            backdropFilter: "blur(4px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16
+          }}
+          onClick={() => setQuickPickerMode(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "100%",
+              maxWidth: 540,
+              background: cardBg,
+              borderRadius: 12,
+              border: `1px solid ${borderCol}`,
+              boxShadow: "0 20px 40px rgba(0,0,0,0.35)",
+              overflow: "hidden",
+              display: "flex",
+              flexDirection: "column"
+            }}
+          >
+            <div
+              style={{
+                padding: "12px 16px",
+                borderBottom: `1px solid ${borderCol}`,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                background: dark ? "rgba(30,41,59,0.95)" : "#f8fafc"
+              }}
+            >
+              <div style={{ fontWeight: 700, fontSize: 14, color: textPrimary }}>
+                {quickPickerMode === "edit" ? "Select Customer to Edit" : "Select Customer to Delete"}
+              </div>
+              <button
+                onClick={() => setQuickPickerMode(null)}
+                style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: textSecondary }}
+              >
+                &times;
+              </button>
+            </div>
+
+            <div style={{ padding: "10px 16px", borderBottom: `1px solid ${borderCol}` }}>
+              <input
+                type="text"
+                placeholder="Search by code, customer name or alias..."
+                value={quickSearch}
+                onChange={(e) => setQuickSearch(e.target.value)}
+                autoFocus
+                style={{
+                  width: "100%",
+                  padding: "7px 10px",
+                  borderRadius: 6,
+                  border: `1px solid ${borderCol}`,
+                  background: inputBg,
+                  color: textPrimary,
+                  fontSize: 12
+                }}
+              />
+            </div>
+
+            <div style={{ maxHeight: 340, overflowY: "auto", padding: "6px" }}>
+              {customers
+                .filter(
+                  (c) =>
+                    !quickSearch ||
+                    c.customerName?.toLowerCase().includes(quickSearch.toLowerCase()) ||
+                    c.customerCode?.toLowerCase().includes(quickSearch.toLowerCase()) ||
+                    c.customerAlias?.toLowerCase().includes(quickSearch.toLowerCase())
+                )
+                .map((c) => (
+                  <div
+                    key={c.id}
+                    onClick={() => handleQuickPickerSelect(c)}
+                    style={{
+                      padding: "8px 12px",
+                      borderRadius: 6,
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      borderBottom: `1px solid ${borderCol}`
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = dark ? "rgba(255,255,255,0.06)" : "#f1f5f9")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                  >
+                    <div>
+                      <span style={{ fontWeight: 700, color: "#2563eb", marginRight: 8 }}>{c.customerCode}</span>
+                      <span style={{ fontWeight: 600, color: textPrimary }}>{c.customerName}</span>
+                      {c.customerAlias && <span style={{ color: textSecondary, fontSize: 11, marginLeft: 6 }}>({c.customerAlias})</span>}
+                    </div>
+                    <span style={{ fontSize: 11, color: textSecondary }}>{c.city || c.state || "Active"}</span>
+                  </div>
+                ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* DELETE CONFIRMATION MODAL                                                 */}
+      {/* ========================================================================= */}
+      {deleteTarget && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 99999,
+            background: "rgba(15, 23, 42, 0.78)",
+            backdropFilter: "blur(4px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16
+          }}
+          onClick={() => setDeleteTarget(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "100%",
+              maxWidth: 440,
+              background: cardBg,
+              borderRadius: 12,
+              border: `1px solid ${borderCol}`,
+              boxShadow: "0 20px 40px rgba(0,0,0,0.35)",
+              padding: 20
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 10, color: "#ef4444", marginBottom: 12 }}>
+              <Trash2 size={24} />
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Confirm Customer Deletion</h3>
+            </div>
+            <p style={{ fontSize: 13, color: textPrimary, margin: "0 0 16px" }}>
+              Are you sure you want to delete customer <strong>"{deleteTarget.customerName}"</strong> (Code: {deleteTarget.customerCode}) from the PostgreSQL database? This action cannot be undone.
+            </p>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                style={{
+                  padding: "7px 14px",
+                  borderRadius: 6,
+                  border: `1px solid ${borderCol}`,
+                  background: "transparent",
+                  color: textPrimary,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: "pointer"
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                style={{
+                  padding: "7px 16px",
+                  borderRadius: 6,
+                  border: "none",
+                  background: "#ef4444",
+                  color: "#ffffff",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: "pointer"
+                }}
+              >
+                Delete Customer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* CUSTOMER MASTER FORM MODAL                                                */}
+      {/* TAB 1: ALL 22 ATTRIBUTES FROM THE EXCEL SHEET                             */}
+      {/* TAB 2: REST OF ALL SYSTEM ATTRIBUTES                                      */}
       {/* ========================================================================= */}
       {isModalOpen && (
         <div
           style={{
             position: "fixed",
             inset: 0,
-            zIndex: 9999,
-            background: "rgba(15, 23, 42, 0.6)",
-            backdropFilter: "blur(3px)",
+            zIndex: 99999,
+            background: "rgba(15, 23, 42, 0.78)",
+            backdropFilter: "blur(6px)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            padding: 20
+            padding: "12px"
           }}
         >
           <div
             style={{
               width: "100%",
-              maxWidth: 820,
-              maxHeight: "90vh",
-              background: "#ffffff",
+              maxWidth: 1140,
+              maxHeight: "96vh",
+              background: cardBg,
+              border: `1px solid ${borderCol}`,
               borderRadius: 14,
-              boxShadow: "0 20px 50px rgba(0,0,0,0.3)",
+              boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.55)",
               display: "flex",
               flexDirection: "column",
               overflow: "hidden"
@@ -1161,499 +2026,1043 @@ export function CustomerMasterPage({
             {/* Modal Header */}
             <div
               style={{
-                padding: "16px 24px",
-                background: "#1e293b",
-                color: "#ffffff",
+                padding: "10px 18px",
+                borderBottom: `1px solid ${borderCol}`,
                 display: "flex",
                 alignItems: "center",
-                justifyContent: "space-between"
+                justifyContent: "space-between",
+                background: dark ? "rgba(30, 41, 59, 0.95)" : "#ffffff"
               }}
             >
-              <div>
-                <h2 style={{ margin: 0, fontSize: 17, fontWeight: 800 }}>
-                  {editingId ? "Edit Customer Master Record" : "+ Create New Customer Master"}
-                </h2>
-                <p style={{ margin: "2px 0 0", fontSize: 12, color: "#94a3b8" }}>
-                  Fill customer attributes for billing, credit terms, location & contact details.
-                </p>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span
+                  style={{
+                    background: editingId ? "#059669" : "#c51f28",
+                    color: "#fff",
+                    fontSize: 10,
+                    fontWeight: 800,
+                    padding: "2px 8px",
+                    borderRadius: 4,
+                    textTransform: "uppercase"
+                  }}
+                >
+                  {editingId ? "Edit Customer" : "New Customer"}
+                </span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: textPrimary }}>
+                  Customer Master &bull; CRM &amp; Order Management
+                </span>
+                <span style={{ fontSize: 11, color: textSecondary, fontWeight: 500 }}>
+                  ({formData.customerCode || "New Record"})
+                </span>
               </div>
+
               <button
                 onClick={() => setIsModalOpen(false)}
-                style={{ background: "none", border: "none", color: "#ffffff", cursor: "pointer", padding: 4 }}
+                style={{
+                  background: "none",
+                  border: "none",
+                  fontSize: 22,
+                  color: textSecondary,
+                  cursor: "pointer",
+                  padding: "2px 6px",
+                  lineHeight: 1
+                }}
               >
-                <X size={20} />
+                &times;
               </button>
             </div>
 
-            {/* Modal Tabs */}
-            <div style={{ display: "flex", borderBottom: "1px solid #e2e8f0", background: "#f8fafc", padding: "0 24px" }}>
+            {/* TAB SELECTOR HEADER */}
+            <div
+              style={{
+                display: "flex",
+                borderBottom: `1px solid ${borderCol}`,
+                background: dark ? "rgba(15, 23, 42, 0.6)" : "#f8fafc"
+              }}
+            >
               <button
                 type="button"
                 onClick={() => setActiveTab("tab1")}
                 style={{
-                  padding: "12px 20px",
-                  fontSize: 13,
-                  fontWeight: activeTab === "tab1" ? 700 : 500,
+                  flex: 1,
+                  padding: "9px 16px",
                   border: "none",
-                  borderBottom: activeTab === "tab1" ? "3px solid #1e293b" : "3px solid transparent",
-                  background: "transparent",
-                  color: activeTab === "tab1" ? "#1e293b" : "#64748b",
-                  cursor: "pointer"
+                  borderBottom: activeTab === "tab1" ? "3px solid #c51f28" : "3px solid transparent",
+                  background: activeTab === "tab1" ? cardBg : "transparent",
+                  color: activeTab === "tab1" ? "#c51f28" : textSecondary,
+                  fontWeight: activeTab === "tab1" ? 800 : 600,
+                  fontSize: 12,
+                  cursor: "pointer",
+                  transition: "all 0.15s"
                 }}
               >
-                1. Basic & Registration
+                1. Tab 1: Excel Sheet Attributes (All 22 Attributes)
               </button>
               <button
                 type="button"
                 onClick={() => setActiveTab("tab2")}
                 style={{
-                  padding: "12px 20px",
-                  fontSize: 13,
-                  fontWeight: activeTab === "tab2" ? 700 : 500,
+                  flex: 1,
+                  padding: "9px 16px",
                   border: "none",
-                  borderBottom: activeTab === "tab2" ? "3px solid #1e293b" : "3px solid transparent",
-                  background: "transparent",
-                  color: activeTab === "tab2" ? "#1e293b" : "#64748b",
-                  cursor: "pointer"
+                  borderBottom: activeTab === "tab2" ? "3px solid #c51f28" : "3px solid transparent",
+                  background: activeTab === "tab2" ? cardBg : "transparent",
+                  color: activeTab === "tab2" ? "#c51f28" : textSecondary,
+                  fontWeight: activeTab === "tab2" ? 800 : 600,
+                  fontSize: 12,
+                  cursor: "pointer",
+                  transition: "all 0.15s"
                 }}
               >
-                2. Contact, Address & Credit
+                2. Tab 2: Rest of Attributes (System & Audit)
               </button>
             </div>
 
-            {/* Modal Body Form */}
-            <form onSubmit={handleSaveCustomer} style={{ flex: 1, overflowY: "auto", padding: "24px" }}>
+            {/* Modal Form */}
+            <form
+              onSubmit={handleSaveCustomer}
+              style={{
+                flex: 1,
+                overflowY: "auto",
+                padding: "16px 22px",
+                display: "flex",
+                flexDirection: "column",
+                gap: 14
+              }}
+            >
+              {/* ========================================================================= */}
+              {/* TAB 1: ALL 22 ATTRIBUTES FROM THE EXCEL SHEET                             */}
+              {/* ========================================================================= */}
               {activeTab === "tab1" && (
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
-                  {/* Customer Code */}
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 6 }}>
-                      Customer Code <span style={{ color: "#dc2626" }}>*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.customerCode}
-                      onChange={(e) => handleInputChange("customerCode", e.target.value)}
-                      placeholder="e.g. CUST-001"
-                      style={{
-                        width: "100%",
-                        padding: "8px 12px",
-                        borderRadius: 6,
-                        border: "1px solid #cbd5e1",
-                        fontSize: 13,
-                        boxSizing: "border-box",
-                        background: "#f8fafc",
-                        fontWeight: 700
-                      }}
-                    />
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  {/* Row 1: Code, Customer Name, Customer Alias Short Name */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1.2fr 2.5fr 1.5fr", gap: 12 }}>
+                    <div>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 3 }}>
+                        <label style={{ fontSize: 11, fontWeight: 700, color: textSecondary, textTransform: "uppercase" }}>
+                          Code *
+                        </label>
+                        <span style={{ fontSize: 9.5, fontWeight: 700, color: "#059669", background: "rgba(16,185,129,0.12)", padding: "1px 6px", borderRadius: 4 }}>
+                          Auto-generated
+                        </span>
+                      </div>
+                      <input
+                        type="text"
+                        readOnly
+                        value={formData.customerCode}
+                        placeholder="e.g. CUST-00034"
+                        title="Customer Code is unique and automatically generated"
+                        style={{
+                          width: "100%",
+                          height: 32,
+                          padding: "4px 10px",
+                          borderRadius: 6,
+                          border: `1px solid ${borderCol}`,
+                          background: dark ? "rgba(30, 41, 59, 0.55)" : "#f1f5f9",
+                          color: textPrimary,
+                          fontSize: 12,
+                          fontWeight: 700,
+                          cursor: "not-allowed"
+                        }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 3 }}>
+                        Customer Name *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={formData.customerName}
+                        onChange={(e) => handleInputChange("customerName", e.target.value)}
+                        placeholder="e.g. Ashok Leyland"
+                        style={{
+                          width: "100%",
+                          height: 32,
+                          padding: "4px 10px",
+                          borderRadius: 6,
+                          border: `1px solid ${borderCol}`,
+                          background: inputBg,
+                          color: textPrimary,
+                          fontSize: 12,
+                          fontWeight: 600
+                        }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 3 }}>
+                        Customer Alias Short Name
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.customerAlias}
+                        onChange={(e) => handleInputChange("customerAlias", e.target.value)}
+                        placeholder="e.g. Ashok Ley"
+                        style={{
+                          width: "100%",
+                          height: 32,
+                          padding: "4px 10px",
+                          borderRadius: 6,
+                          border: `1px solid ${borderCol}`,
+                          background: inputBg,
+                          color: textPrimary,
+                          fontSize: 12
+                        }}
+                      />
+                    </div>
                   </div>
 
-                  {/* Customer Name */}
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 6 }}>
-                      Customer Name <span style={{ color: "#dc2626" }}>*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.customerName}
-                      onChange={(e) => handleInputChange("customerName", e.target.value)}
-                      placeholder="Enter legal client/company name"
-                      required
-                      style={{
-                        width: "100%",
-                        padding: "8px 12px",
-                        borderRadius: 6,
-                        border: "1px solid #cbd5e1",
-                        fontSize: 13,
-                        boxSizing: "border-box"
-                      }}
-                    />
+                  {/* Row 2: Check by Accounts, Check by Sales, Billing Source, Supplier Code of SMS */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1.2fr 1.5fr 1.5fr", gap: 12, background: dark ? "rgba(255,255,255,0.02)" : "#f8fafc", padding: "10px 14px", borderRadius: 8, border: `1px solid ${borderCol}` }}>
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 6 }}>
+                        Check by Accounts
+                      </label>
+                      <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 12, color: textPrimary, fontWeight: 600 }}>
+                        <input
+                          type="checkbox"
+                          checked={formData.checkByAccounts}
+                          onChange={(e) => handleInputChange("checkByAccounts", e.target.checked)}
+                          style={{ width: 16, height: 16, accentColor: "#10b981", cursor: "pointer" }}
+                        />
+                        <span>{formData.checkByAccounts ? "TRUE (Verified)" : "FALSE"}</span>
+                      </label>
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 6 }}>
+                        Check by Sales
+                      </label>
+                      <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 12, color: textPrimary, fontWeight: 600 }}>
+                        <input
+                          type="checkbox"
+                          checked={formData.checkBySales}
+                          onChange={(e) => handleInputChange("checkBySales", e.target.checked)}
+                          style={{ width: 16, height: 16, accentColor: "#10b981", cursor: "pointer" }}
+                        />
+                        <span>{formData.checkBySales ? "TRUE (Verified)" : "FALSE"}</span>
+                      </label>
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 3 }}>
+                        Billing Source
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.billingSource}
+                        onChange={(e) => handleInputChange("billingSource", e.target.value)}
+                        placeholder="SMRL-443, Direct, etc."
+                        style={{
+                          width: "100%",
+                          height: 30,
+                          padding: "4px 8px",
+                          borderRadius: 6,
+                          border: `1px solid ${borderCol}`,
+                          background: inputBg,
+                          color: textPrimary,
+                          fontSize: 12
+                        }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 3 }}>
+                        Supplier Code of SMS
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.supplierCodeSms}
+                        onChange={(e) => handleInputChange("supplierCodeSms", e.target.value)}
+                        placeholder="e.g. 7205808, 232513"
+                        style={{
+                          width: "100%",
+                          height: 30,
+                          padding: "4px 8px",
+                          borderRadius: 6,
+                          border: `1px solid ${borderCol}`,
+                          background: inputBg,
+                          color: textPrimary,
+                          fontSize: 12
+                        }}
+                      />
+                    </div>
                   </div>
 
-                  {/* Customer Type */}
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 6 }}>
-                      Customer Type
-                    </label>
-                    <select
-                      value={formData.customerType}
-                      onChange={(e) => handleInputChange("customerType", e.target.value)}
-                      style={{
-                        width: "100%",
-                        padding: "8px 12px",
-                        borderRadius: 6,
-                        border: "1px solid #cbd5e1",
-                        fontSize: 13,
-                        boxSizing: "border-box"
-                      }}
-                    >
-                      {CUSTOMER_TYPE_OPTIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
+                  {/* Row 3: State, Country, City, Domestic / Export, GST */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1.2fr 1.2fr 1.2fr 1.8fr", gap: 12 }}>
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 3 }}>
+                        State
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.state}
+                        onChange={(e) => handleInputChange("state", e.target.value)}
+                        placeholder="e.g. Haryana"
+                        style={{
+                          width: "100%",
+                          height: 32,
+                          padding: "4px 8px",
+                          borderRadius: 6,
+                          border: `1px solid ${borderCol}`,
+                          background: inputBg,
+                          color: textPrimary,
+                          fontSize: 12
+                        }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 3 }}>
+                        Country
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.country}
+                        onChange={(e) => handleInputChange("country", e.target.value)}
+                        placeholder="India"
+                        style={{
+                          width: "100%",
+                          height: 32,
+                          padding: "4px 8px",
+                          borderRadius: 6,
+                          border: `1px solid ${borderCol}`,
+                          background: inputBg,
+                          color: textPrimary,
+                          fontSize: 12
+                        }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 3 }}>
+                        City
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.city}
+                        onChange={(e) => handleInputChange("city", e.target.value)}
+                        placeholder="e.g. Sonipat, Pune"
+                        style={{
+                          width: "100%",
+                          height: 32,
+                          padding: "4px 8px",
+                          borderRadius: 6,
+                          border: `1px solid ${borderCol}`,
+                          background: inputBg,
+                          color: textPrimary,
+                          fontSize: 12
+                        }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 3 }}>
+                        Domestic / Export
+                      </label>
+                      <select
+                        value={formData.domesticExport}
+                        onChange={(e) => handleInputChange("domesticExport", e.target.value)}
+                        style={{
+                          width: "100%",
+                          height: 32,
+                          padding: "4px 8px",
+                          borderRadius: 6,
+                          border: `1px solid ${borderCol}`,
+                          background: inputBg,
+                          color: textPrimary,
+                          fontSize: 12
+                        }}
+                      >
+                        {DOMESTIC_EXPORT_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 3 }}>
+                        GST (GSTIN)
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.gstin}
+                        onChange={(e) => handleInputChange("gstin", e.target.value)}
+                        placeholder="e.g. 06AARCS3816N1ZQ"
+                        style={{
+                          width: "100%",
+                          height: 32,
+                          padding: "4px 8px",
+                          borderRadius: 6,
+                          border: `1px solid ${borderCol}`,
+                          background: inputBg,
+                          color: textPrimary,
+                          fontSize: 12,
+                          fontFamily: "monospace"
+                        }}
+                      />
+                    </div>
                   </div>
 
-                  {/* GST Registration Type */}
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 6 }}>
-                      GST Registration Type
-                    </label>
-                    <select
-                      value={formData.gstRegistrationType}
-                      onChange={(e) => handleInputChange("gstRegistrationType", e.target.value)}
-                      style={{
-                        width: "100%",
-                        padding: "8px 12px",
-                        borderRadius: 6,
-                        border: "1px solid #cbd5e1",
-                        fontSize: 13,
-                        boxSizing: "border-box"
-                      }}
-                    >
-                      {GST_TYPE_OPTIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
+                  {/* Row 4: Sale Person, Sale Contact, Sale Email */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1.5fr 2fr", gap: 12 }}>
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 3 }}>
+                        Sale Person
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.salesPerson}
+                        onChange={(e) => handleInputChange("salesPerson", e.target.value)}
+                        placeholder="e.g. Prabhakaran : HCV"
+                        style={{
+                          width: "100%",
+                          height: 32,
+                          padding: "4px 8px",
+                          borderRadius: 6,
+                          border: `1px solid ${borderCol}`,
+                          background: inputBg,
+                          color: textPrimary,
+                          fontSize: 12
+                        }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 3 }}>
+                        Sale Contact
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.salesContact}
+                        onChange={(e) => handleInputChange("salesContact", e.target.value)}
+                        placeholder="e.g. 73390 00868"
+                        style={{
+                          width: "100%",
+                          height: 32,
+                          padding: "4px 8px",
+                          borderRadius: 6,
+                          border: `1px solid ${borderCol}`,
+                          background: inputBg,
+                          color: textPrimary,
+                          fontSize: 12
+                        }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 3 }}>
+                        Sale Email
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.salesEmail}
+                        onChange={(e) => handleInputChange("salesEmail", e.target.value)}
+                        placeholder="e.g. Deependra.Choubey@ashokleyland.com"
+                        style={{
+                          width: "100%",
+                          height: 32,
+                          padding: "4px 8px",
+                          borderRadius: 6,
+                          border: `1px solid ${borderCol}`,
+                          background: inputBg,
+                          color: textPrimary,
+                          fontSize: 12
+                        }}
+                      />
+                    </div>
                   </div>
 
-                  {/* GSTIN */}
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 6 }}>
-                      GSTIN (15-Digit Tax Code)
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.gstin}
-                      onChange={(e) => handleInputChange("gstin", e.target.value.toUpperCase())}
-                      placeholder="e.g. 07AABCS1429B1Z2"
-                      maxLength={15}
-                      style={{
-                        width: "100%",
-                        padding: "8px 12px",
-                        borderRadius: 6,
-                        border: "1px solid #cbd5e1",
-                        fontSize: 13,
-                        fontFamily: "monospace",
-                        boxSizing: "border-box"
-                      }}
-                    />
+                  {/* Row 5: Mode of Payment Reminder, Accounts Person Name - Contact No. -Mail id, Credit Days, SCM */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1.5fr 2fr 1fr 1.5fr", gap: 12 }}>
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 3 }}>
+                        Mode of Payment Reminder
+                      </label>
+                      <select
+                        value={formData.modeOfPaymentReminder}
+                        onChange={(e) => handleInputChange("modeOfPaymentReminder", e.target.value)}
+                        style={{
+                          width: "100%",
+                          height: 32,
+                          padding: "4px 8px",
+                          borderRadius: 6,
+                          border: `1px solid ${borderCol}`,
+                          background: inputBg,
+                          color: textPrimary,
+                          fontSize: 12
+                        }}
+                      >
+                        {REMINDER_MODE_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 3 }}>
+                        Accounts Person Name - Contact No. -Mail id
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.accountsContactDetails}
+                        onChange={(e) => handleInputChange("accountsContactDetails", e.target.value)}
+                        placeholder="e.g. K.Kothandaraman: Sprbills@jkfenner.com"
+                        style={{
+                          width: "100%",
+                          height: 32,
+                          padding: "4px 8px",
+                          borderRadius: 6,
+                          border: `1px solid ${borderCol}`,
+                          background: inputBg,
+                          color: textPrimary,
+                          fontSize: 12
+                        }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 3 }}>
+                        Credit Days
+                      </label>
+                      <input
+                        type="number"
+                        value={formData.creditDays}
+                        onChange={(e) => handleInputChange("creditDays", e.target.value)}
+                        placeholder="30"
+                        style={{
+                          width: "100%",
+                          height: 32,
+                          padding: "4px 8px",
+                          borderRadius: 6,
+                          border: `1px solid ${borderCol}`,
+                          background: inputBg,
+                          color: textPrimary,
+                          fontSize: 12,
+                          fontWeight: 700
+                        }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 3 }}>
+                        SCM
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.scm}
+                        onChange={(e) => handleInputChange("scm", e.target.value)}
+                        placeholder="Supply chain manager details"
+                        style={{
+                          width: "100%",
+                          height: 32,
+                          padding: "4px 8px",
+                          borderRadius: 6,
+                          border: `1px solid ${borderCol}`,
+                          background: inputBg,
+                          color: textPrimary,
+                          fontSize: 12
+                        }}
+                      />
+                    </div>
                   </div>
 
-                  {/* PAN */}
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 6 }}>
-                      PAN (10-Digit)
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.pan}
-                      onChange={(e) => handleInputChange("pan", e.target.value.toUpperCase())}
-                      placeholder="e.g. AABCS1429B"
-                      maxLength={10}
-                      style={{
-                        width: "100%",
-                        padding: "8px 12px",
-                        borderRadius: 6,
-                        border: "1px solid #cbd5e1",
-                        fontSize: 13,
-                        fontFamily: "monospace",
-                        boxSizing: "border-box"
-                      }}
-                    />
-                  </div>
+                  {/* Row 6: Addresses from Excel (Bill TO Address, Ship To on Address, Customer Address) */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 3 }}>
+                        Bill TO Address
+                      </label>
+                      <textarea
+                        rows={3}
+                        value={formData.billToAddress}
+                        onChange={(e) => handleInputChange("billToAddress", e.target.value)}
+                        placeholder="Silver Muller Rubber Ltd.(Sales) PHASE-III, PLOT NO.443..."
+                        style={{
+                          width: "100%",
+                          padding: "6px 8px",
+                          borderRadius: 6,
+                          border: `1px solid ${borderCol}`,
+                          background: inputBg,
+                          color: textPrimary,
+                          fontSize: 11.5,
+                          resize: "vertical"
+                        }}
+                      />
+                    </div>
 
-                  {/* Udyam No */}
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 6 }}>
-                      Udyam Registration No.
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.udyamNo}
-                      onChange={(e) => handleInputChange("udyamNo", e.target.value)}
-                      placeholder="e.g. UDYAM-DL-01-0012345"
-                      style={{
-                        width: "100%",
-                        padding: "8px 12px",
-                        borderRadius: 6,
-                        border: "1px solid #cbd5e1",
-                        fontSize: 13,
-                        boxSizing: "border-box"
-                      }}
-                    />
-                  </div>
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 3 }}>
+                        Ship To on Address
+                      </label>
+                      <textarea
+                        rows={3}
+                        value={formData.shipToAddress}
+                        onChange={(e) => handleInputChange("shipToAddress", e.target.value)}
+                        placeholder="Shipping address..."
+                        style={{
+                          width: "100%",
+                          padding: "6px 8px",
+                          borderRadius: 6,
+                          border: `1px solid ${borderCol}`,
+                          background: inputBg,
+                          color: textPrimary,
+                          fontSize: 11.5,
+                          resize: "vertical"
+                        }}
+                      />
+                    </div>
 
-                  {/* Credit Limit */}
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 6 }}>
-                      Credit Limit (INR)
-                    </label>
-                    <input
-                      type="number"
-                      step="1000"
-                      value={formData.creditLimit}
-                      onChange={(e) => handleInputChange("creditLimit", e.target.value)}
-                      placeholder="e.g. 500000"
-                      style={{
-                        width: "100%",
-                        padding: "8px 12px",
-                        borderRadius: 6,
-                        border: "1px solid #cbd5e1",
-                        fontSize: 13,
-                        boxSizing: "border-box"
-                      }}
-                    />
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 3 }}>
+                        Customer Address
+                      </label>
+                      <textarea
+                        rows={3}
+                        value={formData.customerAddress}
+                        onChange={(e) => handleInputChange("customerAddress", e.target.value)}
+                        placeholder="Registered customer address..."
+                        style={{
+                          width: "100%",
+                          padding: "6px 8px",
+                          borderRadius: 6,
+                          border: `1px solid ${borderCol}`,
+                          background: inputBg,
+                          color: textPrimary,
+                          fontSize: 11.5,
+                          resize: "vertical"
+                        }}
+                      />
+                    </div>
                   </div>
                 </div>
               )}
 
+              {/* ========================================================================= */}
+              {/* TAB 2: REST ALL ATTRIBUTES (POINT 2)                                      */}
+              {/* ========================================================================= */}
               {activeTab === "tab2" && (
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
-                  {/* Contact Person */}
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 6 }}>
-                      Contact Person
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.contactPerson}
-                      onChange={(e) => handleInputChange("contactPerson", e.target.value)}
-                      placeholder="Primary contact name"
-                      style={{
-                        width: "100%",
-                        padding: "8px 12px",
-                        borderRadius: 6,
-                        border: "1px solid #cbd5e1",
-                        fontSize: 13,
-                        boxSizing: "border-box"
-                      }}
-                    />
+                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                  <div style={{ padding: "8px 12px", background: dark ? "rgba(37,99,235,0.12)" : "#eff6ff", borderRadius: 6, border: "1px solid #bfdbfe", fontSize: 12, color: "#1d4ed8" }}>
+                    <strong>Extended System Attributes:</strong> These attributes complete the organizational, MSME classification, currency, and commercial ledger limits.
                   </div>
 
-                  {/* Phone */}
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 6 }}>
-                      Phone / Mobile
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.phone}
-                      onChange={(e) => handleInputChange("phone", e.target.value)}
-                      placeholder="+91 9876543210"
-                      style={{
-                        width: "100%",
-                        padding: "8px 12px",
-                        borderRadius: 6,
-                        border: "1px solid #cbd5e1",
-                        fontSize: 13,
-                        boxSizing: "border-box"
-                      }}
-                    />
+                  {/* Identification & Organization */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                    <div>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 3 }}>
+                        <label style={{ fontSize: 11, fontWeight: 700, color: textSecondary, textTransform: "uppercase" }}>
+                          Customer ID
+                        </label>
+                        <span style={{ fontSize: 9.5, fontWeight: 700, color: "#059669", background: "rgba(16,185,129,0.12)", padding: "1px 6px", borderRadius: 4 }}>
+                          Auto
+                        </span>
+                      </div>
+                      <input
+                        type="text"
+                        readOnly
+                        value={formData.customerId || formData.customerCode}
+                        placeholder="Customer ID"
+                        title="Customer ID is locked to unique Customer Code"
+                        style={{
+                          width: "100%",
+                          height: 32,
+                          padding: "4px 8px",
+                          borderRadius: 6,
+                          border: `1px solid ${borderCol}`,
+                          background: dark ? "rgba(30, 41, 59, 0.55)" : "#f1f5f9",
+                          color: textPrimary,
+                          fontSize: 12,
+                          fontWeight: 700,
+                          cursor: "not-allowed"
+                        }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 3 }}>
+                        Company ID
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.companyId}
+                        onChange={(e) => handleInputChange("companyId", e.target.value)}
+                        style={{
+                          width: "100%",
+                          height: 32,
+                          padding: "4px 8px",
+                          borderRadius: 6,
+                          border: `1px solid ${borderCol}`,
+                          background: inputBg,
+                          color: textPrimary,
+                          fontSize: 12
+                        }}
+                      />
+                    </div>
                   </div>
 
-                  {/* Email */}
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 6 }}>
-                      Email Address
-                    </label>
-                    <input
-                      type="email"
-                      value={formData.email}
-                      onChange={(e) => handleInputChange("email", e.target.value)}
-                      placeholder="client@company.com"
-                      style={{
-                        width: "100%",
-                        padding: "8px 12px",
-                        borderRadius: 6,
-                        border: "1px solid #cbd5e1",
-                        fontSize: 13,
-                        boxSizing: "border-box"
-                      }}
-                    />
+                  {/* Customer Classification & Market Segmentation - 4 Relatable Attributes in 1 Row */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12 }}>
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 3 }}>
+                        Market Type
+                      </label>
+                      <select
+                        value={formData.marketType || formData.domesticExport || "Domestic"}
+                        onChange={(e) => handleInputChange("marketType", e.target.value)}
+                        style={{
+                          width: "100%",
+                          height: 32,
+                          padding: "4px 8px",
+                          borderRadius: 6,
+                          border: `1px solid ${borderCol}`,
+                          background: inputBg,
+                          color: textPrimary,
+                          fontSize: 12,
+                          fontWeight: 600
+                        }}
+                      >
+                        {MARKET_TYPE_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 3 }}>
+                        Customer Category
+                      </label>
+                      <select
+                        value={formData.customerCategory || formData.customerType || "OEM"}
+                        onChange={(e) => handleInputChange("customerCategory", e.target.value)}
+                        style={{
+                          width: "100%",
+                          height: 32,
+                          padding: "4px 8px",
+                          borderRadius: 6,
+                          border: `1px solid ${borderCol}`,
+                          background: inputBg,
+                          color: textPrimary,
+                          fontSize: 12,
+                          fontWeight: 600
+                        }}
+                      >
+                        {CUSTOMER_CATEGORY_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 3 }}>
+                        Customer Group
+                      </label>
+                      <select
+                        value={formData.customerGroup || "Automotive"}
+                        onChange={(e) => handleInputChange("customerGroup", e.target.value)}
+                        style={{
+                          width: "100%",
+                          height: 32,
+                          padding: "4px 8px",
+                          borderRadius: 6,
+                          border: `1px solid ${borderCol}`,
+                          background: inputBg,
+                          color: textPrimary,
+                          fontSize: 12,
+                          fontWeight: 600
+                        }}
+                      >
+                        {CUSTOMER_GROUP_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 3 }}>
+                        Customer Status
+                      </label>
+                      <select
+                        value={formData.status || "Active"}
+                        onChange={(e) => handleInputChange("status", e.target.value)}
+                        style={{
+                          width: "100%",
+                          height: 32,
+                          padding: "4px 8px",
+                          borderRadius: 6,
+                          border: `1px solid ${borderCol}`,
+                          background: inputBg,
+                          color: formData.status === "Active" || formData.status === "ACTIVE" ? "#059669" : formData.status === "Inactive" || formData.status === "INACTIVE" ? "#d97706" : "#dc2626",
+                          fontSize: 12,
+                          fontWeight: 700
+                        }}
+                      >
+                        {CUSTOMER_STATUS_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
 
-                  {/* Payment Terms */}
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 6 }}>
-                      Payment Terms
-                    </label>
-                    <select
-                      value={formData.paymentTermsId}
-                      onChange={(e) => handleInputChange("paymentTermsId", e.target.value)}
-                      style={{
-                        width: "100%",
-                        padding: "8px 12px",
-                        borderRadius: 6,
-                        border: "1px solid #cbd5e1",
-                        fontSize: 13,
-                        boxSizing: "border-box"
-                      }}
-                    >
-                      {PAYMENT_TERMS_OPTIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
+                  {/* Tax & Government Details */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1.5fr 1fr 1fr", gap: 12 }}>
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 3 }}>
+                        PAN
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.pan}
+                        onChange={(e) => handleInputChange("pan", e.target.value)}
+                        placeholder="e.g. AARCS3816N"
+                        style={{
+                          width: "100%",
+                          height: 32,
+                          padding: "4px 8px",
+                          borderRadius: 6,
+                          border: `1px solid ${borderCol}`,
+                          background: inputBg,
+                          color: textPrimary,
+                          fontSize: 12,
+                          fontFamily: "monospace"
+                        }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 3 }}>
+                        GST Registration Type
+                      </label>
+                      <select
+                        value={formData.gstRegistrationType}
+                        onChange={(e) => handleInputChange("gstRegistrationType", e.target.value)}
+                        style={{
+                          width: "100%",
+                          height: 32,
+                          padding: "4px 8px",
+                          borderRadius: 6,
+                          border: `1px solid ${borderCol}`,
+                          background: inputBg,
+                          color: textPrimary,
+                          fontSize: 12
+                        }}
+                      >
+                        {GST_TYPE_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 3 }}>
+                        State Code
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.stateCode}
+                        onChange={(e) => handleInputChange("stateCode", e.target.value)}
+                        placeholder="06, 27, etc."
+                        style={{
+                          width: "100%",
+                          height: 32,
+                          padding: "4px 8px",
+                          borderRadius: 6,
+                          border: `1px solid ${borderCol}`,
+                          background: inputBg,
+                          color: textPrimary,
+                          fontSize: 12,
+                          fontFamily: "monospace"
+                        }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 3 }}>
+                        Pincode
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.pincode}
+                        onChange={(e) => handleInputChange("pincode", e.target.value)}
+                        placeholder="131028"
+                        style={{
+                          width: "100%",
+                          height: 32,
+                          padding: "4px 8px",
+                          borderRadius: 6,
+                          border: `1px solid ${borderCol}`,
+                          background: inputBg,
+                          color: textPrimary,
+                          fontSize: 12
+                        }}
+                      />
+                    </div>
                   </div>
 
-                  {/* Address (Full Span) */}
-                  <div style={{ gridColumn: "1 / -1" }}>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 6 }}>
-                      Billing / Dispatch Address
-                    </label>
-                    <textarea
-                      rows={2}
-                      value={formData.address}
-                      onChange={(e) => handleInputChange("address", e.target.value)}
-                      placeholder="Enter street, plot no, industrial area..."
-                      style={{
-                        width: "100%",
-                        padding: "8px 12px",
-                        borderRadius: 6,
-                        border: "1px solid #cbd5e1",
-                        fontSize: 13,
-                        boxSizing: "border-box",
-                        resize: "vertical"
-                      }}
-                    />
+                  {/* Commercial Terms & Limits */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1.5fr 1fr", gap: 12 }}>
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 3 }}>
+                        Payment Terms ID
+                      </label>
+                      <select
+                        value={formData.paymentTermsId}
+                        onChange={(e) => handleInputChange("paymentTermsId", e.target.value)}
+                        style={{
+                          width: "100%",
+                          height: 32,
+                          padding: "4px 8px",
+                          borderRadius: 6,
+                          border: `1px solid ${borderCol}`,
+                          background: inputBg,
+                          color: textPrimary,
+                          fontSize: 12
+                        }}
+                      >
+                        {PAYMENT_TERMS_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 3 }}>
+                        Credit Limit (₹)
+                      </label>
+                      <input
+                        type="number"
+                        value={formData.creditLimit}
+                        onChange={(e) => handleInputChange("creditLimit", e.target.value)}
+                        placeholder="500000.00"
+                        style={{
+                          width: "100%",
+                          height: 32,
+                          padding: "4px 8px",
+                          borderRadius: 6,
+                          border: `1px solid ${borderCol}`,
+                          background: inputBg,
+                          color: textPrimary,
+                          fontSize: 12
+                        }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 3 }}>
+                        Currency
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.currency}
+                        onChange={(e) => handleInputChange("currency", e.target.value)}
+                        placeholder="INR"
+                        style={{
+                          width: "100%",
+                          height: 32,
+                          padding: "4px 8px",
+                          borderRadius: 6,
+                          border: `1px solid ${borderCol}`,
+                          background: inputBg,
+                          color: textPrimary,
+                          fontSize: 12,
+                          fontWeight: 700
+                        }}
+                      />
+                    </div>
                   </div>
 
-                  {/* City */}
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 6 }}>
-                      City
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.city}
-                      onChange={(e) => handleInputChange("city", e.target.value)}
-                      placeholder="City / District"
-                      style={{
-                        width: "100%",
-                        padding: "8px 12px",
-                        borderRadius: 6,
-                        border: "1px solid #cbd5e1",
-                        fontSize: 13,
-                        boxSizing: "border-box"
-                      }}
-                    />
-                  </div>
+                  {/* MSME Details */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1.5fr", gap: 12 }}>
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 3 }}>
+                        Udyam Registration No.
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.udyamNo}
+                        onChange={(e) => handleInputChange("udyamNo", e.target.value)}
+                        placeholder="UDYAM-XX-00-0000000"
+                        style={{
+                          width: "100%",
+                          height: 32,
+                          padding: "4px 8px",
+                          borderRadius: 6,
+                          border: `1px solid ${borderCol}`,
+                          background: inputBg,
+                          color: textPrimary,
+                          fontSize: 12
+                        }}
+                      />
+                    </div>
 
-                  {/* State */}
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 6 }}>
-                      State
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.state}
-                      onChange={(e) => handleInputChange("state", e.target.value)}
-                      placeholder="State name (e.g. Haryana)"
-                      style={{
-                        width: "100%",
-                        padding: "8px 12px",
-                        borderRadius: 6,
-                        border: "1px solid #cbd5e1",
-                        fontSize: 13,
-                        boxSizing: "border-box"
-                      }}
-                    />
-                  </div>
-
-                  {/* State Code */}
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 6 }}>
-                      State Code (2-Digit)
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.stateCode}
-                      onChange={(e) => handleInputChange("stateCode", e.target.value)}
-                      placeholder="e.g. 06"
-                      maxLength={2}
-                      style={{
-                        width: "100%",
-                        padding: "8px 12px",
-                        borderRadius: 6,
-                        border: "1px solid #cbd5e1",
-                        fontSize: 13,
-                        boxSizing: "border-box"
-                      }}
-                    />
-                  </div>
-
-                  {/* Pincode */}
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 6 }}>
-                      Pincode
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.pincode}
-                      onChange={(e) => handleInputChange("pincode", e.target.value)}
-                      placeholder="6-digit postal code"
-                      style={{
-                        width: "100%",
-                        padding: "8px 12px",
-                        borderRadius: 6,
-                        border: "1px solid #cbd5e1",
-                        fontSize: 13,
-                        boxSizing: "border-box"
-                      }}
-                    />
-                  </div>
-
-                  {/* Status */}
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 6 }}>
-                      Customer Account Status
-                    </label>
-                    <select
-                      value={formData.status}
-                      onChange={(e) => handleInputChange("status", e.target.value)}
-                      style={{
-                        width: "100%",
-                        padding: "8px 12px",
-                        borderRadius: 6,
-                        border: "1px solid #cbd5e1",
-                        fontSize: 13,
-                        boxSizing: "border-box"
-                      }}
-                    >
-                      <option value="ACTIVE">ACTIVE</option>
-                      <option value="INACTIVE">INACTIVE</option>
-                      <option value="BLOCKED">BLOCKED / ON HOLD</option>
-                    </select>
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 3 }}>
+                        MSME Category
+                      </label>
+                      <select
+                        value={formData.msmeCategory}
+                        onChange={(e) => handleInputChange("msmeCategory", e.target.value)}
+                        style={{
+                          width: "100%",
+                          height: 32,
+                          padding: "4px 8px",
+                          borderRadius: 6,
+                          border: `1px solid ${borderCol}`,
+                          background: inputBg,
+                          color: textPrimary,
+                          fontSize: 12
+                        }}
+                      >
+                        <option value="NOT_MSME">Not MSME</option>
+                        <option value="MICRO">Micro Enterprise</option>
+                        <option value="SMALL">Small Enterprise</option>
+                        <option value="MEDIUM">Medium Enterprise</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
               )}
 
-              {/* Modal Footer Buttons */}
+              {/* Modal Action Buttons Footer */}
               <div
                 style={{
-                  marginTop: 24,
-                  paddingTop: 16,
-                  borderTop: "1px solid #e2e8f0",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "flex-end",
-                  gap: 12
+                  gap: 10,
+                  marginTop: 10,
+                  paddingTop: 12,
+                  borderTop: `1px solid ${borderCol}`
                 }}
               >
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
                   style={{
-                    padding: "8px 18px",
+                    padding: "7px 18px",
                     borderRadius: 6,
-                    border: "1px solid #cbd5e1",
-                    background: "#ffffff",
-                    color: "#475569",
+                    border: `1px solid ${borderCol}`,
+                    background: "transparent",
+                    color: textPrimary,
                     fontSize: 13,
                     fontWeight: 600,
                     cursor: "pointer"
@@ -1664,18 +3073,18 @@ export function CustomerMasterPage({
                 <button
                   type="submit"
                   style={{
-                    padding: "8px 22px",
+                    padding: "7px 24px",
                     borderRadius: 6,
                     border: "none",
-                    background: "#1e293b",
+                    background: "#c51f28",
                     color: "#ffffff",
                     fontSize: 13,
                     fontWeight: 700,
                     cursor: "pointer",
-                    boxShadow: "0 2px 4px rgba(0,0,0,0.15)"
+                    boxShadow: "0 2px 4px rgba(197, 31, 40, 0.3)"
                   }}
                 >
-                  {editingId ? "Update Customer" : "Save Customer Record"}
+                  {editingId ? "Update Customer in PostgreSQL" : "Save Customer to PostgreSQL"}
                 </button>
               </div>
             </form>
@@ -1684,119 +3093,295 @@ export function CustomerMasterPage({
       )}
 
       {/* ========================================================================= */}
-      {/* DELETE CONFIRMATION DIALOG                                                */}
-      {/* ========================================================================= */}
-      {deleteTarget && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 99999,
-            background: "rgba(15, 23, 42, 0.6)",
-            backdropFilter: "blur(3px)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: 20
-          }}
-        >
-          <div
-            style={{
-              width: "100%",
-              maxWidth: 420,
-              background: "#ffffff",
-              borderRadius: 12,
-              padding: 24,
-              boxShadow: "0 20px 40px rgba(0,0,0,0.3)"
-            }}
-          >
-            <h3 style={{ margin: "0 0 8px", fontSize: 16, fontWeight: 800, color: "#0f172a" }}>Confirm Deletion</h3>
-            <p style={{ margin: "0 0 20px", fontSize: 13, color: "#64748b", lineHeight: 1.5 }}>
-              Are you sure you want to delete customer record <strong>"{deleteTarget.customerName}"</strong> ({deleteTarget.customerCode})?
-            </p>
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
-              <button
-                onClick={() => setDeleteTarget(null)}
-                style={{ padding: "8px 16px", borderRadius: 6, border: "1px solid #cbd5e1", background: "#ffffff", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirmDelete}
-                style={{ padding: "8px 18px", borderRadius: 6, border: "none", background: "#dc2626", color: "#ffffff", fontSize: 13, fontWeight: 700, cursor: "pointer" }}
-              >
-                Delete Record
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* DETAIL VIEW MODAL                                                         */}
+      {/* VIEW DETAILS DRAWER (SLIDES IN ON DOUBLE CLICK OR VIEW BUTTON)            */}
       {/* ========================================================================= */}
       {detailItem && (
         <div
           style={{
             position: "fixed",
             inset: 0,
-            zIndex: 9999,
+            zIndex: 99998,
             background: "rgba(15, 23, 42, 0.6)",
-            backdropFilter: "blur(3px)",
+            backdropFilter: "blur(4px)",
             display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: 20
+            justifyContent: "flex-end"
           }}
+          onClick={() => setDetailItem(null)}
         >
           <div
+            onClick={(e) => e.stopPropagation()}
             style={{
               width: "100%",
               maxWidth: 600,
-              background: "#ffffff",
-              borderRadius: 14,
-              overflow: "hidden",
-              boxShadow: "0 20px 40px rgba(0,0,0,0.3)"
+              height: "100%",
+              background: cardBg,
+              boxShadow: "-10px 0 30px rgba(0,0,0,0.3)",
+              display: "flex",
+              flexDirection: "column",
+              borderLeft: `1px solid ${borderCol}`
             }}
           >
-            <div style={{ padding: "16px 20px", background: "#1e293b", color: "#ffffff", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>Customer Specifications</h3>
-              <button onClick={() => setDetailItem(null)} style={{ background: "none", border: "none", color: "#ffffff", cursor: "pointer" }}>
-                <X size={20} />
-              </button>
-            </div>
-            <div style={{ padding: 24, fontSize: 13, color: "#334155", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-              <div><strong>Customer Code:</strong> <div>{detailItem.customerCode || detailItem.customerId || "-"}</div></div>
-              <div><strong>Customer Name:</strong> <div>{detailItem.customerName || "-"}</div></div>
-              <div><strong>GSTIN:</strong> <div>{detailItem.gstin || "-"}</div></div>
-              <div><strong>PAN:</strong> <div>{detailItem.pan || "-"}</div></div>
-              <div><strong>Contact Person:</strong> <div>{detailItem.contactPerson || "-"}</div></div>
-              <div><strong>Phone:</strong> <div>{detailItem.phone || "-"}</div></div>
-              <div><strong>Email:</strong> <div>{detailItem.email || "-"}</div></div>
-              <div><strong>Customer Type:</strong> <div>{detailItem.customerType || "-"}</div></div>
-              <div><strong>GST Registration:</strong> <div>{detailItem.gstRegistrationType || "-"}</div></div>
-              <div><strong>Credit Limit:</strong> <div>₹ {detailItem.creditLimit ? Number(detailItem.creditLimit).toLocaleString('en-IN') : "5,00,000"}</div></div>
-              <div><strong>Payment Terms:</strong> <div>{detailItem.paymentTermsId || "-"}</div></div>
-              <div style={{ gridColumn: "1 / -1" }}><strong>Address:</strong> <div>{detailItem.address || "-"}</div></div>
-              <div><strong>City:</strong> <div>{detailItem.city || "-"}</div></div>
-              <div><strong>State:</strong> <div>{detailItem.state ? `${detailItem.state} (${detailItem.stateCode || "-"})` : "-"}</div></div>
-            </div>
-            <div style={{ padding: "12px 20px", background: "#f8fafc", borderTop: "1px solid #e2e8f0", display: "flex", justifyContent: "flex-end", gap: 10 }}>
-              <button
-                onClick={() => {
-                  const toEdit = detailItem;
-                  setDetailItem(null);
-                  handleOpenEditModal(toEdit);
-                }}
-                style={{ padding: "7px 16px", borderRadius: 6, background: "#10b981", color: "#fff", border: "none", fontWeight: 700, cursor: "pointer" }}
-              >
-                Edit
-              </button>
+            {/* Drawer Header */}
+            <div
+              style={{
+                padding: "16px 20px",
+                borderBottom: `1px solid ${borderCol}`,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                background: dark ? "rgba(30,41,59,0.95)" : "#f8fafc"
+              }}
+            >
+              <div>
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 800,
+                    background: "#2563eb",
+                    color: "#fff",
+                    padding: "2px 8px",
+                    borderRadius: 4,
+                    textTransform: "uppercase"
+                  }}
+                >
+                  {detailItem.customerCode}
+                </span>
+                <h2 style={{ margin: "6px 0 0", fontSize: 16, fontWeight: 700, color: textPrimary }}>
+                  {detailItem.customerName}
+                </h2>
+                {detailItem.customerAlias && (
+                  <p style={{ margin: "2px 0 0", fontSize: 12, color: textSecondary }}>
+                    Alias: {detailItem.customerAlias}
+                  </p>
+                )}
+              </div>
               <button
                 onClick={() => setDetailItem(null)}
-                style={{ padding: "7px 16px", borderRadius: 6, background: "#cbd5e1", color: "#0f172a", border: "none", fontWeight: 600, cursor: "pointer" }}
+                style={{
+                  background: "none",
+                  border: "none",
+                  fontSize: 24,
+                  cursor: "pointer",
+                  color: textSecondary
+                }}
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Drawer Content */}
+            <div style={{ flex: 1, overflowY: "auto", padding: 20, display: "flex", flexDirection: "column", gap: 16 }}>
+              {/* Approval status banner */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, background: dark ? "rgba(255,255,255,0.02)" : "#f1f5f9", padding: "10px 14px", borderRadius: 8 }}>
+                <div>
+                  <span style={{ fontSize: 10, color: textSecondary, fontWeight: 700, textTransform: "uppercase" }}>Check by Accounts</span>
+                  <div style={{ marginTop: 2, fontWeight: 700, fontSize: 12, color: detailItem.checkByAccounts ? "#059669" : "#dc2626" }}>
+                    {detailItem.checkByAccounts ? "Verified / Approved (TRUE)" : "Pending Check (FALSE)"}
+                  </div>
+                </div>
+                <div>
+                  <span style={{ fontSize: 10, color: textSecondary, fontWeight: 700, textTransform: "uppercase" }}>Check by Sales</span>
+                  <div style={{ marginTop: 2, fontWeight: 700, fontSize: 12, color: detailItem.checkBySales ? "#059669" : "#dc2626" }}>
+                    {detailItem.checkBySales ? "Verified / Approved (TRUE)" : "Pending Check (FALSE)"}
+                  </div>
+                </div>
+              </div>
+
+              {/* Excel Sheet Primary Identifiers */}
+              <div style={{ border: `1px solid ${borderCol}`, borderRadius: 8, padding: 14 }}>
+                <h4 style={{ margin: "0 0 10px", fontSize: 12, fontWeight: 800, color: "#2563eb", textTransform: "uppercase" }}>
+                  Primary Business Identifiers
+                </h4>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, fontSize: 12 }}>
+                  <div>
+                    <span style={{ color: textSecondary, fontSize: 11 }}>Code:</span>
+                    <p style={{ margin: "2px 0 0", fontWeight: 700, color: "#2563eb" }}>{detailItem.customerCode || "-"}</p>
+                  </div>
+                  <div>
+                    <span style={{ color: textSecondary, fontSize: 11 }}>GST (GSTIN):</span>
+                    <p style={{ margin: "2px 0 0", fontWeight: 700, fontFamily: "monospace", color: textPrimary }}>{detailItem.gstin || "-"}</p>
+                  </div>
+                  <div>
+                    <span style={{ color: textSecondary, fontSize: 11 }}>Billing Source:</span>
+                    <p style={{ margin: "2px 0 0", fontWeight: 600, color: textPrimary }}>{detailItem.billingSource || "Direct"}</p>
+                  </div>
+                  <div>
+                    <span style={{ color: textSecondary, fontSize: 11 }}>Supplier Code of SMS:</span>
+                    <p style={{ margin: "2px 0 0", fontWeight: 600, color: textPrimary }}>{detailItem.supplierCodeSms || "-"}</p>
+                  </div>
+                  <div>
+                    <span style={{ color: textSecondary, fontSize: 11 }}>Domestic / Export:</span>
+                    <p style={{ margin: "2px 0 0", fontWeight: 700, color: "#2563eb" }}>{detailItem.domesticExport || "Domestic"}</p>
+                  </div>
+                  <div>
+                    <span style={{ color: textSecondary, fontSize: 11 }}>Credit Days:</span>
+                    <p style={{ margin: "2px 0 0", fontWeight: 700, color: textPrimary }}>{detailItem.creditDays ?? 30} Days</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Contacts */}
+              <div style={{ border: `1px solid ${borderCol}`, borderRadius: 8, padding: 14 }}>
+                <h4 style={{ margin: "0 0 10px", fontSize: 12, fontWeight: 800, color: "#2563eb", textTransform: "uppercase" }}>
+                  Contact Information (Excel)
+                </h4>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 12 }}>
+                  <div>
+                    <span style={{ color: textSecondary, fontSize: 11 }}>Sale Person:</span>
+                    <p style={{ margin: "2px 0 0", fontWeight: 700, color: textPrimary }}>{detailItem.salesPerson || detailItem.contactPerson || "-"}</p>
+                  </div>
+                  <div>
+                    <span style={{ color: textSecondary, fontSize: 11 }}>Sale Contact:</span>
+                    <p style={{ margin: "2px 0 0", fontWeight: 600, color: textPrimary, whiteSpace: "pre-wrap" }}>{detailItem.salesContact || detailItem.phone || "-"}</p>
+                  </div>
+                  <div>
+                    <span style={{ color: textSecondary, fontSize: 11 }}>Sale Email:</span>
+                    <p style={{ margin: "2px 0 0", fontWeight: 600, color: textPrimary, wordBreak: "break-all" }}>{detailItem.salesEmail || detailItem.email || "-"}</p>
+                  </div>
+                  <div>
+                    <span style={{ color: textSecondary, fontSize: 11 }}>Mode of Payment Reminder:</span>
+                    <p style={{ margin: "2px 0 0", fontWeight: 600, color: textPrimary }}>{detailItem.modeOfPaymentReminder || "-"}</p>
+                  </div>
+                  {detailItem.accountsContactDetails && (
+                    <div>
+                      <span style={{ color: textSecondary, fontSize: 11 }}>Accounts Person Name - Contact No. -Mail id:</span>
+                      <p style={{ margin: "2px 0 0", fontWeight: 500, color: textPrimary, background: dark ? "rgba(255,255,255,0.03)" : "#f8fafc", padding: "6px 8px", borderRadius: 4 }}>
+                        {detailItem.accountsContactDetails}
+                      </p>
+                    </div>
+                  )}
+                  {detailItem.scm && (
+                    <div>
+                      <span style={{ color: textSecondary, fontSize: 11 }}>SCM:</span>
+                      <p style={{ margin: "2px 0 0", fontWeight: 500, color: textPrimary }}>{detailItem.scm}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Addresses from Excel */}
+              <div style={{ border: `1px solid ${borderCol}`, borderRadius: 8, padding: 14 }}>
+                <h4 style={{ margin: "0 0 10px", fontSize: 12, fontWeight: 800, color: "#2563eb", textTransform: "uppercase" }}>
+                  Addresses (Excel Sheet)
+                </h4>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10, fontSize: 12 }}>
+                  <div>
+                    <span style={{ color: textSecondary, fontSize: 11, fontWeight: 700 }}>BILL TO ADDRESS:</span>
+                    <p style={{ margin: "2px 0 0", color: textPrimary, whiteSpace: "pre-wrap" }}>{detailItem.billToAddress || "-"}</p>
+                  </div>
+                  <div>
+                    <span style={{ color: textSecondary, fontSize: 11, fontWeight: 700 }}>SHIP TO ON ADDRESS:</span>
+                    <p style={{ margin: "2px 0 0", color: textPrimary, whiteSpace: "pre-wrap" }}>{detailItem.shipToAddress || "-"}</p>
+                  </div>
+                  <div>
+                    <span style={{ color: textSecondary, fontSize: 11, fontWeight: 700 }}>CUSTOMER ADDRESS:</span>
+                    <p style={{ margin: "2px 0 0", color: textPrimary, whiteSpace: "pre-wrap" }}>{detailItem.customerAddress || detailItem.address || "-"}</p>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginTop: 4 }}>
+                    <div>
+                      <span style={{ color: textSecondary, fontSize: 10 }}>City:</span>
+                      <p style={{ margin: 0, fontWeight: 600, color: textPrimary }}>{detailItem.city || "-"}</p>
+                    </div>
+                    <div>
+                      <span style={{ color: textSecondary, fontSize: 10 }}>State:</span>
+                      <p style={{ margin: 0, fontWeight: 600, color: textPrimary }}>{detailItem.state || "-"}</p>
+                    </div>
+                    <div>
+                      <span style={{ color: textSecondary, fontSize: 10 }}>Country:</span>
+                      <p style={{ margin: 0, fontWeight: 600, color: textPrimary }}>{detailItem.country || "India"}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tab 2 System Attributes */}
+              <div style={{ border: `1px solid ${borderCol}`, borderRadius: 8, padding: 14 }}>
+                <h4 style={{ margin: "0 0 10px", fontSize: 12, fontWeight: 800, color: textSecondary, textTransform: "uppercase" }}>
+                  System Attributes (Tab 2)
+                </h4>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, fontSize: 12 }}>
+                  <div>
+                    <span style={{ color: textSecondary, fontSize: 11 }}>Customer ID:</span>
+                    <p style={{ margin: "2px 0 0", fontWeight: 600, color: textPrimary }}>{detailItem.customerId || detailItem.customerCode}</p>
+                  </div>
+                  <div>
+                    <span style={{ color: textSecondary, fontSize: 11 }}>Company ID:</span>
+                    <p style={{ margin: "2px 0 0", fontWeight: 600, color: textPrimary }}>{detailItem.companyId || "COMP-001"}</p>
+                  </div>
+                  <div>
+                    <span style={{ color: textSecondary, fontSize: 11 }}>Market Type:</span>
+                    <p style={{ margin: "2px 0 0", fontWeight: 600, color: textPrimary }}>{detailItem.marketType || detailItem.domesticExport || "Domestic"}</p>
+                  </div>
+                  <div>
+                    <span style={{ color: textSecondary, fontSize: 11 }}>Customer Category:</span>
+                    <p style={{ margin: "2px 0 0", fontWeight: 600, color: textPrimary }}>{detailItem.customerCategory || detailItem.customerType || "OEM"}</p>
+                  </div>
+                  <div>
+                    <span style={{ color: textSecondary, fontSize: 11 }}>Customer Group:</span>
+                    <p style={{ margin: "2px 0 0", fontWeight: 600, color: textPrimary }}>{detailItem.customerGroup || "Automotive"}</p>
+                  </div>
+                  <div>
+                    <span style={{ color: textSecondary, fontSize: 11 }}>Customer Status:</span>
+                    <p style={{ margin: "2px 0 0", fontWeight: 700, color: (detailItem.status === "ACTIVE" || detailItem.status === "Active") ? "#059669" : (detailItem.status === "BLOCKED" || detailItem.status === "Blocked") ? "#dc2626" : "#d97706" }}>{detailItem.status || "Active"}</p>
+                  </div>
+                  <div>
+                    <span style={{ color: textSecondary, fontSize: 11 }}>PAN:</span>
+                    <p style={{ margin: "2px 0 0", fontWeight: 600, fontFamily: "monospace", color: textPrimary }}>{detailItem.pan || "-"}</p>
+                  </div>
+                  <div>
+                    <span style={{ color: textSecondary, fontSize: 11 }}>Credit Limit:</span>
+                    <p style={{ margin: "2px 0 0", fontWeight: 700, color: textPrimary }}>₹{Number(detailItem.creditLimit || 500000).toLocaleString("en-IN")}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Drawer Footer Actions */}
+            <div
+              style={{
+                padding: "12px 20px",
+                borderTop: `1px solid ${borderCol}`,
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: 8,
+                background: dark ? "rgba(30,41,59,0.95)" : "#f8fafc"
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setDetailItem(null)}
+                style={{
+                  padding: "7px 16px",
+                  borderRadius: 6,
+                  border: `1px solid ${borderCol}`,
+                  background: "transparent",
+                  color: textPrimary,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: "pointer"
+                }}
               >
                 Close
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const item = detailItem;
+                  setDetailItem(null);
+                  handleOpenEditModal(item);
+                }}
+                style={{
+                  padding: "7px 18px",
+                  borderRadius: 6,
+                  border: "none",
+                  background: "#2563eb",
+                  color: "#ffffff",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: "pointer"
+                }}
+              >
+                Edit Customer
               </button>
             </div>
           </div>

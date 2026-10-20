@@ -1,3 +1,5 @@
+import { formatDisplayDate, formatDisplayDateTime } from "../../../shared/utils/dateFormat";
+import { useResizableColumns, ResizableColGroup, ColumnResizeHandle } from "../../../shared/components/ResizableTable";
 import { useState, useEffect, useRef, useMemo } from "react";
 
 import {
@@ -223,7 +225,48 @@ function ItemCodeSelect({ value, onChange, masterItems }) {
 
 
 
+const INVENTORY_TRANSACTION_PAGE_1_COLUMNS = [
+  { key: "sr", width: 82 },
+  { key: "item_code", width: 103 },
+  { key: "item_description", width: 152 },
+  { key: "category_of_item", width: 166 },
+  { key: "unit_measurement", width: 166 },
+  { key: "closing_balance", width: 145 },
+  { key: "transaction_quantity", width: 180 },
+  { key: "action", width: 82 },
+];
+
+const INVENTORY_TRANSACTION_PAGE_2_COLUMNS = [
+  { key: "transaction_no", width: 145 },
+  { key: "slip_no", width: 96 },
+  { key: "type", width: 80 },
+  { key: "from_dept", width: 103 },
+  { key: "to_dept", width: 89 },
+  { key: "item_code", width: 103 },
+  { key: "description", width: 117 },
+  { key: "category", width: 96 },
+  { key: "quantity", width: 96 },
+  { key: "timestamp", width: 103 },
+  { key: "remarks", width: 89 },
+];
+
+const INVENTORY_TRANSACTION_PAGE_3_COLUMNS = [
+  { key: "status", width: 82 },
+  { key: "row", width: 80 },
+  { key: "slip_no", width: 96 },
+  { key: "type", width: 80 },
+  { key: "from_dept", width: 103 },
+  { key: "to_dept", width: 89 },
+  { key: "item_code", width: 103 },
+  { key: "category", width: 96 },
+  { key: "quantity", width: 96 },
+  { key: "validation_message", width: 166 },
+];
+
 export function InventoryTransactionPage({ defaultTab = "form", dark = false, isActive = true }) {
+  const inventoryTransactionPage3Resize = useResizableColumns("inventory-transaction-page-3", INVENTORY_TRANSACTION_PAGE_3_COLUMNS);
+  const inventoryTransactionPage2Resize = useResizableColumns("inventory-transaction-page-2", INVENTORY_TRANSACTION_PAGE_2_COLUMNS);
+  const inventoryTransactionPage1Resize = useResizableColumns("inventory-transaction-page-1", INVENTORY_TRANSACTION_PAGE_1_COLUMNS);
 
   const inv = useInventoryTransactions(isActive);
   const [activeTab, setActiveTab] = useState(defaultTab); // 'form' | 'history'
@@ -235,12 +278,8 @@ export function InventoryTransactionPage({ defaultTab = "form", dark = false, is
   const [excelPreviewData, setExcelPreviewData] = useState(null);
   const [isSavingExcel, setIsSavingExcel] = useState(false);
 
-  // Format today's date e.g. "09-Aug-2026"
-  const formattedToday = new Date().toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).replace(/ /g, "-");
+  // Today's date as DD/MM/YYYY
+  const formattedToday = formatDisplayDate(new Date());
 
   // Form State
   const [txType, setTxType] = useState("");
@@ -460,7 +499,7 @@ export function InventoryTransactionPage({ defaultTab = "form", dark = false, is
       `"${tx.category || '-'}"`,
       tx.quantity,
       tx.unitOfMeasurement,
-      `"${tx.transactionDate}"`,
+      `"${formatDisplayDate(tx.transactionDate)}"`,
       `"${tx.remarks || '-'}"`,
     ]);
 
@@ -862,17 +901,18 @@ export function InventoryTransactionPage({ defaultTab = "form", dark = false, is
 
               {/* Table */}
               <div className="overflow-x-auto rounded-xl border border-slate-200">
-                <table className="w-full text-left text-sm text-slate-800">
+                <table style={{ ...inventoryTransactionPage1Resize.tableStyle }} className="resizable-table w-full text-left text-sm text-slate-800">
+                  <ResizableColGroup columns={INVENTORY_TRANSACTION_PAGE_1_COLUMNS} widths={inventoryTransactionPage1Resize.widths} />
                   <thead className="bg-slate-100 text-xs font-bold text-slate-700 uppercase tracking-wider border-b border-slate-200">
                     <tr>
-                      <th className="py-3.5 px-4 w-16 text-center">SR No.</th>
-                      <th className="py-3.5 px-4 min-w-[160px]">Item Code</th>
-                      <th className="py-3.5 px-4 min-w-[200px]">Item Description</th>
-                      <th className="py-3.5 px-4 min-w-[140px]">Category of Item <span className="text-sky-500 normal-case">*</span></th>
-                      <th className="py-3.5 px-4 min-w-[120px]">Unit & Measurement</th>
-                      <th className="py-3.5 px-4 min-w-[140px] text-right">Closing Balance</th>
-                      <th className="py-3.5 px-4 min-w-[160px]">Transaction Quantity</th>
-                      <th className="py-3.5 px-4 w-16 text-center">Action</th>
+                      <th className="py-3.5 px-4 w-16 text-center">SR No.<ColumnResizeHandle colKey="sr" resize={inventoryTransactionPage1Resize} /></th>
+                      <th className="py-3.5 px-4 min-w-[160px]">Item Code<ColumnResizeHandle colKey="item_code" resize={inventoryTransactionPage1Resize} /></th>
+                      <th className="py-3.5 px-4 min-w-[200px]">Item Description<ColumnResizeHandle colKey="item_description" resize={inventoryTransactionPage1Resize} /></th>
+                      <th className="py-3.5 px-4 min-w-[140px]">Category of Item <span className="text-sky-500 normal-case">*</span><ColumnResizeHandle colKey="category_of_item" resize={inventoryTransactionPage1Resize} /></th>
+                      <th className="py-3.5 px-4 min-w-[120px]">Unit & Measurement<ColumnResizeHandle colKey="unit_measurement" resize={inventoryTransactionPage1Resize} /></th>
+                      <th className="py-3.5 px-4 min-w-[140px] text-right">Closing Balance<ColumnResizeHandle colKey="closing_balance" resize={inventoryTransactionPage1Resize} /></th>
+                      <th className="py-3.5 px-4 min-w-[160px]">Transaction Quantity<ColumnResizeHandle colKey="transaction_quantity" resize={inventoryTransactionPage1Resize} /></th>
+                      <th className="py-3.5 px-4 w-16 text-center">Action<ColumnResizeHandle colKey="action" resize={inventoryTransactionPage1Resize} /></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200 bg-white">
@@ -1129,20 +1169,21 @@ export function InventoryTransactionPage({ defaultTab = "form", dark = false, is
 
             {/* Table */}
             <div className="overflow-x-auto rounded-xl border border-slate-200">
-              <table className="w-full text-left text-sm text-slate-800">
+              <table style={{ ...inventoryTransactionPage2Resize.tableStyle }} className="resizable-table w-full text-left text-sm text-slate-800">
+                <ResizableColGroup columns={INVENTORY_TRANSACTION_PAGE_2_COLUMNS} widths={inventoryTransactionPage2Resize.widths} />
                 <thead className="bg-slate-100 text-xs font-bold text-slate-700 uppercase tracking-wider border-b border-slate-200">
                   <tr>
-                    <th className="py-3.5 px-4">Transaction No.</th>
-                    <th className="py-3.5 px-4">Slip No.</th>
-                    <th className="py-3.5 px-4">Type</th>
-                    <th className="py-3.5 px-4">From Dept</th>
-                    <th className="py-3.5 px-4">To Dept</th>
-                    <th className="py-3.5 px-4">Item Code</th>
-                    <th className="py-3.5 px-4">Description</th>
-                    <th className="py-3.5 px-4">Category</th>
-                    <th className="py-3.5 px-4 text-right">Quantity</th>
-                    <th className="py-3.5 px-4">Timestamp</th>
-                    <th className="py-3.5 px-4">Remarks</th>
+                    <th className="py-3.5 px-4">Transaction No.<ColumnResizeHandle colKey="transaction_no" resize={inventoryTransactionPage2Resize} /></th>
+                    <th className="py-3.5 px-4">Slip No.<ColumnResizeHandle colKey="slip_no" resize={inventoryTransactionPage2Resize} /></th>
+                    <th className="py-3.5 px-4">Type<ColumnResizeHandle colKey="type" resize={inventoryTransactionPage2Resize} /></th>
+                    <th className="py-3.5 px-4">From Dept<ColumnResizeHandle colKey="from_dept" resize={inventoryTransactionPage2Resize} /></th>
+                    <th className="py-3.5 px-4">To Dept<ColumnResizeHandle colKey="to_dept" resize={inventoryTransactionPage2Resize} /></th>
+                    <th className="py-3.5 px-4">Item Code<ColumnResizeHandle colKey="item_code" resize={inventoryTransactionPage2Resize} /></th>
+                    <th className="py-3.5 px-4">Description<ColumnResizeHandle colKey="description" resize={inventoryTransactionPage2Resize} /></th>
+                    <th className="py-3.5 px-4">Category<ColumnResizeHandle colKey="category" resize={inventoryTransactionPage2Resize} /></th>
+                    <th className="py-3.5 px-4 text-right">Quantity<ColumnResizeHandle colKey="quantity" resize={inventoryTransactionPage2Resize} /></th>
+                    <th className="py-3.5 px-4">Timestamp<ColumnResizeHandle colKey="timestamp" resize={inventoryTransactionPage2Resize} /></th>
+                    <th className="py-3.5 px-4">Remarks<ColumnResizeHandle colKey="remarks" resize={inventoryTransactionPage2Resize} /></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 bg-white">
@@ -1195,7 +1236,7 @@ export function InventoryTransactionPage({ defaultTab = "form", dark = false, is
                           {tx.quantity} {tx.unitOfMeasurement}
                         </td>
                         <td className="py-3 px-4 text-xs text-slate-500">
-                          {new Date(tx.transactionDate).toLocaleString("en-IN")}
+                          {formatDisplayDateTime(tx.transactionDate)}
                         </td>
                         <td className="py-3 px-4 text-slate-500 text-xs">{tx.remarks || "-"}</td>
                       </tr>
@@ -1299,19 +1340,20 @@ export function InventoryTransactionPage({ defaultTab = "form", dark = false, is
                   </span>
                 </div>
                 <div className="overflow-x-auto max-h-64 overflow-y-auto">
-                  <table className="w-full text-left text-xs text-slate-800">
+                  <table style={{ ...inventoryTransactionPage3Resize.tableStyle }} className="resizable-table w-full text-left text-xs text-slate-800">
+                    <ResizableColGroup columns={INVENTORY_TRANSACTION_PAGE_3_COLUMNS} widths={inventoryTransactionPage3Resize.widths} />
                     <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 sticky top-0">
                       <tr>
-                        <th className="py-2.5 px-3">Status</th>
-                        <th className="py-2.5 px-3">Row</th>
-                        <th className="py-2.5 px-3">Slip No.</th>
-                        <th className="py-2.5 px-3">Type</th>
-                        <th className="py-2.5 px-3">From Dept</th>
-                        <th className="py-2.5 px-3">To Dept</th>
-                        <th className="py-2.5 px-3">Item Code</th>
-                        <th className="py-2.5 px-3">Category</th>
-                        <th className="py-2.5 px-3 text-right">Quantity</th>
-                        <th className="py-2.5 px-3">Validation Message</th>
+                        <th className="py-2.5 px-3">Status<ColumnResizeHandle colKey="status" resize={inventoryTransactionPage3Resize} /></th>
+                        <th className="py-2.5 px-3">Row<ColumnResizeHandle colKey="row" resize={inventoryTransactionPage3Resize} /></th>
+                        <th className="py-2.5 px-3">Slip No.<ColumnResizeHandle colKey="slip_no" resize={inventoryTransactionPage3Resize} /></th>
+                        <th className="py-2.5 px-3">Type<ColumnResizeHandle colKey="type" resize={inventoryTransactionPage3Resize} /></th>
+                        <th className="py-2.5 px-3">From Dept<ColumnResizeHandle colKey="from_dept" resize={inventoryTransactionPage3Resize} /></th>
+                        <th className="py-2.5 px-3">To Dept<ColumnResizeHandle colKey="to_dept" resize={inventoryTransactionPage3Resize} /></th>
+                        <th className="py-2.5 px-3">Item Code<ColumnResizeHandle colKey="item_code" resize={inventoryTransactionPage3Resize} /></th>
+                        <th className="py-2.5 px-3">Category<ColumnResizeHandle colKey="category" resize={inventoryTransactionPage3Resize} /></th>
+                        <th className="py-2.5 px-3 text-right">Quantity<ColumnResizeHandle colKey="quantity" resize={inventoryTransactionPage3Resize} /></th>
+                        <th className="py-2.5 px-3">Validation Message<ColumnResizeHandle colKey="validation_message" resize={inventoryTransactionPage3Resize} /></th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200">

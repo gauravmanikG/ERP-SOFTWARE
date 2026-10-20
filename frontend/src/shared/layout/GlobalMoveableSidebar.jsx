@@ -1,5 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { MODULES_LIST, ModuleIcons } from "./modulesData";
+
+// Keeps a flyout inside the window: its top is clamped and its height fills only the space below it.
+const fitTop = (desired, min = 72) => Math.max(min, Math.min(desired, window.innerHeight - 260));
+const fitMaxHeight = (top) => `${Math.max(240, window.innerHeight - top - 16)}px`;
 
 export function GlobalMoveableSidebar({
   isOpen,
@@ -10,8 +14,18 @@ export function GlobalMoveableSidebar({
   onNavigate
 }) {
   const [hoveredModule, setHoveredModule] = useState(null);
+  const [hoveredSubmodule, setHoveredSubmodule] = useState(null);
+  const [subDrawerTop, setSubDrawerTop] = useState(0);
   const [drawerCoords, setDrawerCoords] = useState({ top: 0, left: 260 });
   const [searchQuery, setSearchQuery] = useState("");
+  const closeTimerRef = useRef(null);
+
+  const cancelClose = () => {
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+  };
 
   // Listen to Escape key to close sidebar
   useEffect(() => {
@@ -25,19 +39,35 @@ export function GlobalMoveableSidebar({
   }, [isOpen, onClose]);
 
   const handleMouseEnter = (mod, event) => {
+    cancelClose();
     const rect = event.currentTarget.getBoundingClientRect();
     setDrawerCoords({ top: rect.top, left: rect.right });
     setHoveredModule(mod);
+    setHoveredSubmodule(null);
   };
 
   const handleMouseLeave = () => {
-    setHoveredModule(null);
+    cancelClose();
+    closeTimerRef.current = setTimeout(() => {
+      setHoveredModule(null);
+      setHoveredSubmodule(null);
+    }, 250);
   };
 
   const handleSubmoduleClick = (submod, modName) => {
     setHoveredModule(null);
-    if (submod.targetPage) {
-      onNavigate(submod.targetPage, modName);
+    let target = submod.targetPage;
+    if (!target && submod.name) {
+      const lower = submod.name.toLowerCase();
+      if (lower.includes("purchase order")) target = "purchase-orders";
+      else if (lower.includes("purchase requisition")) target = "purchase-requisition";
+      else if (lower.includes("purchase processing")) target = "purchase-processing";
+      else if (lower.includes("po approval")) target = "po-approval";
+      else if (lower.includes("quotation")) target = "vendor-quotations";
+      else if (lower.includes("customer")) target = "customer-master";
+    }
+    if (target) {
+      onNavigate(target, modName);
     } else {
       onNavigate("dashboard", modName);
     }
@@ -50,7 +80,11 @@ export function GlobalMoveableSidebar({
     if (!q) return true;
     return (
       mod.name.toLowerCase().includes(q) ||
-      (mod.submodules || []).some((sub) => sub.name.toLowerCase().includes(q))
+      (mod.submodules || []).some((sub) => {
+        if (sub.name.toLowerCase().includes(q)) return true;
+        if (sub.children && sub.children.some((c) => c.name.toLowerCase().includes(q))) return true;
+        return false;
+      })
     );
   });
 
@@ -241,9 +275,10 @@ export function GlobalMoveableSidebar({
         <nav
           style={{
             flex: 1,
+            minHeight: 0,
             overflowY: "auto",
             padding: "6px 0",
-            scrollbarWidth: "none"
+            scrollbarWidth: "thin"
           }}
         >
           {filteredModules.map((mod) => {
@@ -262,8 +297,11 @@ export function GlobalMoveableSidebar({
               >
                 <button
                   onClick={() => {
-                    if (mod.submodules?.[0]?.targetPage) {
-                      onNavigate(mod.submodules[0].targetPage, mod.name);
+                    const firstTarget =
+                      mod.submodules?.[0]?.targetPage ||
+                      mod.submodules?.[0]?.children?.[0]?.targetPage;
+                    if (firstTarget) {
+                      onNavigate(firstTarget, mod.name);
                       onClose();
                     }
                   }}
@@ -349,14 +387,17 @@ export function GlobalMoveableSidebar({
       {/* ========================================================================= */}
       {isOpen && hoveredModule && hoveredModule.submodules && (
         <div
-          onMouseEnter={() => setHoveredModule(hoveredModule)}
+          onMouseEnter={() => {
+            cancelClose();
+            setHoveredModule(hoveredModule);
+          }}
           onMouseLeave={handleMouseLeave}
           style={{
             position: "fixed",
-            top: Math.max(72, Math.min(drawerCoords.top - 6, window.innerHeight - 440)),
+            top: fitTop(drawerCoords.top - 6),
             left: drawerCoords.left + 4,
             width: 270,
-            maxHeight: "calc(100vh - 90px)",
+            maxHeight: fitMaxHeight(fitTop(drawerCoords.top - 6)),
             overflowY: "auto",
             scrollbarWidth: "thin",
             background: "#1e293b",
@@ -390,11 +431,102 @@ export function GlobalMoveableSidebar({
           {/* Submodules list */}
           <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
             {hoveredModule.submodules.map((sub, sIdx) => {
+              // If submodule has children (e.g. Item Master -> FG, Other)
+              if (sub.children && sub.children.length > 0) {
+                const isAnyChildActive = sub.children.some(
+                  (c) =>
+                    (c.targetPage === "item-master" && currentView === "item-master") ||
+                    (c.targetPage === "item-master-other" && currentView === "item-master-other")
+                );
+                const isHovered = hoveredSubmodule?.name === sub.name;
+
+                return (
+                  <button
+                    key={sIdx}
+                    onMouseEnter={(e) => {
+                      cancelClose();
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      setSubDrawerTop(rect.top);
+                      setHoveredSubmodule(sub);
+                    }}
+                    onClick={() => {
+                      handleSubmoduleClick(sub.children[0], hoveredModule.name);
+                    }}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      padding: "7px 10px",
+                      borderRadius: 6,
+                      background: isAnyChildActive || isHovered ? "rgba(197,31,40,0.25)" : "rgba(255,255,255,0.02)",
+                      border: isAnyChildActive || isHovered ? "1px solid rgba(197,31,40,0.5)" : "1px solid transparent",
+                      color: isAnyChildActive || isHovered ? "#ffffff" : "#cbd5e1",
+                      fontSize: 11.5,
+                      fontWeight: isAnyChildActive || isHovered ? 700 : 500,
+                      cursor: "pointer",
+                      textAlign: "left",
+                      transition: "all 0.12s ease"
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isHovered) {
+                        e.currentTarget.style.background = isAnyChildActive
+                          ? "rgba(197,31,40,0.25)"
+                          : "rgba(255,255,255,0.02)";
+                        e.currentTarget.style.color = isAnyChildActive ? "#ffffff" : "#cbd5e1";
+                      }
+                    }}
+                  >
+                    <span>{sub.name}</span>
+                    <span style={{ display: "flex", alignItems: "center", gap: 5, color: isHovered || isAnyChildActive ? "#ef4444" : "#64748b" }}>
+                      {isAnyChildActive ? (
+                        <span style={{ fontSize: 9, background: "#c51f28", color: "#ffffff", padding: "1px 5px", borderRadius: 3, fontWeight: 800 }}>
+                          ACTIVE
+                        </span>
+                      ) : (
+                        <span style={{ fontSize: 8.5, background: "rgba(16,185,129,0.18)", color: "#34d399", padding: "1px 4px", borderRadius: 3, fontWeight: 700 }}>
+                          READY
+                        </span>
+                      )}
+                      <ModuleIcons.ChevronRight />
+                    </span>
+                  </button>
+                );
+              }
+
               const isItemMasterActive =
                 sub.targetPage === "item-master" && currentView === "item-master";
+              const isOtherItemMasterActive =
+                sub.targetPage === "item-master-other" && currentView === "item-master-other";
+              const isSupplierMasterActive =
+                sub.targetPage === "supplier-master" && currentView === "supplier-master";
+              const isCustomerMasterActive =
+                sub.targetPage === "customer-master" && currentView === "customer-master";
+              const isDeptMasterActive =
+                sub.targetPage === "department-master" && currentView === "department-master";
+              const isMachineMasterActive =
+                sub.targetPage === "machine-master" && currentView === "machine-master";
+              const isPrActive =
+                sub.targetPage === "purchase-requisition" && currentView === "purchase-requisition";
+              const isPoActive =
+                (sub.targetPage === "purchase-orders" && currentView === "purchase-orders") ||
+                (sub.targetPage === "purchase-processing" && currentView === "purchase-processing") ||
+                (sub.targetPage === "po-approval" && currentView === "po-approval");
+              const isQuotationActive =
+                (sub.targetPage === "vendor-quotations" || (sub.name && sub.name.toLowerCase().includes("quotation"))) &&
+                (currentView === "vendor-quotations" || (currentView === "operations" && (erpSlot === "vendor-quotations" || erpSlot === "quotations")));
               const isErpActive =
                 currentView === "operations" && sub.targetPage && erpSlot === sub.targetPage;
-              const isSelected = isItemMasterActive || isErpActive;
+              const isSelected =
+                isItemMasterActive ||
+                isOtherItemMasterActive ||
+                isSupplierMasterActive ||
+                isCustomerMasterActive ||
+                isDeptMasterActive ||
+                isMachineMasterActive ||
+                isPrActive ||
+                isPoActive ||
+                isQuotationActive ||
+                isErpActive;
 
               return (
                 <button
@@ -416,6 +548,7 @@ export function GlobalMoveableSidebar({
                     transition: "all 0.12s ease"
                   }}
                   onMouseEnter={(e) => {
+                    setHoveredSubmodule(null);
                     e.currentTarget.style.background = "rgba(197,31,40,0.2)";
                     e.currentTarget.style.color = "#ffffff";
                     e.currentTarget.style.transform = "translateX(3px)";
@@ -456,6 +589,129 @@ export function GlobalMoveableSidebar({
                       READY
                     </span>
                   ) : null}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 5. 3RD TIER HOVER FLYOUT DRAWER (OPENING WHEN HOVERING ITEM MASTER)       */}
+      {/* ========================================================================= */}
+      {isOpen && hoveredModule && hoveredSubmodule && hoveredSubmodule.children && (
+        <div
+          onMouseEnter={() => {
+            cancelClose();
+            setHoveredSubmodule(hoveredSubmodule);
+          }}
+          onMouseLeave={handleMouseLeave}
+          style={{
+            position: "fixed",
+            top: fitTop(subDrawerTop),
+            maxHeight: fitMaxHeight(fitTop(subDrawerTop)),
+            overflowY: "auto",
+            left: drawerCoords.left + 266,
+            width: 230,
+            background: "#1e293b",
+            borderRadius: 12,
+            padding: "12px",
+            boxShadow: "0 14px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.12)",
+            zIndex: 2300,
+            borderLeft: "3px solid #c51f28",
+            animation: "slideLeftToRight 0.15s cubic-bezier(0.16, 1, 0.3, 1)"
+          }}
+        >
+          {/* Header */}
+          <div style={{ paddingBottom: 8, marginBottom: 8, borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+            <p
+              style={{
+                fontSize: 11,
+                fontWeight: 900,
+                color: "#f87171",
+                textTransform: "uppercase",
+                letterSpacing: "0.08em",
+                margin: 0
+              }}
+            >
+              {hoveredSubmodule.name} Sub-modules
+            </p>
+            <p style={{ fontSize: 10, color: "#94a3b8", margin: "2px 0 0" }}>
+              Select target screen:
+            </p>
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {hoveredSubmodule.children.map((child, cIdx) => {
+              const isActive =
+                (child.targetPage === "item-master" && currentView === "item-master") ||
+                (child.targetPage === "item-master-other" && currentView === "item-master-other");
+
+              return (
+                <button
+                  key={cIdx}
+                  onClick={() => {
+                    if (!child.targetPage) return; // screen not built yet
+                    setHoveredSubmodule(null);
+                    handleSubmoduleClick(child, hoveredModule.name);
+                  }}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "8px 10px",
+                    borderRadius: 6,
+                    background: isActive ? "rgba(197,31,40,0.3)" : "rgba(255,255,255,0.03)",
+                    border: isActive ? "1px solid rgba(197,31,40,0.6)" : "1px solid transparent",
+                    color: isActive ? "#ffffff" : "#cbd5e1",
+                    fontSize: 11.5,
+                    fontWeight: isActive ? 700 : 500,
+                    cursor: "pointer",
+                    textAlign: "left",
+                    transition: "all 0.12s ease"
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "rgba(197,31,40,0.25)";
+                    e.currentTarget.style.color = "#ffffff";
+                    e.currentTarget.style.transform = "translateX(3px)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = isActive ? "rgba(197,31,40,0.3)" : "rgba(255,255,255,0.03)";
+                    e.currentTarget.style.color = isActive ? "#ffffff" : "#cbd5e1";
+                    e.currentTarget.style.transform = "none";
+                  }}
+                >
+                  <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ color: "#ef4444", fontSize: 12 }}>↳</span>
+                    <span>{child.name}</span>
+                  </span>
+                  {isActive ? (
+                    <span
+                      style={{
+                        fontSize: 8.5,
+                        background: "#c51f28",
+                        color: "#ffffff",
+                        padding: "1px 5px",
+                        borderRadius: 3,
+                        fontWeight: 800
+                      }}
+                    >
+                      ACTIVE
+                    </span>
+                  ) : (
+                    <span
+                      style={{
+                        fontSize: 8.5,
+                        background: "rgba(16,185,129,0.18)",
+                        color: "#34d399",
+                        padding: "1px 4px",
+                        borderRadius: 3,
+                        fontWeight: 700
+                      }}
+                    >
+                      READY
+                    </span>
+                  )}
                 </button>
               );
             })}

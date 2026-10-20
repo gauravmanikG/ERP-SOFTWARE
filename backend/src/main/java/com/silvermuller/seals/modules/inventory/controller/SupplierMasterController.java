@@ -105,7 +105,7 @@ public class SupplierMasterController {
         if (input.getPhone() != null) s.setPhone(input.getPhone());
         if (input.getPaymentTermsId() != null) s.setPaymentTermsId(input.getPaymentTermsId());
         if (input.getCurrency() != null) s.setCurrency(input.getCurrency());
-        if (input.getStatus() != null) s.setStatus(input.getStatus());
+        if (input.getStatus() != null && !input.getStatus().isBlank()) s.setStatus(input.getStatus());
         if (input.getAddress() != null) s.setAddress(input.getAddress());
         if (input.getCity() != null) s.setCity(input.getCity());
         if (input.getState() != null) s.setState(input.getState());

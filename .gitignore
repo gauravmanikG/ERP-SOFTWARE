@@ -11,3 +11,5 @@ backend/.env
 *.log
 .vscode
 .idea
+artifacts/
+*.bak

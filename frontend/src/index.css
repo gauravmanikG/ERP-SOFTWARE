@@ -128,3 +128,106 @@ body {
 .dark button.bg-slate-100:hover {
   background-color: #475569 !important;
 }
+
+/* ============================================================
+   RESIZABLE TABLES (see shared/components/ResizableTable.jsx)
+   Fixed layout keeps header and body cells on the <colgroup> widths.
+   Cell content is clipped at the column edge so it never overlaps neighbours.
+   ============================================================ */
+.resizable-table th,
+.resizable-table td {
+  overflow: hidden;
+}
+
+.resizable-table th {
+  position: relative;
+}
+
+.col-resize-handle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  user-select: none;
+  touch-action: none;
+  z-index: 1;
+}
+
+.col-resize-handle:hover {
+  background: rgba(37, 99, 235, 0.35);
+}
+
+/* ============================================================
+   NIGHT VIEW (whole software)
+   Applied when <html> has the `dark` class (see shared/utils/theme.js).
+   Maps the app's light inline colours to a night palette, keeping each hue.
+   ============================================================ */
+.dark { color-scheme: dark; }
+/* Night background reaches every edge of the window (no white frame around the app) */
+html.dark,
+html.dark body,
+html.dark #root {
+  background-color: #0b1220 !important;
+  min-height: 100%;
+}
+.dark body { color: #e2e8f0; }
+.dark [style*="background: rgb(255, 255, 255)"], .dark [style*="background-color: rgb(255, 255, 255)"] { background-color: #111827 !important; }
+.dark [style*="background: rgb(248, 250, 252)"], .dark [style*="background-color: rgb(248, 250, 252)"] { background-color: #0b1220 !important; }
+.dark [style*="background: rgb(241, 245, 249)"], .dark [style*="background-color: rgb(241, 245, 249)"] { background-color: #1e293b !important; }
+.dark [style*="background: rgb(226, 232, 240)"], .dark [style*="background-color: rgb(226, 232, 240)"] { background-color: #334155 !important; }
+.dark [style*="background: rgb(236, 253, 245)"], .dark [style*="background-color: rgb(236, 253, 245)"] { background-color: #0d2e25 !important; }
+.dark [style*="background: rgb(240, 253, 244)"], .dark [style*="background-color: rgb(240, 253, 244)"] { background-color: #0d2e25 !important; }
+.dark [style*="background: rgb(220, 252, 231)"], .dark [style*="background-color: rgb(220, 252, 231)"] { background-color: #103d2c !important; }
+.dark [style*="background: rgb(187, 247, 208)"], .dark [style*="background-color: rgb(187, 247, 208)"] { background-color: #14532d !important; }
+.dark [style*="background: rgb(239, 246, 255)"], .dark [style*="background-color: rgb(239, 246, 255)"] { background-color: #102a4a !important; }
+.dark [style*="background: rgb(240, 249, 255)"], .dark [style*="background-color: rgb(240, 249, 255)"] { background-color: #0f2a44 !important; }
+.dark [style*="background: rgb(224, 242, 254)"], .dark [style*="background-color: rgb(224, 242, 254)"] { background-color: #0c2d4d !important; }
+.dark [style*="background: rgb(219, 234, 254)"], .dark [style*="background-color: rgb(219, 234, 254)"] { background-color: #12305e !important; }
+.dark [style*="background: rgb(254, 242, 242)"], .dark [style*="background-color: rgb(254, 242, 242)"] { background-color: #3b1616 !important; }
+.dark [style*="background: rgb(254, 226, 226)"], .dark [style*="background-color: rgb(254, 226, 226)"] { background-color: #4a1d1d !important; }
+.dark [style*="background: rgb(254, 202, 202)"], .dark [style*="background-color: rgb(254, 202, 202)"] { background-color: #5a2222 !important; }
+.dark [style*="background: rgb(254, 243, 199)"], .dark [style*="background-color: rgb(254, 243, 199)"] { background-color: #3d2c0b !important; }
+.dark [style*="background: rgb(254, 249, 195)"], .dark [style*="background-color: rgb(254, 249, 195)"] { background-color: #3a300b !important; }
+.dark [style*="background: rgb(255, 247, 237)"], .dark [style*="background-color: rgb(255, 247, 237)"] { background-color: #3a250d !important; }
+.dark [style*="background: rgb(250, 245, 255)"], .dark [style*="background-color: rgb(250, 245, 255)"] { background-color: #2a1d44 !important; }
+.dark [style*="background: rgb(245, 243, 255)"], .dark [style*="background-color: rgb(245, 243, 255)"] { background-color: #2a1d44 !important; }
+.dark [style^="color: rgb(15, 23, 42)"], .dark [style*="; color: rgb(15, 23, 42)"] { color: #f1f5f9 !important; }
+.dark [style^="color: rgb(30, 41, 59)"], .dark [style*="; color: rgb(30, 41, 59)"] { color: #e2e8f0 !important; }
+.dark [style^="color: rgb(51, 65, 85)"], .dark [style*="; color: rgb(51, 65, 85)"] { color: #cbd5e1 !important; }
+.dark [style^="color: rgb(71, 85, 105)"], .dark [style*="; color: rgb(71, 85, 105)"] { color: #94a3b8 !important; }
+.dark [style^="color: rgb(100, 116, 139)"], .dark [style*="; color: rgb(100, 116, 139)"] { color: #94a3b8 !important; }
+.dark [style^="color: rgb(22, 101, 52)"], .dark [style*="; color: rgb(22, 101, 52)"] { color: #86efac !important; }
+.dark [style^="color: rgb(21, 128, 61)"], .dark [style*="; color: rgb(21, 128, 61)"] { color: #86efac !important; }
+.dark [style^="color: rgb(4, 120, 87)"], .dark [style*="; color: rgb(4, 120, 87)"] { color: #6ee7b7 !important; }
+.dark [style^="color: rgb(185, 28, 28)"], .dark [style*="; color: rgb(185, 28, 28)"] { color: #fca5a5 !important; }
+.dark [style^="color: rgb(220, 38, 38)"], .dark [style*="; color: rgb(220, 38, 38)"] { color: #f87171 !important; }
+.dark [style^="color: rgb(29, 78, 216)"], .dark [style*="; color: rgb(29, 78, 216)"] { color: #93c5fd !important; }
+.dark [style^="color: rgb(3, 105, 161)"], .dark [style*="; color: rgb(3, 105, 161)"] { color: #7dd3fc !important; }
+.dark [style^="color: rgb(146, 64, 14)"], .dark [style*="; color: rgb(146, 64, 14)"] { color: #fcd34d !important; }
+.dark [style^="color: rgb(217, 119, 6)"], .dark [style*="; color: rgb(217, 119, 6)"] { color: #fbbf24 !important; }
+.dark [style^="color: rgb(124, 58, 237)"], .dark [style*="; color: rgb(124, 58, 237)"] { color: #c4b5fd !important; }
+.dark [style*="solid rgb(203, 213, 225)"] { border-color: #334155 !important; }
+.dark [style*="solid rgb(226, 232, 240)"] { border-color: #1e293b !important; }
+.dark [style*="solid rgb(134, 239, 172)"] { border-color: #166534 !important; }
+.dark [style*="solid rgb(187, 247, 208)"] { border-color: #14532d !important; }
+.dark [style*="solid rgb(252, 165, 165)"] { border-color: #7f1d1d !important; }
+.dark [style*="solid rgb(254, 202, 202)"] { border-color: #7f1d1d !important; }
+.dark [style*="solid rgb(191, 219, 254)"] { border-color: #1e3a8a !important; }
+.dark [style*="solid rgb(253, 230, 138)"] { border-color: #78350f !important; }
+
+/* Additional night borders (row dividers and status outlines) */
+.dark [style*="solid rgb(241, 245, 249)"] { border-color: #1e293b !important; }
+.dark [style*="solid rgb(167, 243, 208)"] { border-color: #134e3a !important; }
+
+/* Page wrapper and white outlines used by some screens (e.g. Supplier Master) */
+.dark [style*="background: rgb(244, 246, 251)"], .dark [style*="background-color: rgb(244, 246, 251)"] { background-color: #0b1220 !important; }
+.dark [style*="solid rgb(255, 255, 255)"] { border-color: #1e293b !important; }
+
+/* Near-white page surfaces used by some screens */
+.dark [style*="background: rgb(251, 252, 254)"], .dark [style*="background-color: rgb(251, 252, 254)"] { background-color: #0b1220 !important; }
+.dark [style*="background: rgb(249, 250, 251)"], .dark [style*="background-color: rgb(249, 250, 251)"] { background-color: #0b1220 !important; }
+.dark [style*="background: rgb(245, 247, 251)"], .dark [style*="background-color: rgb(245, 247, 251)"] { background-color: #0b1220 !important; }
+.dark [style*="background: rgb(250, 251, 252)"], .dark [style*="background-color: rgb(250, 251, 252)"] { background-color: #0b1220 !important; }
+.dark [style*="background: rgb(244, 246, 251)"], .dark [style*="background-color: rgb(244, 246, 251)"] { background-color: #0b1220 !important; }

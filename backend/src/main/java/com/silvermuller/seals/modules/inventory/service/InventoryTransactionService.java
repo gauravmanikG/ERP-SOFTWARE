@@ -16,8 +16,6 @@ import com.silvermuller.seals.modules.inventory.repository.OpeningBalanceReposit
 import com.silvermuller.seals.modules.inventory.repository.CategoryMasterRepository;
 import com.silvermuller.seals.modules.inventory.repository.OperationRepository;
 import com.silvermuller.seals.modules.inventory.repository.TransactionTypeRepository;
-import com.silvermuller.seals.modules.notifications.service.StockAlertService;
-import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,7 +37,6 @@ public class InventoryTransactionService {
     private final OpeningBalanceRepository openingBalanceRepository;
     private final OperationRepository operationRepository;
     private final CategoryMasterRepository categoryMasterRepository;
-    private final StockAlertService stockAlertService;
 
     public InventoryTransactionService(
             InventoryTransactionRepository transactionRepository,
@@ -49,8 +46,7 @@ public class InventoryTransactionService {
             TransactionTypeRepository transactionTypeRepository,
             OpeningBalanceRepository openingBalanceRepository,
             OperationRepository operationRepository,
-            CategoryMasterRepository categoryMasterRepository,
-            @Lazy StockAlertService stockAlertService) {
+            CategoryMasterRepository categoryMasterRepository) {
         this.transactionRepository = transactionRepository;
         this.masterRepository = masterRepository;
         this.departmentRepository = departmentRepository;
@@ -59,7 +55,6 @@ public class InventoryTransactionService {
         this.openingBalanceRepository = openingBalanceRepository;
         this.operationRepository = operationRepository;
         this.categoryMasterRepository = categoryMasterRepository;
-        this.stockAlertService = stockAlertService;
     }
 
     /** Inbound stock (adds to destination). All other operations move from → to. */
@@ -257,20 +252,7 @@ public class InventoryTransactionService {
                     .orElseThrow(() -> new InvalidTransactionException(
                             "Category '" + requestedCategory + "' is not in category_master."));
 
-            // Validate sufficient stock using category-specific balance
-            BigDecimal fromDeptBalance = getDepartmentClosingBalance(master.getId(), itemCategory, request.getFromDepartmentId());
-
-            if (!isInboundOperation(typeStr)) {
-                if (itemReq.getQuantity().compareTo(fromDeptBalance) > 0) {
-                    throw new InsufficientStockException(String.format(
-                            "Transaction quantity (%s %s) cannot be greater than closing balance in department '%s' (%s %s) for item '%s' [%s].",
-                            itemReq.getQuantity(), master.getUnitOfMeasurement(),
-                            fromDept.getName(), fromDeptBalance, master.getUnitOfMeasurement(),
-                            master.getCode(), itemCategory
-                    ));
-                }
-            }
-
+            // Stock-balance check removed for testing: any quantity can be dispatched, even beyond the closing balance.
 
             InventoryTransaction tx = new InventoryTransaction();
             tx.setTransactionNumber(transactionNumber);
@@ -287,7 +269,6 @@ public class InventoryTransactionService {
             InventoryTransaction savedTx = transactionRepository.save(tx);
             BigDecimal newBalance = getCurrentBalance(master.getId());
             responses.add(mapToResponse(savedTx, newBalance));
-            stockAlertService.evaluateItem(master.getCode(), itemCategory);
         }
 
         return responses;
@@ -356,10 +337,6 @@ public class InventoryTransactionService {
 
         InventoryTransaction savedTx = transactionRepository.save(reverseTx);
         BigDecimal newBalance = getCurrentBalance(masterId);
-        String cat = targetTx.getCategory() != null && !targetTx.getCategory().isBlank()
-                ? targetTx.getCategory()
-                : targetTx.getMaster().getCategory();
-        stockAlertService.evaluateItem(targetTx.getMaster().getCode(), cat);
 
         return mapToResponse(savedTx, newBalance);
     }

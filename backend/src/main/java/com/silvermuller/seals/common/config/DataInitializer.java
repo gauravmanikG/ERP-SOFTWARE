@@ -113,22 +113,87 @@ public class DataInitializer {
             } catch (Exception e) {
                 System.err.println("Note: Could not drop legacy transaction types: " + e.getMessage());
             }
-            System.out.println("Seeded operation transaction types.");
 
+            // 2b. Remove 'Gaurav' department and its references from everywhere
+            try {
+                List<Long> gauravIds = jdbc.queryForList(
+                    "SELECT id FROM department WHERE LOWER(name) = 'gaurav'", Long.class);
+                for (Long gId : gauravIds) {
+                    jdbc.update("DELETE FROM inventory_transaction WHERE from_department_id = ? OR to_department_id = ?", gId, gId);
+                    jdbc.update("DELETE FROM department WHERE id = ?", gId);
+                }
+                jdbc.update("DELETE FROM opening_balance WHERE LOWER(department_name) = 'gaurav'");
+                jdbc.update("DELETE FROM public.department_master WHERE LOWER(department_name) = 'gaurav'");
+                try {
+                    jdbc.update("DELETE FROM sms_inventory.department_master WHERE LOWER(department_name) = 'gaurav'");
+                } catch (Exception ignored) {}
+                System.out.println("Removed 'Gaurav' department and its references from everywhere.");
+            } catch (Exception e) {
+                System.err.println("Note: Cleanup 'Gaurav' department: " + e.getMessage());
+            }
 
-            // 3. Seed Departments if missing
-            List<String> depts = List.of(
-                "Gate", "LASER", "T/Room", "Store", "Sand", "Tambling",
-                "Moulding", "Finishing", "CNC", "Burning", "Packing", "Rejection Store"
+            // 3. Seed / Synchronize all 18 Departments with exact numbers and types
+            record DeptSeed(int num, String code, String name, double seq, String type) {}
+            List<DeptSeed> deptsList = List.of(
+                new DeptSeed(1, "DPT-001", "Store", 1.0, "Material Store"),
+                new DeptSeed(2, "DPT-002", "Power Press Die Making", 2.0, "Process"),
+                new DeptSeed(3, "DPT-003", "Power Press Rubber Die Making", 3.0, "Process"),
+                new DeptSeed(4, "DPT-004", "Power Press Circle Cutting", 4.0, "Process"),
+                new DeptSeed(5, "DPT-005", "LASER", 5.0, "Process"),
+                new DeptSeed(6, "DPT-006", "CNC", 6.0, "Process"),
+                new DeptSeed(7, "DPT-007", "Moulding", 7.0, "Process"),
+                new DeptSeed(8, "DPT-008", "Finishing", 8.0, "Process"),
+                new DeptSeed(9, "DPT-009", "Tambling", 9.0, "Process"),
+                new DeptSeed(10, "DPT-010", "Sand", 10.0, "Process"),
+                new DeptSeed(11, "DPT-011", "Burning", 11.0, "Process"),
+                new DeptSeed(12, "DPT-012", "T/Room", 12.0, "Process"),
+                new DeptSeed(13, "DPT-013", "Packing", 13.0, "Process"),
+                new DeptSeed(14, "DPT-014", "FG STORE", 14.0, "Finished Goods Store"),
+                new DeptSeed(15, "DPT-015", "Dispatch", 15.0, "Outward"),
+                new DeptSeed(16, "DPT-016", "Rejection Store", 16.0, "Rejection"),
+                new DeptSeed(17, "DPT-017", "Rework-Burning", 17.0, "Rework"),
+                new DeptSeed(18, "DPT-018", "Gate", 18.0, "Movement/Control")
             );
-            for (String d : depts) {
-                if (deptRepo.findByNameIgnoreCase(d).isEmpty()) {
+
+            for (DeptSeed ds : deptsList) {
+                // Ensure entry in department table
+                if (deptRepo.findByNameIgnoreCase(ds.name()).isEmpty()) {
                     Department dept = new Department();
-                    dept.setName(d);
+                    dept.setName(ds.name());
                     deptRepo.save(dept);
                 }
+
+                // Upsert in public.department_master
+                try {
+                    jdbc.update("""
+                        INSERT INTO public.department_master (dept_code, dept_number, department_name, process_sequence, category, status)
+                        VALUES (?, ?, ?, ?, ?, 'ACTIVE')
+                        ON CONFLICT (department_name) DO UPDATE SET
+                            dept_code = EXCLUDED.dept_code,
+                            dept_number = EXCLUDED.dept_number,
+                            process_sequence = EXCLUDED.process_sequence,
+                            category = EXCLUDED.category,
+                            status = EXCLUDED.status
+                    """, ds.code(), ds.num(), ds.name(), BigDecimal.valueOf(ds.seq()), ds.type());
+                } catch (Exception e) {
+                    System.err.println("Note: public.department_master upsert for " + ds.name() + ": " + e.getMessage());
+                }
+
+                // Upsert in sms_inventory.department_master
+                try {
+                    jdbc.update("""
+                        INSERT INTO sms_inventory.department_master (dept_code, dept_number, department_name, process_sequence, category, status)
+                        VALUES (?, ?, ?, ?, ?, 'ACTIVE')
+                        ON CONFLICT (department_name) DO UPDATE SET
+                            dept_code = EXCLUDED.dept_code,
+                            dept_number = EXCLUDED.dept_number,
+                            process_sequence = EXCLUDED.process_sequence,
+                            category = EXCLUDED.category,
+                            status = EXCLUDED.status
+                    """, ds.code(), ds.num(), ds.name(), BigDecimal.valueOf(ds.seq()), ds.type());
+                } catch (Exception ignored) {}
             }
-            System.out.println("Seeded departments from department_master.");
+            System.out.println("Seeded and synchronized all 18 departments into database.");
 
 
             // 4. Seed Material Master Items if empty
@@ -170,6 +235,50 @@ public class DataInitializer {
                 }
             } catch (Exception e) {
                 System.err.println("Note: Customer master seeding check: " + e.getMessage());
+            }
+
+            // 7. Seed Machine Master from machine_master.sql
+            try {
+                org.springframework.core.io.ClassPathResource res = new org.springframework.core.io.ClassPathResource("machine_master.sql");
+                if (res.exists()) {
+                    org.springframework.jdbc.datasource.init.ResourceDatabasePopulator populator =
+                            new org.springframework.jdbc.datasource.init.ResourceDatabasePopulator(res);
+                    populator.setContinueOnError(true);
+                    populator.execute(java.util.Objects.requireNonNull(jdbc.getDataSource()));
+                    System.out.println("Seeded machine_master from machine_master.sql.");
+                }
+                jdbc.update("UPDATE public.machine_master SET machine_no = REGEXP_REPLACE(machine_no, '(?i)m/c\\s*-?\\s*', 'M/C -') WHERE machine_no ~* 'm/c'");
+                System.out.println("Standardized all machine codes to 'M/C -X' format.");
+            } catch (Exception e) {
+                System.err.println("Note: Machine master seeding check: " + e.getMessage());
+            }
+
+            // 8. Seed HSN Tax Master from init_hsn_and_phase15.sql if empty
+            try {
+                Long hsnCount = jdbc.queryForObject("SELECT count(*) FROM public.hsn_tax_master", Long.class);
+                if (hsnCount == null || hsnCount == 0) {
+                    org.springframework.core.io.ClassPathResource res = new org.springframework.core.io.ClassPathResource("init_hsn_and_phase15.sql");
+                    if (res.exists()) {
+                        org.springframework.jdbc.datasource.init.ResourceDatabasePopulator populator =
+                                new org.springframework.jdbc.datasource.init.ResourceDatabasePopulator(res);
+                        populator.setContinueOnError(true);
+                        populator.execute(java.util.Objects.requireNonNull(jdbc.getDataSource()));
+                        System.out.println("Seeded hsn_tax_master from init_hsn_and_phase15.sql.");
+                    }
+                }
+            } catch (Exception e) {
+                try {
+                    org.springframework.core.io.ClassPathResource res = new org.springframework.core.io.ClassPathResource("init_hsn_and_phase15.sql");
+                    if (res.exists()) {
+                        org.springframework.jdbc.datasource.init.ResourceDatabasePopulator populator =
+                                new org.springframework.jdbc.datasource.init.ResourceDatabasePopulator(res);
+                        populator.setContinueOnError(true);
+                        populator.execute(java.util.Objects.requireNonNull(jdbc.getDataSource()));
+                        System.out.println("Created and seeded hsn_tax_master from init_hsn_and_phase15.sql.");
+                    }
+                } catch (Exception ex) {
+                    System.err.println("Note: HSN tax master seeding check: " + ex.getMessage());
+                }
             }
         };
     }

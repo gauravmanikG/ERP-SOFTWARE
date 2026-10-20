@@ -1,0 +1,137 @@
+Check by Accounts,Code,Check by Sales,Customer Name,"-----Bill TO-------
+Address","Customer Alias
+Short Name",State,Country,"----Ship To on----
+Address",Billing Source,GST,City,Domestic / Export,Supplier Code of SMS,"Sale
+Person",Sale Contact,Sale Email,Mode of Payment Reminder,Accounts Person Name - Contact No. -Mail id,Credit Days,SCM,Customer Address
+FALSE,16C114,TRUE,Ashok Leyland,"Silver Muller Rubber Ltd.(Sales)
+PHASE-III, PLOT NO.443, EPIP HSIIDC, KUNDLI, Sonipat, Haryana, 131028",Ashok Ley,Haryana,India,"Silver Muller Rubber Ltd.(Sales)
+PHASE-III, PLOT NO.443, EPIP HSIIDC, KUNDLI, Sonipat, Haryana, 131028",SMRL-443,06AARCS3816N1ZQ,,Domestic,7205808,,,"Deependra.Choubey@ashokleyland.com,Jayakumar@ashokleyland.com,Chhatrpal.Singh@ashokleyland.com,Vikramsingh.R@ashokleyland.com,Nagarajan.A2@ashokleyland.com
+POTHIRAJ.P2@ashokleyland.com",,,,,"Silver Muller Rubber Ltd.(Sales)
+PHASE-III, PLOT NO.443, EPIP HSIIDC, KUNDLI, Sonipat, Haryana, 131028"
+TRUE,,TRUE,Bir Auto And Tractor Agencies,"GROUND FLOOR, 2935, HAMILTON ROAD,, KASHMERE GATE, New Delhi, Delhi, 110006",Bir Auto,Delhi,India,"GROUND FLOOR, 2935, HAMILTON ROAD,, KASHMERE GATE, New Delhi, Delhi, 110006",Direct,07AAAPM6656Q1Z2,India,,,,,,,,,,"GROUND FLOOR, 2935, HAMILTON ROAD,, KASHMERE GATE, New Delhi, Delhi, 110006"
+TRUE,,TRUE,Dana India Private Ltd-PUNE,"Plot Number 01 Gat Number 51/1-3, 52-54, 56-59,, Global Industrial Park, Post-Vasuli, Taluka Khed,, Bhamboli, Pune, Maharashtra, 410501",DANA-PUNE,Maharashtra,India,"Plot Number 01 Gat Number 51/1-3, 52-54, 56-59,, Global Industrial Park, Post-Vasuli, Taluka Khed,, Bhamboli, Pune, Maharashtra, 410501",Direct,27AABCD1873A1Z3,,DOMESTIC,,Prabhakaran : HCV,"73390 00868
+95525 10464","d.prabakaran@alsn.com
+ratnesh.chourasiya@alsn.com
+dadasaheb.thorat@alsn.com",,,,,"Plot Number 01 Gat Number 51/1-3, 52-54, 56-59,, Global Industrial Park, Post-Vasuli, Taluka Khed,, Bhamboli, Pune, Maharashtra, 410501"
+FALSE,16C119,TRUE,Diesel Technic (M.E) Fze - Dubai,"Silver Muller Rubber Ltd.(Sales)
+PHASE-III, PLOT NO.443, EPIP HSIIDC, KUNDLI, Sonipat, Haryana, 131028",DT-Dubai,,Dubai,"Silver Muller Rubber Ltd.(Sales)
+PHASE-III, PLOT NO.443, EPIP HSIIDC, KUNDLI, Sonipat, Haryana, 131028",,,,Export,,,971 48120 100,,,,,,"PO Box 17051, Streen N305 ,Jebel Ali Free Zone, Dubai UAE"
+TRUE,,TRUE,Diesel Technic Se Germany,"Silver Muller Rubber Ltd.(Sales)
+PHASE-III, PLOT NO.443, EPIP HSIIDC, KUNDLI, Sonipat, Haryana, 131028",DT-Germany,,Germany,"Silver Muller Rubber Ltd.(Sales)
+PHASE-III, PLOT NO.443, EPIP HSIIDC, KUNDLI, Sonipat, Haryana, 131028",SMRL-443,,,Export,,"Ina Johannes
+Jessica Wiegmann : Packing Mgr",,"lea.harzmeier@dieseltechnic.com,j.wiegmann@dieseltechnic.com,Johannes@dieseltechnic.com,dannemann@dieseltechnic.com,
+dannemann@dieseltechnic.com\,laeticia.kowitz@dieseltechnic.com,laeticia.kowitz@dieseltechnic.com>,j.rehling@dieseltechnic.com",,,,,"GLOBAL AUTOMOTIVE SOLUTIONS, WEHRMANNSDAMM 5-9, 27245 KIRCHDORF/GERMANY"
+TRUE,,TRUE,Elpi General Trading Llc,"S-5, BEHIND KARACHI DARBAR RESTAURANT, AL MAKTOUM HOSPITAL ROAD, DEIRA, DUBAI, U.A.E",ELPI,,UAE,"S-5, BEHIND KARACHI DARBAR RESTAURANT, AL MAKTOUM HOSPITAL ROAD, DEIRA, DUBAI, U.A.E",Direct,,,,,,,info@elpi.com,,,,,
+,,,,,"S-5, BEHIND KARACHI DARBAR RESTAURANT, AL MAKTOUM HOSPITAL ROAD, DEIRA, DUBAI, U.A.E",,,,,,,,,,,,,,,,
+TRUE,,TRUE,Europart Middle East Fzco,"Plot # M209 Street # N400 , JAFZA North, Jebel Ali Free Zone , Dubai, United Arab Emirates, Ph:-04 8808449
+Fax-04 8808525, MOBILE+971 55 956 9488",Europart,,UAE,"Plot # M209 Street # N400 , JAFZA North, Jebel Ali Free Zone , Dubai, United Arab Emirates, Ph:-04 8808449
+Fax-04 8808525, MOBILE+971 55 956 9488",Direct,,"Jebel Ali Free Zone , Dubai",Export,,"Vitaly
+Shahzad Riaz - Purchase Exe","9714-8808449
+
+04 8808449
+971 55 956 9488","1243@europart.ru
+R.Shahzad@europart.net
+H.Charawanan@europart.net",,,,,"Plot # M209 Street # N400 , JAFZA North, Jebel Ali Free Zone , Dubai, United Arab Emirates, Ph:-04 8808449
+Fax-04 8808525, MOBILE+971 55 956 9488"
+TRUE,,TRUE,J.K. Fenner India Limited(Gurugram),"C/O SEABIRD LOGISOLUTION LTD, NO.19., VILL-DABODHA,KHASRA NO.4/18,22,23,24,5//11,6//2,3,4, FARRUKHNAGAR,GURUGRAM,HARYANA-122506",JK-GURGAON,Haryana,India,"C/O SEABIRD LOGISOLUTION LTD, NO.19., VILL-DABODHA,KHASRA NO.4/18,22,23,24,5//11,6//2,3,4, FARRUKHNAGAR,GURUGRAM,HARYANA-122506",Direct,06AAACJ7230N2ZF,,,,Avinash Kumar :Deputy Manager,8586865307,"prashant.b@jkfenner.com
+avinashkumar.p@jkfenner.com",,,,,"C/O SEABIRD LOGISOLUTION LTD, NO.19., VILL-DABODHA,KHASRA NO.4/18,22,23,24,5//11,6//2,3,4, FARRUKHNAGAR,GURUGRAM,HARYANA-122506"
+TRUE,,TRUE,J.K. FENNER (INDIA) LTD (CHENNAI),"J.K-FENNER (INDIA) LTD, F-21 & 22,SIPCOT INDUSTRIAL PARK, SRIPERUMBADUR, KANCHEEPURAM-602 105, TAMIL NADU",JK-CHENNAI,Tamil Nadu,India,"J.K-FENNER (INDIA) LTD, F-21 & 22,SIPCOT INDUSTRIAL PARK, SRIPERUMBADUR, KANCHEEPURAM-602 105, TAMIL NADU",Direct,33AAACJ7230N1ZJ,KANCHEEPURAM,Domestic,,"Lion Kumar
+
+Vikash Panchamani : Supply Chain :91-9003246132
+
+P Vikash: Plant PURCHSE HEAD :+91-9003246132","98416 53170
+91761 76114 / 95856 52819","Leonkumar.g@jkfenner.com,sanjeevkumar.shishpal@jkfenner.com
+KUTHALAMAGESH.n@jkfenner.com
+sasikumarr@jkfenner.com
+saravana.kumar1@safexpress.com",E-Mail,K.Kothandaraman: Sprbills@jkfenner.com,,"Vikash Panchamani @jkfenner.com,Saravanans@jkfenner.com","J.K-FENNER (INDIA) LTD, F-21 & 22,SIPCOT INDUSTRIAL PARK, SRIPERUMBADUR, KANCHEEPURAM-602 105, TAMIL NADU"
+TRUE,,TRUE,Kistenmacher Auto Technik,"Kohli Auto Traders
+WZ 76, TODAPUR, NEW DELHI 110012",KAT,,UAE,"Kohli Auto Traders
+WZ 76, TODAPUR, NEW DELHI 110012",kohli auto,,,,,,,"katlogistics@kat-germany.de
+Pecherska@kat-germany.de
+Krause@kat-germany.de
+Subramanian@kat-germany.de",,,,,"HOLIDAY INN, GATEWAY AVENUE, FESTIVAL CITY, DUBAI, UAE"
+TRUE,,TRUE,Lakhdatar Shyam Industries Private Limited,"Plot No. F-40/308, Transport Nagar Phase II,, Kanpur Road, Lukhnow, Uttar Pradesh, 226012",Lakhdatar,Uttar Pradesh,India,"Plot No. F-40/308, Transport Nagar Phase II,, Kanpur Road, Lukhnow, Uttar Pradesh, 226012",Direct,09AAICR4269F1Z2,,,,Mr. Shyam,"01147587176, 93122 07176",Lakhdatarshyaminds@gmail.com,whatsapp,,,,"Plot No. F-40/308, Transport Nagar Phase II,, Kanpur Road, Lukhnow, Uttar Pradesh, 226012"
+TRUE,,TRUE,"Llc ""F.A.Logistic""","4,SOLNECHNOGORORSKY PROEZD,125413, MOSCOW,RUSSIA FEDERATION",FORUM 6,,Russia,"4,SOLNECHNOGORORSKY PROEZD,125413, MOSCOW,RUSSIA FEDERATION",Direct,,,,,"Sergey Suryadnov
+Aleksej,",-10117,"vsyannikov.u@forum-auto.ru,suryadnov.s@forum-auto.ru,sorokin.a@forum-auto.ru,
+ovsyannikov.u@forum-auto.ru,viv33in@gmail.com,
+suryadnov.s@forum-auto.ru,egorov.da@forum-auto.ru
+ovsyannikov.u@forum-auto.ru,
+sorokin.a@forum-auto.ru,viv33in@gmail.com
+gorlov.o@forum-auto.ru",,,,,"4,SOLNECHNOGORORSKY PROEZD,125413, MOSCOW,RUSSIA FEDERATION"
+TRUE,,TRUE,Meritor Hvs (India) Limited,"CVA Warehouse, Gate No.34, Taluka Maval, Near Talegaon, Pune-412106, Maharashtra",MERITOR,Maharashtra,India,"CVA Warehouse, Gate No.34, Taluka Maval, Near Talegaon, Pune-412106, Maharashtra",Direct,27AABCM8911G1ZH,PUNE,Domestic,232513,"Selvan Shrinivasan
+Mr. Deva Accounts :8799986216",91 8799990281,"CVA.Pune3@cummins.com,CVA.Pune2@cummins.com,Laxmikant.Somnathe@cummins.com,
+Suresh.Joshi@cummins.com,
+selvan.shrinivasan@cummins.com
+devidas.anbhule@cummins.com
+Laxmikant.Somnathe@cummins.com",E-Mail,,,,"CVA Warehouse, Gate No.34, Taluka Maval, Near Talegaon, Pune-412106, Maharashtra"
+TRUE,,TRUE,SAHNI DISTRIBUTORS PVT. LTD./DFT,"KHASRA NO-38, ROAD NO-3, DABRI VILLAGE, West Delhi, Delhi, 110045
+
+""PLOT NO. 313, ROAD NO.3,
+DABRI INDUSTRIAL AREA,
+NEW DELHI-110045 (INDIA)""",DFT,Delhi,India,,Direct,07AAFCS9276E1Z1,,,,,,,,,,,"KHASRA NO-38, ROAD NO-3, DABRI VILLAGE, West Delhi, Delhi, 110045
+
+""PLOT NO. 313, ROAD NO.3,
+DABRI INDUSTRIAL AREA,
+NEW DELHI-110045 (INDIA)"""
+TRUE,,TRUE,Sfp Products India Private Limited,"KOHLI AUTO TRADERS
+WZ-76, TODAPUR, DELHI, SOUTH WEST DELHI, DELHI-110012",SFP,DELHI,INDIA,"Sfp Products India Private Limited
+HOUSE NO. 79, BLK-CW, NEW DELHI NORTH DELHI",Direct,07ABPCS1939M1ZM,NEW DELHI,DOMESTIC,,,,whatsapp,,,,,"KOHLI AUTO TRADERS
+WZ-76, TODAPUR, DELHI, SOUTH WEST DELHI, DELHI-110012"
+TRUE,,TRUE,Silver Muller Rubber Ltd.(Sales),"PHASE-III, PLOT NO.443, EPIP HSIIDC, KUNDLI, Sonipat, Haryana, 131028",SMRL,Haryana,India,"PHASE-III, PLOT NO.443, EPIP HSIIDC, KUNDLI, Sonipat, Haryana, 131028",Direct,06AARCS3816N1ZQ,KUNDLI,Domestic,,Ravi Anand,,design@silvermuller.com,,,,,"PHASE-III, PLOT NO.443, EPIP HSIIDC, KUNDLI, Sonipat, Haryana, 131028"
+TRUE,,TRUE,Steel Impex & Industries,"HISSA NO 6, SURVEY NO 115, GHODBUNDER VILLAGE ROAD, MIRA ROAD EAST, THANE, MAHARASHTRA- 401107",Steel Impex,Maharashtra,India,"HISSA NO 6, SURVEY NO 115, GHODBUNDER VILLAGE ROAD, MIRA ROAD EAST, THANE, MAHARASHTRA- 401107",Direct,27AAAFS3367A1ZI,,,,Sunil Batra,-28458087,whatsapp,,,,,"HISSA NO 6, SURVEY NO 115, GHODBUNDER VILLAGE ROAD, MIRA ROAD EAST, THANE, MAHARASHTRA- 401107"
+FALSE,,TRUE,Kohli Auto Traders,"WZ 76, TODAPUR, NEW DELHI 110012",Kohli,,,,Direct,,,,,,,group.silverseal@gmail.com,,,,,"WZ 76, TODAPUR, NEW DELHI 110012"
+FALSE,,TRUE,Y.S.M Spring International,"96/99, Bhatwara, Shahpeer Gate, Shohrab Gate, Meerut, Uttar Pradesh 250002",YSM,Uttar Pradesh,India,"96/99, Bhatwara, Shahpeer Gate, Shohrab Gate, Meerut, Uttar Pradesh 250002",,,,,,,,whatsapp,,,,,"96/99, Bhatwara, Shahpeer Gate, Shohrab Gate, Meerut, Uttar Pradesh 250002"
+TRUE,,TRUE,Partap Singh and Sons-GUJRAT,"UMARWADA, VPUNE KUMBHARIA ROAD, SARDAR COMPLEX, SHOP NO.B-50,ROYAL TOWNSHIP",PSS-GUJRAT,GUJRAT,India,"24, THNKER OWNER S ASSO BULIDING, OPP GOKUL HOTEL, GANDHIDHAM, Kachchh,
+Gujarat, 370001",Direct,24AAAFP8679G1ZY,SURAT,Domestic,,Sartaj Chadha,9892523522,sartajchadha78@gmail.com,,,,,"UMARWADA, VPUNE KUMBHARIA ROAD, SARDAR COMPLEX, SHOP NO.B-50,ROYAL TOWNSHIP"
+TRUE,,TRUE,Partap Singh and Sons-MUMBAI,"SHOP NO 5, 29-B, NAVAKAR BLDG SHOP NO 5, KENNEDY BRIDGE, OPERA HOUSE, MUMBAI",PSS-MUMBAI,MAHARASHTRA,India,"115, TRUCK TERMINAL, NEXT TOO STEEL TOWN PETROL PUMP, KALAMBOLI, Raigad, Maharashtra, 410218",Direct,27AAAFP8679G1ZS,KALAMBOLI,Domestic,,Sartaj Chadha,9892523522,sartajchadha78@gmail.com,,,,,"SHOP NO 5, 29-B, NAVAKAR BLDG SHOP NO 5, KENNEDY BRIDGE, OPERA HOUSE, MUMBAI"
+FALSE,,TRUE,KJ,"PHASE-III, PLOT NO.443, EPIP HSIIDC, KUNDLI, Sonipat, Haryana, 131028",KJ,Haryana,India,"PHASE-III, PLOT NO.443, EPIP HSIIDC, KUNDLI, Sonipat, Haryana, 131028",SMRL-443,,,,,,,,,,,,
+FALSE,,TRUE,RSK MOTORS,"4-C, PURSHOTTAM BUILDING, TRIBHUVAN ROAD, MUMBAI-400004",RSK MOTORS,MAHARASHTRA,India,"4-C, PURSHOTTAM BUILDING, TRIBHUVAN ROAD, MUMBAI-400004",Direct,27AAMPK9641H1ZA,TRIBHUVAN ROAD,DOMESTIC,,,,whatsapp,,,,,
+FALSE,,TRUE,Safety Stock,,Safety Stock,,,,,,,,,,,,,,,,
+FALSE,,TRUE,J.K. Fenner India Limited(Export),"C/O SEABIRD LOGISOLUTION LTD, NO.19., VILL-DABODHA,KHASRA NO.4/18,22,23,24,5//11,6//2,3,4, FARRUKHNAGAR,GURUGRAM,HARYANA-122506",JK-EXPORT,Haryana,India,"C/O SEABIRD LOGISOLUTION LTD, NO.19., VILL-DABODHA,KHASRA NO.4/18,22,23,24,5//11,6//2,3,4, FARRUKHNAGAR,GURUGRAM,HARYANA-122506",Direct,06AAACJ7230N2ZF,,,,Avinash Kumar :Deputy Manager,8586865307,,,,,,"C/O SEABIRD LOGISOLUTION LTD, NO.19., VILL-DABODHA,KHASRA NO.4/18,22,23,24,5//11,6//2,3,4, FARRUKHNAGAR,GURUGRAM,HARYANA-122506"
+FALSE,,TRUE,VEE TEE AUTO MANUFACTURING CO. PVT. LTD.,"PLOT NO. 10, SECTOR 19D, NEAR APMC MARKET, VASHI, NAVI MUMBAI.
+TEL: 022-67675000 FAX: 022-27835004",VEE TEE,MAHARASHTRA,INDIA,"PLOT NO. 10, SECTOR 19D, NEAR APMC MARKET, VASHI, NAVI MUMBAI.
+TEL: 022-67675000 FAX: 022-27835004",Direct,,,,,Rajesh Tiwari,98204 63605,rajesh@virtechnique.com,,,,,
+FALSE,,TRUE,SATYAM ENTERPRISES,3520/1 CHUTTANI MANZIL NICHOLSON ROAD MORI GATE DELHI 110006,Satyam,Delhi,India,"BG 335 SANJAY GANDHI TRANSPORT NAGAR DELHI 110042
+( BILLING & SHIPPING ADDRESS IMPORTANT MENTION IN BILL)",Direct,07AAFPM5657A1ZV,,Domestic,,Rohit,9811422501,whatsapp,,,,,
+FALSE,,TRUE,NBC,"National Engineering Industries Ltd.
+(Auto Adjacencies Division)
+Khatipura Road, Jaipur - 302006,
+India .",NBC,RAJASTHAN,INDIA,"National Engineering Industries Ltd.
+(Auto Adjacencies Division)
+Khatipura Road, Jaipur - 302006,
+India .",Direct,,,Domestic,,Sanjeev Kumar,8860880244,"sanjeev.kumar2@nbcbearings.in
+manish.sinha@nbcbearings.in
+rahul.dewedi@nbcbearings.in",,,,,
+FALSE,,TRUE,FREUDENBERG-NOK,"Freudenberg-NOK Pvt.Ltd.
+C/O Rhenus Contract Logistics I
+Pvt Ltd.
+MUF10, Shail Embassy Ind.
+Park, F+H Block
+Situated Near SH 15A,
+122506 GURGAON, HARYANA, INDIA",FNI,Haryana,INDIA,"Freudenberg-NOK Pvt.Ltd.
+C/O Rhenus Contract Logistics I
+Pvt Ltd.
+MUF10, Shail Embassy Ind.
+Park, F+H Block
+Situated Near SH 15A,
+122506 GURGAON, HARYANA, INDIA",Direct,06AAFCS0306K1ZL,,Domestic,,,,"Paltu.Sana@corteco.in
+,Mandeep.Sehgal@fst.com
+Pankaj.Jariyal@fst.com",,,,,
+FALSE,,TRUE,TRUCK MOTORS,"TME SPARE PARTS TRADING DWC-LLC
+P.O. BOX 644272, DUBAI, UAE, PHONE : +97148879220, truckmotorsdubai@gmail.com",TM,,DUBAI,"TME SPARE PARTS TRADING DWC-LLC
+P.O. BOX 644272, DUBAI, UAE, PHONE : +97148879220, truckmotorsdubai@gmail.com",Direct,,,EXPORT,,,,"i.efimov@tmtr.ru
+a.utkin@tmtr.ru
+a.iakimchenko@tmtr.ru
+l.vdovina@tmtr.ru
+a.dumbadze@tmtr.ru
+e.petrygina@tmtr.ru
+i.latfullin@tmtr.ru
+a.samylkin@tmtr.ru",,,,,
+FALSE,,TRUE,NEW KIM AUTO PRODUCTS,"PLOT NO 191, GROUND FLOOR, DSIDC PKT M SEC 5, NEAR LABOUR CHOWK SEC 5, Bawana Industrial Area, NEW DELHI, NORTH WEST DELHI, DELHI, 110039",KIM,Delhi,india,"PLOT NO 191, GROUND FLOOR, DSIDC PKT M SEC 5, NEAR LABOUR CHOWK SEC 5, Bawana Industrial Area, NEW DELHI, NORTH WEST DELHI, DELHI, 110039",Direct,07BDKPB5855J1ZB,,Domestic,,,Kshitiz Bhaskar,,,,,,
+FALSE,,TRUE,TIMKEN GGB TECHNOLOGY PVT LTD,"6th Floor, Wing B, Unit No B603, S No. 87/1A
+Plot No.187(Part). Amar Business Zone , Baner Road
+Pune, 411045 GSTIN/UIN: 27AABCE7337G1ZN
+State Name : Maharashtra, Code : 27",TIMKEN,MAHARASHTRA,INDIA,"Plot No.109-B, GIDC,
+Narmadanagar Bharuch, 392015
+State Name : GUJARAT",Direct,27AABCE7337G1ZN,,Domestic,,,Raghavendra,"d.raghavendra@timken.com
+swarup.mandal@timken.com",,,,,

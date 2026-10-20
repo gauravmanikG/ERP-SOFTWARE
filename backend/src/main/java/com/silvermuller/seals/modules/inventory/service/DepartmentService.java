@@ -1,6 +1,7 @@
 package com.silvermuller.seals.modules.inventory.service;
 
 import com.silvermuller.seals.common.exception.ResourceNotFoundException;
+import com.silvermuller.seals.modules.inventory.dto.CreateDepartmentRequest;
 import com.silvermuller.seals.modules.inventory.dto.DepartmentResponse;
 import com.silvermuller.seals.modules.inventory.model.Department;
 import com.silvermuller.seals.modules.inventory.model.DepartmentMaster;
@@ -39,29 +40,69 @@ public class DepartmentService {
 
     public List<DepartmentResponse> getAllDepartments() {
         return departmentMasterRepository.findAllByOrderByProcessSequenceAsc().stream()
-                .map(dept -> new DepartmentResponse(dept.getId(), dept.getDepartmentName(), dept.getProcessSequence()))
+                .map(this::toResponse)
                 .collect(Collectors.toList());
+    }
+
+    private DepartmentResponse toResponse(DepartmentMaster dept) {
+        return new DepartmentResponse(
+                dept.getId(),
+                dept.getDeptCode(),
+                dept.getDeptNumber(),
+                dept.getDepartmentName(),
+                dept.getProcessSequence(),
+                dept.getCategory(),
+                dept.getStatus(),
+                dept.getNotes()
+        );
+    }
+
+    @Transactional
+    public DepartmentResponse createDepartment(CreateDepartmentRequest req) {
+        String name = req.getDepartmentName() == null ? "" : req.getDepartmentName().trim();
+        if (name.isBlank()) {
+            throw new IllegalArgumentException("Department name is required");
+        }
+        if (req.getProcessSequence() == null) {
+            throw new IllegalArgumentException("Process sequence is required");
+        }
+        if (departmentMasterRepository.findByDepartmentNameIgnoreCase(name).isPresent()) {
+            throw new IllegalArgumentException("A department named '" + name + "' already exists");
+        }
+        long count = departmentMasterRepository.count();
+        Integer num = req.getDeptNumber();
+        if (num == null) {
+            num = (int) count + 1;
+        }
+        String code = req.getDeptCode();
+        if (code == null || code.isBlank()) {
+            code = String.format("DPT-%03d", num);
+        }
+
+        DepartmentMaster dept = new DepartmentMaster();
+        dept.setDeptCode(code.trim());
+        dept.setDeptNumber(num);
+        dept.setDepartmentName(name);
+        dept.setProcessSequence(req.getProcessSequence());
+        dept.setCategory(req.getCategory() != null ? req.getCategory().trim() : "General");
+        dept.setStatus(req.getStatus() != null && !req.getStatus().isBlank() ? req.getStatus().trim() : "ACTIVE");
+        dept.setNotes(req.getNotes());
+
+        DepartmentMaster saved = departmentMasterRepository.save(dept);
+        if (departmentRepository.findByNameIgnoreCase(name).isEmpty()) {
+            Department live = new Department();
+            live.setName(name);
+            departmentRepository.save(live);
+        }
+        return toResponse(saved);
     }
 
     @Transactional
     public DepartmentResponse createDepartment(String name, java.math.BigDecimal processSequence) {
-        String trimmed = name == null ? "" : name.trim();
-        if (trimmed.isBlank()) {
-            throw new IllegalArgumentException("Department name is required");
-        }
-        if (processSequence == null) {
-            throw new IllegalArgumentException("Process sequence is required");
-        }
-        if (departmentMasterRepository.findByDepartmentNameIgnoreCase(trimmed).isPresent()) {
-            throw new IllegalArgumentException("A department named '" + trimmed + "' already exists");
-        }
-        DepartmentMaster saved = departmentMasterRepository.save(new DepartmentMaster(trimmed, processSequence));
-        if (departmentRepository.findByNameIgnoreCase(trimmed).isEmpty()) {
-            Department live = new Department();
-            live.setName(trimmed);
-            departmentRepository.save(live);
-        }
-        return new DepartmentResponse(saved.getId(), saved.getDepartmentName(), saved.getProcessSequence());
+        CreateDepartmentRequest req = new CreateDepartmentRequest();
+        req.setDepartmentName(name);
+        req.setProcessSequence(processSequence);
+        return createDepartment(req);
     }
 
     @Transactional
@@ -92,14 +133,14 @@ public class DepartmentService {
     }
 
     @Transactional
-    public DepartmentResponse updateDepartment(Long id, String name, java.math.BigDecimal processSequence) {
+    public DepartmentResponse updateDepartment(Long id, CreateDepartmentRequest req) {
         DepartmentMaster master = departmentMasterRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Department not found with ID: " + id));
-        String trimmed = name == null ? "" : name.trim();
+        String trimmed = req.getDepartmentName() == null ? "" : req.getDepartmentName().trim();
         if (trimmed.isBlank()) {
             throw new IllegalArgumentException("Department name is required");
         }
-        if (processSequence == null) {
+        if (req.getProcessSequence() == null) {
             throw new IllegalArgumentException("Process sequence is required");
         }
         String oldName = master.getDepartmentName();
@@ -120,10 +161,31 @@ public class DepartmentService {
                 departmentRepository.save(live);
             });
         }
+
+        Integer num = req.getDeptNumber() != null ? req.getDeptNumber() : master.getDeptNumber();
+        String code = req.getDeptCode() != null && !req.getDeptCode().isBlank() ? req.getDeptCode().trim() : master.getDeptCode();
+        if (code == null || code.isBlank()) {
+            code = String.format("DPT-%03d", num != null ? num : master.getId().intValue());
+        }
+
+        master.setDeptCode(code);
+        master.setDeptNumber(num);
         master.setDepartmentName(trimmed);
-        master.setProcessSequence(processSequence);
+        master.setProcessSequence(req.getProcessSequence());
+        if (req.getCategory() != null) master.setCategory(req.getCategory().trim());
+        if (req.getStatus() != null) master.setStatus(req.getStatus().trim());
+        if (req.getNotes() != null) master.setNotes(req.getNotes());
+
         DepartmentMaster saved = departmentMasterRepository.save(master);
-        return new DepartmentResponse(saved.getId(), saved.getDepartmentName(), saved.getProcessSequence());
+        return toResponse(saved);
+    }
+
+    @Transactional
+    public DepartmentResponse updateDepartment(Long id, String name, java.math.BigDecimal processSequence) {
+        CreateDepartmentRequest req = new CreateDepartmentRequest();
+        req.setDepartmentName(name);
+        req.setProcessSequence(processSequence);
+        return updateDepartment(id, req);
     }
 
     @Transactional
