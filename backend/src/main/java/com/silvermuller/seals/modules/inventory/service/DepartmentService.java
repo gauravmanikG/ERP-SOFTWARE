@@ -7,7 +7,6 @@ import com.silvermuller.seals.modules.inventory.model.Department;
 import com.silvermuller.seals.modules.inventory.model.DepartmentMaster;
 import com.silvermuller.seals.modules.inventory.repository.DepartmentMasterRepository;
 import com.silvermuller.seals.modules.inventory.repository.DepartmentRepository;
-import com.silvermuller.seals.modules.inventory.repository.InventoryTransactionRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,15 +21,12 @@ public class DepartmentService {
 
     private final DepartmentRepository departmentRepository;
     private final DepartmentMasterRepository departmentMasterRepository;
-    private final InventoryTransactionRepository transactionRepository;
 
     public DepartmentService(
             DepartmentRepository departmentRepository,
-            DepartmentMasterRepository departmentMasterRepository,
-            InventoryTransactionRepository transactionRepository) {
+            DepartmentMasterRepository departmentMasterRepository) {
         this.departmentRepository = departmentRepository;
         this.departmentMasterRepository = departmentMasterRepository;
-        this.transactionRepository = transactionRepository;
     }
 
     public List<DepartmentResponse> getAllDepartments() {
@@ -182,15 +178,6 @@ public class DepartmentService {
         DepartmentMaster master = departmentMasterRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Department not found with ID: " + id));
         Department live = departmentRepository.findByNameIgnoreCase(master.getDepartmentName()).orElse(null);
-        if (live != null) {
-            List<com.silvermuller.seals.modules.inventory.model.InventoryTransaction> txs =
-                    transactionRepository.findByFromDepartment_IdOrToDepartment_Id(live.getId(), live.getId());
-            if (!txs.isEmpty()) {
-                throw new IllegalArgumentException(
-                        "Cannot delete '" + master.getDepartmentName()
-                                + "' because inventory transactions still use it. Remove those movements first.");
-            }
-        }
         if (live != null) {
             departmentRepository.delete(live);
         }

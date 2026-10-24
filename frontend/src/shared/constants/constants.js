@@ -66,13 +66,6 @@ export const NAV = [
     ],
   },
   { label: "Contact", page: "contact" },
-  {
-    label: "Admin",
-    page: "inventory-transactions",
-    items: [
-      { label: "Inventory Slips", page: "inventory-transactions" },
-    ],
-  },
 ];
 
 export const NOTICES = [

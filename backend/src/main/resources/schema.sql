@@ -19,53 +19,17 @@ CREATE TABLE IF NOT EXISTS department (
   name VARCHAR(255) NOT NULL UNIQUE
 );
 
--- 2. Transaction Type Table
-CREATE TABLE IF NOT EXISTS transaction_type (
-  id   BIGSERIAL PRIMARY KEY,
-  type VARCHAR(50) NOT NULL UNIQUE
-);
-
--- 3. Master Table (Material Master)
+-- 2. Master Table (Material Master)
 CREATE TABLE IF NOT EXISTS master (
   id                  BIGSERIAL PRIMARY KEY,
   code                VARCHAR(100) NOT NULL UNIQUE,
   description         VARCHAR(255) NOT NULL,
   category            VARCHAR(100) NOT NULL DEFAULT 'General',
   unit_of_measurement VARCHAR(50) NOT NULL,
-  opening_balance     NUMERIC(15, 2) NOT NULL DEFAULT 0 CHECK (opening_balance >= 0),
   store_name          VARCHAR(100) NOT NULL
 );
 
 ALTER TABLE master ADD COLUMN IF NOT EXISTS category VARCHAR(100) NOT NULL DEFAULT 'General';
-
--- 4. Inventory Transaction Table
-CREATE TABLE IF NOT EXISTS inventory_transaction (
-  id                      BIGSERIAL PRIMARY KEY,
-  transaction_number      VARCHAR(50) NOT NULL,
-  slip_number             VARCHAR(100),
-  transaction_type_id     BIGINT NOT NULL REFERENCES transaction_type(id),
-  master_id               BIGINT NOT NULL REFERENCES master(id),
-  from_department_id      BIGINT NOT NULL REFERENCES department(id),
-  to_department_id        BIGINT REFERENCES department(id),
-  quantity                NUMERIC(15, 2) NOT NULL CHECK (quantity > 0),
-  transaction_date        TIMESTAMPTZ NOT NULL DEFAULT now(),
-  remarks                 TEXT,
-  reversed_transaction_id BIGINT REFERENCES inventory_transaction(id)
-);
-
--- Migration steps for existing database instances
-ALTER TABLE inventory_transaction DROP CONSTRAINT IF EXISTS inventory_transaction_slip_number_key;
-ALTER TABLE inventory_transaction ADD COLUMN IF NOT EXISTS transaction_number VARCHAR(50);
-ALTER TABLE inventory_transaction ALTER COLUMN slip_number DROP NOT NULL;
-ALTER TABLE inventory_transaction ADD COLUMN IF NOT EXISTS from_department_id BIGINT REFERENCES department(id);
-ALTER TABLE inventory_transaction ADD COLUMN IF NOT EXISTS to_department_id BIGINT REFERENCES department(id);
-
-CREATE INDEX IF NOT EXISTS idx_inv_tx_transaction_number ON inventory_transaction(transaction_number);
-CREATE INDEX IF NOT EXISTS idx_inv_tx_slip_number ON inventory_transaction(slip_number);
-CREATE INDEX IF NOT EXISTS idx_inv_tx_master_id ON inventory_transaction(master_id);
-CREATE INDEX IF NOT EXISTS idx_inv_tx_type_id ON inventory_transaction(transaction_type_id);
--- Used by the InventoryTransaction entity (previously added only by Hibernate ddl-auto=update).
-ALTER TABLE inventory_transaction ADD COLUMN IF NOT EXISTS category VARCHAR(150);
 
 -- =============================================================================
 -- SMS Inventory Module — Item Master
@@ -1488,8 +1452,6 @@ CREATE TABLE IF NOT EXISTS public.job_work_challan_lines (
   category              VARCHAR(255) NOT NULL,
   batch_no              VARCHAR(100),
   qty                   NUMERIC(15,2) NOT NULL,
-  inventory_transaction_id BIGINT REFERENCES public.inventory_transaction(id),
-  reversal_transaction_id  BIGINT REFERENCES public.inventory_transaction(id),
   CONSTRAINT ck_jwc_line_qty CHECK (qty > 0)
 );
 
@@ -1548,7 +1510,6 @@ CREATE TABLE IF NOT EXISTS public.job_work_stock_ledger (
   reference_no          VARCHAR(50) NOT NULL,
   challan_id            BIGINT REFERENCES public.job_work_challans(id),
   receipt_id            BIGINT REFERENCES public.job_work_receipts(id),
-  inventory_transaction_id BIGINT REFERENCES public.inventory_transaction(id),
   created_by            VARCHAR(150) NOT NULL,
   created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CONSTRAINT ck_jwl_nonzero CHECK (qty <> 0),

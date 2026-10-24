@@ -3,20 +3,14 @@ package com.silvermuller.seals.modules.inventory.service;
 import com.silvermuller.seals.common.exception.ResourceNotFoundException;
 import com.silvermuller.seals.modules.inventory.dto.CreateCategoryRequest;
 import com.silvermuller.seals.modules.inventory.model.CategoryMaster;
-import com.silvermuller.seals.modules.inventory.model.InventoryTransaction;
 import com.silvermuller.seals.modules.inventory.model.Master;
 import com.silvermuller.seals.modules.inventory.repository.CategoryMasterRepository;
-import com.silvermuller.seals.modules.inventory.repository.InventoryTransactionRepository;
 import com.silvermuller.seals.modules.inventory.repository.MasterRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 @Service
 @Transactional(readOnly = true)
@@ -24,15 +18,12 @@ public class CategoryService {
 
     private final CategoryMasterRepository categoryMasterRepository;
     private final MasterRepository masterRepository;
-    private final InventoryTransactionRepository transactionRepository;
 
     public CategoryService(
             CategoryMasterRepository categoryMasterRepository,
-            MasterRepository masterRepository,
-            InventoryTransactionRepository transactionRepository) {
+            MasterRepository masterRepository) {
         this.categoryMasterRepository = categoryMasterRepository;
         this.masterRepository = masterRepository;
-        this.transactionRepository = transactionRepository;
     }
 
     public List<CategoryMaster> getAll() {
@@ -62,60 +53,25 @@ public class CategoryService {
         CategoryMaster category = categoryMasterRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Category not found with ID: " + id));
         String name = category.getCategoryName();
-        long transactions = transactionRepository.countByCategoryIgnoreCase(name);
-        if (transactions > 0) {
-            throw new IllegalArgumentException(
-                    "Cannot delete '" + name + "' because " + transactions
-                            + " inventory transaction(s) still use it. Reverse or remove those movements first.");
-        }
 
-        Set<String> itemCodes = new LinkedHashSet<>();
         for (Master master : masterRepository.findByCategoryIgnoreCase(name)) {
-            if (master.getCode() != null && !master.getCode().isBlank()) {
-                itemCodes.add(master.getCode().trim());
-            }
-        }
-
-        for (String code : itemCodes) {
-            masterRepository.findByCodeIgnoreCase(code).ifPresent(this::retargetOrDeleteMaster);
+            masterRepository.delete(master);
         }
 
         categoryMasterRepository.delete(category);
     }
 
-    private void retargetOrDeleteMaster(Master master) {
-        List<InventoryTransaction> itemTxs =
-                transactionRepository.findByMasterIdOrderByTransactionDateAscIdAsc(master.getId());
-        if (itemTxs.isEmpty()) {
-            masterRepository.delete(master);
-            return;
-        }
-        String fromTx = itemTxs.stream()
-                .map(InventoryTransaction::getCategory)
-                .filter(c -> c != null && !c.isBlank())
-                .findFirst()
-                .orElse("General");
-        master.setCategory(fromTx);
-        masterRepository.save(master);
-    }
-
     private Map<String, Object> usageFor(CategoryMaster category) {
         String name = category.getCategoryName();
         long masters = masterRepository.countByCategoryIgnoreCase(name);
-        long transactions = transactionRepository.countByCategoryIgnoreCase(name);
-        boolean canDelete = transactions == 0;
 
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("id", category.getId());
         body.put("categoryName", name);
         body.put("masterCount", masters);
-        body.put("transactionCount", transactions);
-        body.put("canDelete", canDelete);
-        if (!canDelete) {
-            body.put("message", "Cannot delete '" + name + "' because " + transactions
-                    + " inventory transaction(s) still use it. Reverse or remove those movements first.");
-        } else if (masters > 0) {
-            body.put("message", "'" + name + "' has " + masters + " item(s) and no inventory movements. Delete will remove items that only existed in this category.");
+        body.put("canDelete", true);
+        if (masters > 0) {
+            body.put("message", "'" + name + "' has " + masters + " item(s). Delete will remove all items in this category.");
         } else {
             body.put("message", "'" + name + "' is not used. It can be deleted.");
         }

@@ -41,7 +41,7 @@ public class StartupDataMigrations implements ApplicationRunner {
     /** Every column that stores a category by name (categories have no ID references or foreign keys). */
     static final List<String> CATEGORY_NAME_COLUMNS = List.of(
             "item_master.category", "item_master.group_name", "item_master.subgroup", "master.category",
-            "opening_balance.category_name", "inventory_transaction.category", "job_work_stock_ledger.category",
+            "job_work_stock_ledger.category",
             "goods_receipt_note_items.category", "purchase_requisition_items.category", "rfq_items.category",
             "vendor_quotation_items.category", "job_work_adjustments.category", "job_work_challan_lines.category",
             "job_work_indent_lines.category", "job_work_loss_policy.category", "job_work_order_lines.category",
@@ -50,15 +50,6 @@ public class StartupDataMigrations implements ApplicationRunner {
             "service_purchase_orders.service_category", "item_group.name", "item_subgroup.name");
 
     public static final List<Migration> MIGRATIONS = List.of(
-            new Migration("2026-10-24-01-backfill-inventory-transaction-number",
-                    "Copies slip_number into transaction_number for rows created before that column existed. Fills NULLs only. "
-                            + "Previously ran on every start from schema.sql.",
-                    "UPDATE inventory_transaction SET transaction_number = slip_number WHERE transaction_number IS NULL"),
-            new Migration("2026-10-24-02-remove-unused-legacy-transaction-types",
-                    "Deletes the legacy ISSUE/RECEIPT/REVERSE/TRANSFER transaction types that no transaction references. "
-                            + "Previously ran on every start from DataInitializer.",
-                    "DELETE FROM transaction_type WHERE UPPER(type) IN ('ISSUE', 'RECEIPT', 'REVERSE', 'TRANSFER') "
-                            + "AND id NOT IN (SELECT DISTINCT transaction_type_id FROM inventory_transaction WHERE transaction_type_id IS NOT NULL)"),
             new Migration("2026-10-24-03-normalize-machine-numbers",
                     "Rewrites machine numbers such as 'm/c-5' to the standard 'M/C -5' format, only where the value actually changes. "
                             + "Previously ran on every start from DataInitializer; the machine master screen now produces this format itself.",
