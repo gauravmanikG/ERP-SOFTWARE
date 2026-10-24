@@ -266,12 +266,7 @@ public class JobWorkReconciliationService {
         }
         Long txId = null;
         if (type.equals("SCRAP_DISPOSAL")) {
-            long rejectionDept = jw.departmentId(REJECTION_STORE);
-            long scrapDept = jw.departmentId(SCRAP_YARD);
-            List<Long> tx = jw.postBatch("Material Transfer", rejectionDept, scrapDept,
-                    List.of(jw.item(((Number) a.get("master_id")).longValue(), JobWorkService.str(a, "category"), qty, "Scrap disposal " + number)),
-                    "Scrap disposal " + number);
-            txId = tx.get(0);
+            // Inventory transaction posting removed - scrap disposal no longer posts to inventory
         } else {
             Map<String, Object> line = jdbc.queryForList("SELECT * FROM public.job_work_order_lines WHERE id = ? FOR UPDATE", lineId).get(0);
             BigDecimal withWorker = ((BigDecimal) line.get("dispatched_qty")).add((BigDecimal) line.get("rework_redispatched_qty"))

@@ -420,9 +420,10 @@ public class JobWorkService {
         }
     }
 
-    /** Stock available at the source location right now, from the inventory engine. */
+    /** Stock available at the source location right now. Inventory transaction tracking removed. */
     BigDecimal available(long masterId, String category, long sourceDeptId) {
-        return inventory.getDepartmentClosingBalance(masterId, category, sourceDeptId);
+        // Returns zero since inventory transaction tracking has been removed
+        return BigDecimal.ZERO;
     }
 
     public Map<String, Object> indentDetails(long id, Actor actor) {
@@ -844,14 +845,7 @@ public class JobWorkService {
             lines.add(pair("line", ol, "qty", cl.qty(), "batch", blank(cl.batchNo()) == null ? "" : cl.batchNo().trim()));
         }
         String number = nextNumber("JWC");
-        List<TransactionItemRequest> items = new ArrayList<>();
-        for (Map<String, Object> l : lines) {
-            Map<String, Object> ol = castMap(l.get("line"));
-            items.add(item(((Number) ol.get("master_id")).longValue(), str(ol, "category"), (BigDecimal) l.get("qty"),
-                    "Challan " + number + " " + str(ol, "item_code")));
-        }
-        // Stock is posted first: the engine refuses the whole batch if any line exceeds available stock.
-        List<Long> txIds = postBatch(SEND_TYPE, sourceDept, externalDept, items, "Job work dispatch " + number);
+        // Inventory transaction posting removed - job work now tracks stock only in job_work_stock_ledger
 
         Map<String, Object> cols = new LinkedHashMap<>();
         cols.put("challan_number", number);
@@ -875,15 +869,15 @@ public class JobWorkService {
             Map<String, Object> l = lines.get(i);
             Map<String, Object> ol = castMap(l.get("line"));
             BigDecimal qty = (BigDecimal) l.get("qty");
-            jdbc.update("INSERT INTO public.job_work_challan_lines (challan_id, jwo_line_id, master_id, category, batch_no, qty, inventory_transaction_id) VALUES (?,?,?,?,?,?,?)",
-                    challanId, ol.get("id"), ol.get("master_id"), str(ol, "category"), blank((String) l.get("batch")), qty, txIds.get(i));
+            jdbc.update("INSERT INTO public.job_work_challan_lines (challan_id, jwo_line_id, master_id, category, batch_no, qty) VALUES (?,?,?,?,?,?)",
+                    challanId, ol.get("id"), ol.get("master_id"), str(ol, "category"), blank((String) l.get("batch")), qty);
             if (r.reworkDispatch()) {
                 jdbc.update("UPDATE public.job_work_order_lines SET rework_redispatched_qty = rework_redispatched_qty + ? WHERE id = ?", qty, ol.get("id"));
             } else {
                 jdbc.update("UPDATE public.job_work_order_lines SET dispatched_qty = dispatched_qty + ? WHERE id = ?", qty, ol.get("id"));
             }
             ledger(((Number) o.get("job_worker_id")).longValue(), r.jwoId(), ((Number) ol.get("id")).longValue(), ((Number) ol.get("master_id")).longValue(),
-                    str(ol, "category"), "SENT", qty, number, challanId, null, txIds.get(i), actor);
+                    str(ol, "category"), "SENT", qty, number, challanId, null, null, actor);
         }
         refreshOrderStatus(r.jwoId());
         history("CHALLAN", challanId, "DISPATCHED", null, "POSTED", actor, number + " · " + lines.size() + " line(s)");
@@ -910,15 +904,14 @@ public class JobWorkService {
             if (!rework && afterDispatch.add((BigDecimal) ol.get("rework_redispatched_qty")).compareTo(((BigDecimal) ol.get("received_qty")).add((BigDecimal) ol.get("unused_returned_qty"))) < 0) {
                 throw conflict("Cannot reverse: material on this line has already come back. Reverse the receipts first.");
             }
-            TransactionResponse rev = inventory.processReverse(reverseRequest(((Number) cl.get("inventory_transaction_id")).longValue(), "Reversal of challan " + str(c, "challan_number")));
-            jdbc.update("UPDATE public.job_work_challan_lines SET reversal_transaction_id = ? WHERE id = ?", rev.getId(), cl.get("id"));
+            // Inventory transaction reversal removed
             if (rework) {
                 jdbc.update("UPDATE public.job_work_order_lines SET rework_redispatched_qty = rework_redispatched_qty - ? WHERE id = ?", qty, lineId);
             } else {
                 jdbc.update("UPDATE public.job_work_order_lines SET dispatched_qty = dispatched_qty - ? WHERE id = ?", qty, lineId);
             }
             ledger(workerId, jwoId, lineId, ((Number) cl.get("master_id")).longValue(), str(cl, "category"), "REVERSED_SENT", qty.negate(),
-                    str(c, "challan_number"), id, null, rev.getId(), actor);
+                    str(c, "challan_number"), id, null, null, actor);
         }
         jdbc.update("UPDATE public.job_work_challans SET status = 'CANCELLED', cancel_reason = ? WHERE id = ?", req.comments(), id);
         refreshOrderStatus(jwoId);
@@ -1030,20 +1023,7 @@ public class JobWorkService {
             plan.add(pair("line", ol, "got", got, "unused", unused));
         }
         String number = nextNumber("JWR");
-        // Processed material moves from External Job Work into Quality Hold; unused material goes back to the store.
-        long externalDept = departmentId(EXTERNAL);
-        long qualityDept = departmentId(QUALITY_HOLD);
-        List<TransactionItemRequest> recvItems = new ArrayList<>();
-        List<TransactionItemRequest> unusedItems = new ArrayList<>();
-        for (Map<String, Object> p : plan) {
-            Map<String, Object> ol = castMap(p.get("line"));
-            BigDecimal got = (BigDecimal) p.get("got");
-            BigDecimal unused = (BigDecimal) p.get("unused");
-            if (got.signum() > 0) recvItems.add(item(((Number) ol.get("master_id")).longValue(), str(ol, "category"), got, "Receipt " + number));
-            if (unused.signum() > 0) unusedItems.add(item(((Number) ol.get("master_id")).longValue(), str(ol, "category"), unused, "Unused return " + number));
-        }
-        List<Long> recvTx = recvItems.isEmpty() ? List.of() : postBatch(TRANSFER_TYPE, externalDept, qualityDept, recvItems, "Job work receipt " + number);
-        List<Long> unusedTx = unusedItems.isEmpty() ? List.of() : postBatch(TRANSFER_TYPE, externalDept, ((Number) o.get("source_department_id")).longValue(), unusedItems, "Unused material return " + number);
+        // Inventory transaction posting removed - job work now tracks stock only in job_work_stock_ledger
 
         Map<String, Object> cols = new LinkedHashMap<>();
         cols.put("receipt_number", number);
@@ -1056,21 +1036,18 @@ public class JobWorkService {
         cols.put("remarks", blank(r.remarks()));
         cols.put("received_by", actor.name());
         long receiptId = insertRow("public.job_work_receipts", cols);
-        int ri = 0, ui = 0;
         for (Map<String, Object> p : plan) {
             Map<String, Object> ol = castMap(p.get("line"));
             BigDecimal got = (BigDecimal) p.get("got");
             BigDecimal unused = (BigDecimal) p.get("unused");
-            Long rtx = got.signum() > 0 ? recvTx.get(ri++) : null;
-            Long utx = unused.signum() > 0 ? unusedTx.get(ui++) : null;
             long lineId = ((Number) ol.get("id")).longValue();
             long masterId = ((Number) ol.get("master_id")).longValue();
-            jdbc.update("INSERT INTO public.job_work_receipt_lines (receipt_id, jwo_line_id, master_id, category, qty_received, unused_returned_qty, inspection_status, receive_transaction_id, unused_transaction_id) "
-                    + "VALUES (?,?,?,?,?,?,'PENDING',?,?)", receiptId, lineId, masterId, str(ol, "category"), got, unused, rtx, utx);
+            jdbc.update("INSERT INTO public.job_work_receipt_lines (receipt_id, jwo_line_id, master_id, category, qty_received, unused_returned_qty, inspection_status) "
+                    + "VALUES (?,?,?,?,?,?,'PENDING')", receiptId, lineId, masterId, str(ol, "category"), got, unused);
             jdbc.update("UPDATE public.job_work_order_lines SET received_qty = received_qty + ?, unused_returned_qty = unused_returned_qty + ? WHERE id = ?", got, unused, lineId);
             long workerId = ((Number) o.get("job_worker_id")).longValue();
-            if (got.signum() > 0) ledger(workerId, r.jwoId(), lineId, masterId, str(ol, "category"), "RECEIVED", got.negate(), number, r.challanId(), receiptId, rtx, actor);
-            if (unused.signum() > 0) ledger(workerId, r.jwoId(), lineId, masterId, str(ol, "category"), "RETURNED_UNUSED", unused.negate(), number, r.challanId(), receiptId, utx, actor);
+            if (got.signum() > 0) ledger(workerId, r.jwoId(), lineId, masterId, str(ol, "category"), "RECEIVED", got.negate(), number, r.challanId(), receiptId, null, actor);
+            if (unused.signum() > 0) ledger(workerId, r.jwoId(), lineId, masterId, str(ol, "category"), "RETURNED_UNUSED", unused.negate(), number, r.challanId(), receiptId, null, actor);
         }
         refreshOrderStatus(r.jwoId());
         history("RECEIPT", receiptId, "RECEIVED", null, "PENDING_INSPECTION", actor, number);
@@ -1096,14 +1073,7 @@ public class JobWorkService {
         }
         long masterId = ((Number) rl.get("master_id")).longValue();
         String category = str(rl, "category");
-        long sourceDept = ((Number) o.get("source_department_id")).longValue();
-        long qualityDept = departmentId(QUALITY_HOLD);
-        // Only inspected material leaves Quality Hold: accepted returns to store, rejected and scrap to Rejection Store, rework to Rework-Burning.
-        if (acc.signum() > 0) postBatch(TRANSFER_TYPE, qualityDept, sourceDept, List.of(item(masterId, category, acc, "Accepted " + str(rl, "receipt_number"))), "Accepted after inspection " + str(rl, "receipt_number"));
-        if (rej.add(scr).signum() > 0) postBatch(TRANSFER_TYPE, qualityDept, departmentId(REJECTION_STORE),
-                List.of(item(masterId, category, rej.add(scr), "Rejected/scrap " + str(rl, "receipt_number"))), "Rejected/scrap " + str(rl, "receipt_number"));
-        if (rew.signum() > 0) postBatch(TRANSFER_TYPE, qualityDept, departmentId(REWORK_STORE),
-                List.of(item(masterId, category, rew, "Rework " + str(rl, "receipt_number"))), "Rework " + str(rl, "receipt_number"));
+        // Inventory transaction posting removed - job work now tracks stock only in job_work_stock_ledger
 
         jdbc.update("UPDATE public.job_work_receipt_lines SET inspection_status = 'INSPECTED', accepted_qty = ?, rejected_qty = ?, rework_qty = ?, "
                 + "scrap_qty = ?, defect_code = ?, inspection_remarks = ?, inspected_by = ?, inspected_at = NOW() WHERE id = ?",
@@ -1254,33 +1224,7 @@ public class JobWorkService {
         return ids.get(0);
     }
 
-    TransactionItemRequest item(long masterId, String category, BigDecimal qty, String remarks) {
-        TransactionItemRequest t = new TransactionItemRequest();
-        t.setMasterId(masterId);
-        t.setCategory(category);
-        t.setQuantity(qty);
-        t.setRemarks(remarks);
-        return t;
-    }
-
-    /** Posts a batch through the inventory engine. Returns one transaction id per item, in order. */
-    List<Long> postBatch(String type, long fromDept, long toDept, List<TransactionItemRequest> items, String remarks) {
-        CreateBatchTransactionRequest req = new CreateBatchTransactionRequest();
-        req.setTransactionType(type);
-        req.setFromDepartmentId(fromDept);
-        req.setToDepartmentId(toDept);
-        req.setRemarks(remarks);
-        req.setItems(items);
-        List<TransactionResponse> res = inventory.processBatchTransaction(req);
-        return res.stream().map(TransactionResponse::getId).collect(Collectors.toList());
-    }
-
-    CreateReverseRequest reverseRequest(long txId, String remarks) {
-        CreateReverseRequest r = new CreateReverseRequest();
-        r.setTargetTransactionId(txId);
-        r.setRemarks(remarks);
-        return r;
-    }
+    // Inventory transaction posting removed - job work now tracks stock only in job_work_stock_ledger
 
     /** Job-worker-wise ledger. Locks the worker row so two postings for one worker cannot read the same balance. */
     void ledger(long workerId, long jwoId, long lineId, long masterId, String category, String movement, BigDecimal signedQty,
@@ -1291,8 +1235,8 @@ public class JobWorkService {
         BigDecimal next = prev.add(signedQty);
         if (next.signum() < 0) throw conflict("Job worker balance would go negative for " + category + " (balance " + prev + ", movement " + signedQty + ").");
         jdbc.update("INSERT INTO public.job_work_stock_ledger (job_worker_id, jwo_id, jwo_line_id, master_id, category, movement_type, qty, balance_after, reference_no, "
-                + "challan_id, receipt_id, inventory_transaction_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                workerId, jwoId, lineId, masterId, category, movement, signedQty, next, ref, challanId, receiptId, invTxId, actor.name());
+                + "challan_id, receipt_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                workerId, jwoId, lineId, masterId, category, movement, signedQty, next, ref, challanId, receiptId, actor.name());
     }
 
     // ================================================================== inspection of a job worker's stock: balances endpoint helper
