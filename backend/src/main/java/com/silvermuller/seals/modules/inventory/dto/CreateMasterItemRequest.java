@@ -1,8 +1,6 @@
 package com.silvermuller.seals.modules.inventory.dto;
 
-import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
-import java.util.List;
 
 public class CreateMasterItemRequest {
 
@@ -20,9 +18,6 @@ public class CreateMasterItemRequest {
 
     @NotBlank(message = "Unit of measurement is required")
     private String unitOfMeasurement;
-
-    @Valid
-    private List<DepartmentOpeningLine> departmentOpenings;
 
     public CreateMasterItemRequest() {
     }
@@ -65,13 +60,5 @@ public class CreateMasterItemRequest {
 
     public void setUnitOfMeasurement(String unitOfMeasurement) {
         this.unitOfMeasurement = unitOfMeasurement;
-    }
-
-    public List<DepartmentOpeningLine> getDepartmentOpenings() {
-        return departmentOpenings;
-    }
-
-    public void setDepartmentOpenings(List<DepartmentOpeningLine> departmentOpenings) {
-        this.departmentOpenings = departmentOpenings;
     }
 }

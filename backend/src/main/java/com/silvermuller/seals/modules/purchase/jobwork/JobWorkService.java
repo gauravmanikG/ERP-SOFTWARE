@@ -1,10 +1,5 @@
 package com.silvermuller.seals.modules.purchase.jobwork;
 
-import com.silvermuller.seals.modules.inventory.dto.CreateBatchTransactionRequest;
-import com.silvermuller.seals.modules.inventory.dto.CreateReverseRequest;
-import com.silvermuller.seals.modules.inventory.dto.TransactionItemRequest;
-import com.silvermuller.seals.modules.inventory.dto.TransactionResponse;
-import com.silvermuller.seals.modules.inventory.service.InventoryTransactionService;
 import com.silvermuller.seals.modules.purchase.jobwork.JobWorkDtos.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -60,13 +55,11 @@ public class JobWorkService {
     static final int MAX_LIST = 200;
 
     private final JdbcTemplate jdbc;
-    private final InventoryTransactionService inventory;
     private final BigDecimal approvalLimit;
 
-    public JobWorkService(JdbcTemplate jdbc, InventoryTransactionService inventory,
+    public JobWorkService(JdbcTemplate jdbc,
                           @Value("${job-work.approval-limit:}") String approvalLimitRaw) {
         this.jdbc = jdbc;
-        this.inventory = inventory;
         this.approvalLimit = (approvalLimitRaw == null || approvalLimitRaw.isBlank()) ? null : new BigDecimal(approvalLimitRaw.trim());
     }
 

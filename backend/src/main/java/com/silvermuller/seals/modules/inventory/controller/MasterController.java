@@ -2,7 +2,7 @@ package com.silvermuller.seals.modules.inventory.controller;
 
 import com.silvermuller.seals.modules.inventory.dto.CreateMasterItemRequest;
 import com.silvermuller.seals.modules.inventory.dto.ItemEditDetailResponse;
-import com.silvermuller.seals.modules.inventory.dto.MasterStockResponse;
+import com.silvermuller.seals.modules.inventory.dto.MasterResponse;
 import com.silvermuller.seals.modules.inventory.service.MasterService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -23,12 +23,12 @@ public class MasterController {
     }
 
     @GetMapping
-    public ResponseEntity<List<MasterStockResponse>> getAllMaster() {
+    public ResponseEntity<List<MasterResponse>> getAllMaster() {
         return ResponseEntity.ok(masterService.getAllMasterWithStock());
     }
 
     @PostMapping
-    public ResponseEntity<MasterStockResponse> createMaster(@Valid @RequestBody CreateMasterItemRequest request) {
+    public ResponseEntity<MasterResponse> createMaster(@Valid @RequestBody CreateMasterItemRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(masterService.createItem(request));
     }
 
@@ -53,12 +53,12 @@ public class MasterController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<MasterStockResponse> getMasterById(@PathVariable Long id) {
+    public ResponseEntity<MasterResponse> getMasterById(@PathVariable Long id) {
         return ResponseEntity.ok(masterService.getMasterStockById(id));
     }
 
     @GetMapping("/{id}/balance")
-    public ResponseEntity<MasterStockResponse> getMasterBalance(@PathVariable Long id) {
+    public ResponseEntity<MasterResponse> getMasterBalance(@PathVariable Long id) {
         return ResponseEntity.ok(masterService.getMasterStockById(id));
     }
 }
