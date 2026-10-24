@@ -1,5 +1,6 @@
 package com.silvermuller.seals.modules.inventory.controller;
 
+import com.silvermuller.seals.common.exception.ConflictException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -179,7 +180,7 @@ public class ItemMasterApiController {
         }
         if (!exists) {
             List<Map<String, Object>> existing = jdbc.queryForList(
-                    "SELECT id FROM public.item_master WHERE sms_new_part_no = ? LIMIT 1", code);
+                    "SELECT id FROM public.item_master WHERE sms_new_part_no = ? ORDER BY id LIMIT 1", code);
             if (!existing.isEmpty()) {
                 itemId = ((Number) existing.get(0).get("id")).longValue();
                 exists = true;
@@ -274,8 +275,9 @@ public class ItemMasterApiController {
         String code = items.isEmpty() ? null : (String) items.get(0).get("sms_new_part_no");
         jdbc.update("DELETE FROM public.item_master WHERE id = ?", id);
         if (code != null) {
+            // The stock master row is keyed by code and may be shared with other items that have the same part number.
             try {
-                jdbc.update("DELETE FROM public.master WHERE code = ?", code);
+                jdbc.update("DELETE FROM public.master WHERE code = ? AND NOT EXISTS (SELECT 1 FROM public.item_master WHERE sms_new_part_no = ?)", code, code);
             } catch (Exception ignored) {}
         }
         return ResponseEntity.ok(Map.of("success", true, "id", id));
@@ -283,9 +285,14 @@ public class ItemMasterApiController {
 
     @DeleteMapping("/by-code/{code}")
     public ResponseEntity<Map<String, Object>> deleteItemByCode(@PathVariable String code) {
+        Integer matches = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM public.item_master WHERE sms_new_part_no = ? OR old_code = ?", Integer.class, code, code);
+        if (matches != null && matches > 1) {
+            throw new ConflictException(matches + " items share the code '" + code + "'. Delete them one at a time by id.");
+        }
         jdbc.update("DELETE FROM public.item_master WHERE sms_new_part_no = ? OR old_code = ?", code, code);
         try {
-            jdbc.update("DELETE FROM public.master WHERE code = ?", code);
+            jdbc.update("DELETE FROM public.master WHERE code = ? AND NOT EXISTS (SELECT 1 FROM public.item_master WHERE sms_new_part_no = ?)", code, code);
         } catch (Exception ignored) {}
         return ResponseEntity.ok(Map.of("success", true, "code", code));
     }

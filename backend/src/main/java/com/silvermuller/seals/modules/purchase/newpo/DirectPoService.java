@@ -4,7 +4,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.silvermuller.seals.modules.purchase.dto.PurchaseCalculationRequest;
 import com.silvermuller.seals.modules.purchase.dto.PurchaseCalculationResponse;
 import com.silvermuller.seals.modules.purchase.dto.PurchaseItemLine;
+import com.silvermuller.seals.modules.purchase.dto.VendorExtraCharges;
 import com.silvermuller.seals.modules.purchase.dto.VendorSummaryGroup;
+import com.silvermuller.seals.modules.masters.PurchaseOrderTerms;
+import com.silvermuller.seals.modules.masters.PurchaseOrderTermsService;
 import com.silvermuller.seals.modules.purchase.newpo.PoByPrDtos.PlannedLine;
 import com.silvermuller.seals.modules.purchase.newpo.PoByPrDtos.PlannedPo;
 import com.silvermuller.seals.modules.purchase.newpo.VendorRateService.NewPoException;
@@ -37,7 +40,13 @@ public class DirectPoService {
         }
     }
 
-    public record Request(String vendorCode, LocalDate poDate, LocalDate expectedDeliveryDate, List<Line> lines, String remarks) {}
+    /** deliveryFreight, terms and schedules are optional. schedules are delivery lots per item (see DeliveryLots). */
+    public record Request(String vendorCode, LocalDate poDate, LocalDate expectedDeliveryDate, List<Line> lines, String remarks,
+                          BigDecimal deliveryFreight, PurchaseOrderTerms terms, List<DeliveryLots.Lot> schedules) {
+        public Request(String vendorCode, LocalDate poDate, LocalDate expectedDeliveryDate, List<Line> lines, String remarks) {
+            this(vendorCode, poDate, expectedDeliveryDate, lines, remarks, null, null, null);
+        }
+    }
 
     public record Created(String poNumber, String poId, PlannedPo po) {}
 
@@ -47,9 +56,11 @@ public class DirectPoService {
     private final PurchaseProcessingService purchaseProcessing;
     private final VendorRateService rates;
     private final ObjectMapper objectMapper;
+    private final PurchaseOrderTermsService poTerms;
 
     public DirectPoService(JdbcTemplate jdbc, PurchaseProcessingService purchaseProcessing,
-                           VendorRateService rates, ObjectMapper objectMapper) {
+                           VendorRateService rates, ObjectMapper objectMapper, PurchaseOrderTermsService poTerms) {
+        this.poTerms = poTerms;
         this.jdbc = jdbc;
         this.purchaseProcessing = purchaseProcessing;
         this.rates = rates;
@@ -70,6 +81,8 @@ public class DirectPoService {
         String poNumber = purchaseProcessing.reservePoNumber();
         String poId = "PO-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
         insert(poId, poNumber, plan, r, actor.trim());
+        poTerms.save(poNumber, r.terms(), r.deliveryFreight());
+        purchaseProcessing.saveDeliverySchedules(poNumber, DeliveryLots.toRows(poNumber, r.schedules()));
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
@@ -94,10 +107,16 @@ public class DirectPoService {
         if (!"ACTIVE".equalsIgnoreCase(String.valueOf(sup.get(0).get("status")))) throw bad("Vendor " + vendorCode + " is not active.");
 
         LocalDate poDate = r.poDate() == null ? LocalDate.now() : r.poDate();
+        if (poDate.isBefore(LocalDate.now())) throw bad("PO date cannot be in the past. Select today or a future date.");
         if (r.expectedDeliveryDate() != null && r.expectedDeliveryDate().isBefore(poDate)) {
             throw bad("Expected delivery date cannot be before the PO date.");
         }
         if (r.lines() == null || r.lines().isEmpty()) throw bad("Add at least one item to the Direct PO.");
+        Map<String, BigDecimal> poQtyByItem = new HashMap<>();
+        for (Line l : r.lines()) {
+            if (l != null && l.itemCode() != null && l.quantity() != null) poQtyByItem.merge(l.itemCode().trim(), l.quantity(), BigDecimal::add);
+        }
+        DeliveryLots.validate(r.schedules(), poQtyByItem, poDate);
 
         // Merge duplicate item codes; validate each quantity.
         Map<String, BigDecimal> qty = new LinkedHashMap<>();
@@ -147,8 +166,16 @@ public class DirectPoService {
             calcItems.add(line);
         }
 
+        String termsError = poTerms.validate(r.terms());
+        if (termsError != null) throw bad(termsError);
+        if (r.deliveryFreight() != null && r.deliveryFreight().signum() < 0) throw bad("Freight amount cannot be negative.");
+
         PurchaseCalculationRequest calcRequest = new PurchaseCalculationRequest();
         calcRequest.setItems(calcItems);
+        // The freight amount is the vendor group's delivery freight, as in PO by PR.
+        Map<String, VendorExtraCharges> vendorCharges = new HashMap<>();
+        vendorCharges.put(vendorCode, new VendorExtraCharges(r.deliveryFreight(), null, null));
+        calcRequest.setVendorCharges(vendorCharges);
         PurchaseCalculationResponse calc = purchaseProcessing.calculate(calcRequest);
         if (calc.getVendorGroups() == null || calc.getVendorGroups().isEmpty()) {
             throw new NewPoException(HttpStatus.INTERNAL_SERVER_ERROR, "GST calculation returned no vendor summary.");
@@ -157,8 +184,8 @@ public class DirectPoService {
         List<PlannedLine> lines = new ArrayList<>();
         for (PurchaseItemLine l : calc.getItems()) {
             lines.add(new PlannedLine(l.getItemCode(), l.getItemName(), l.getUom(), l.getHsnCode(), l.getQuantity(), l.getUnitRate(),
-                    l.getTaxPercent(), l.getTaxType(), l.getTaxableAmount(), l.getCgstAmount(), l.getSgstAmount(), l.getIgstAmount(),
-                    l.getTaxAmount(), l.getItemTotal()));
+                    l.getTaxPercent(), l.getTaxType(), l.getDiscountAmount(), l.getTaxableAmount(), l.getCgstAmount(), l.getSgstAmount(),
+                    l.getIgstAmount(), l.getTaxAmount(), l.getItemTotal(), null));
         }
         PlannedPo po = new PlannedPo(vendorCode, group.getVendorName(), group.getVendorGstin(), poDate, lines, List.of(),
                 group.getItemsGross(), group.getTotalDiscount(), group.getTaxableAmount(), group.getTotalTax(),

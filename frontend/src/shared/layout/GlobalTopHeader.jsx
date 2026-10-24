@@ -57,15 +57,6 @@ export function GlobalTopHeader({
     if (currentView === "vendor-quotations") {
       return { module: "Purchase Module", screen: "Vendor Quotations (RFQ & Rates)" };
     }
-    if (currentView === "purchase-orders") {
-      return { module: "Purchase Module", screen: "Purchase Orders (PO) Management" };
-    }
-    if (currentView === "purchase-processing") {
-      return { module: "Purchase Module", screen: "Purchase Processing & PO Proposal" };
-    }
-    if (currentView === "po-approval") {
-      return { module: "Purchase Module", screen: "Purchase Order (PO) Approval" };
-    }
     if (currentView === "purchase-requisition") {
       return { module: "Purchase Module", screen: "Purchase Requisition (PR) Management" };
     }
@@ -88,15 +79,12 @@ export function GlobalTopHeader({
         docs: "User Documentation",
         "ai-chatbot": "AI Plant Assistant",
         "entry-forms": "Entry Forms · Screen 1",
-        "company-master-form": "Company & Supplier Master",
-        "company-master-list": "Company Master List",
         "vendor-quotations": "Vendor Quotations (RFQ & Rates)",
         quotations: "Vendor Quotations (RFQ & Rates)",
         rfq: "Request for Quotation (RFQ)",
         grn: "Goods Receipt Note (GRN)",
         "supplier-master": "Supplier Master Directory",
         inventory: "Inventory Management",
-        "moulding-bom": "BOM Moulding Transfer",
         "dept-wise-cb": "Department Stock Ledger",
         "item-wise-cb": "Item Wise Closing Balance",
         users: "Users & Security Roles",
@@ -104,7 +92,7 @@ export function GlobalTopHeader({
       };
       return { module: "Plant Operations", screen: slotMap[erpSlot] || erpSlot || "ERP Dashboard" };
     }
-    return { module: "Silver Muller Seals", screen: "Plant Operations v2.5" };
+    return { module: "Silver Brain", screen: "Intelligence Systems · ERP" };
   };
 
   const breadcrumb = getScreenBreadcrumb();
@@ -118,14 +106,14 @@ export function GlobalTopHeader({
         right: 0,
         width: "100%",
         height: 68,
-        background: "#ffffff",
+        background: "#f8fafc",
         color: "#0f172a",
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
         padding: "0 24px",
         borderBottom: "1px solid #e2e8f0",
-        boxShadow: "0 2px 10px rgba(0,0,0,0.06)",
+        boxShadow: "0 1px 4px rgba(0, 0, 0, 0.04)",
         zIndex: 1000,
         flexShrink: 0,
         fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
@@ -149,7 +137,7 @@ export function GlobalTopHeader({
                 width: 32,
                 height: 32,
                 borderRadius: 8,
-                background: sidebarOpen ? "#fee2e2" : "#f8fafc",
+                background: sidebarOpen ? "#fee2e2" : "#ffffff",
                 color: sidebarOpen ? "#c51f28" : "#475569",
                 border: sidebarOpen ? "1.5px solid #c51f28" : "1px solid #cbd5e1",
                 display: "flex",
@@ -157,7 +145,8 @@ export function GlobalTopHeader({
                 justifyContent: "center",
                 cursor: "pointer",
                 padding: 0,
-                transition: "all 0.15s ease"
+                transition: "all 0.15s ease",
+                boxShadow: "0 1px 2px rgba(0, 0, 0, 0.04)"
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.background = "#fee2e2";
@@ -165,7 +154,7 @@ export function GlobalTopHeader({
                 e.currentTarget.style.borderColor = "#c51f28";
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.background = sidebarOpen ? "#fee2e2" : "#f8fafc";
+                e.currentTarget.style.background = sidebarOpen ? "#fee2e2" : "#ffffff";
                 e.currentTarget.style.color = sidebarOpen ? "#c51f28" : "#475569";
                 e.currentTarget.style.borderColor = sidebarOpen ? "#c51f28" : "#cbd5e1";
               }}
@@ -182,7 +171,7 @@ export function GlobalTopHeader({
           </>
         )}
 
-        {/* Silver Brain Logo & Tagline (Clickable to return Home) */}
+        {/* Silver Brain Logo (Clickable to return Home) */}
         <div
           onClick={onNavigateHome}
           title="Click to return to Silver Brain Home"
@@ -191,96 +180,64 @@ export function GlobalTopHeader({
             alignItems: "center",
             gap: 10,
             cursor: "pointer",
-            userSelect: "none"
+            userSelect: "none",
+            flexShrink: 0
           }}
         >
-          {/* Logo Emblem Matching Attached Image */}
-          <svg width="36" height="36" viewBox="0 0 60 60" fill="none">
-            {/* Red upper wing / S curved top */}
-            <path
-              d="M14 12C14 7.58 17.58 4 22 4H34C40.63 4 46 9.37 46 16C46 21.6 42.15 26.3 37 27.6V20C37 17.79 35.21 16 33 16H24C21.79 16 20 17.79 20 20V23C16.69 24.38 14 27.87 14 32V12Z"
-              fill="#c51f28"
-            />
-            {/* Slate Gray lower wing / S curved bottom */}
-            <path
-              d="M46 48C46 52.42 42.42 56 38 56H26C19.37 56 14 50.63 14 44C14 38.4 17.85 33.7 23 32.4V40C23 42.21 24.79 44 27 44H36C38.21 44 40 42.21 40 40V37C43.31 35.62 46 32.13 46 28V48Z"
-              fill="#64748b"
-            />
-            {/* Central precision pin hole */}
-            <circle cx="28" cy="30" r="3.5" fill="#ffffff" />
-          </svg>
+          {/* Brain icon — tightly cropped to edges, fills header height */}
+          <img
+            src="/silver-brain-icon.png?v=4"
+            alt="Silver Brain"
+            style={{
+              height: 62,
+              width: "auto",
+              display: "block",
+              flexShrink: 0,
+              objectFit: "contain"
+            }}
+          />
 
-          <div>
-            <div style={{ display: "flex", alignItems: "baseline", gap: 3 }}>
+          {/* Wordmark */}
+          <div style={{ lineHeight: 1 }}>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
               <span
                 style={{
-                  fontSize: 23,
-                  fontWeight: 700,
-                  color: "#64748b",
+                  fontSize: 21.5,
+                  fontWeight: 800,
+                  color: "#1e293b",
                   letterSpacing: "-0.5px",
-                  fontFamily: "'Segoe UI', system-ui, sans-serif"
+                  fontFamily: "'Inter', system-ui, -apple-system, sans-serif"
                 }}
               >
-                silver
+                Silver
               </span>
               <span
                 style={{
-                  fontSize: 25,
+                  fontSize: 21.5,
                   fontWeight: 900,
                   color: "#c51f28",
                   letterSpacing: "-0.5px",
-                  fontFamily: "'Segoe UI', system-ui, sans-serif"
+                  fontFamily: "'Inter', system-ui, -apple-system, sans-serif"
                 }}
               >
                 Brain
               </span>
-              <span
-                style={{
-                  fontSize: 11,
-                  fontWeight: 800,
-                  color: "#64748b",
-                  transform: "translateY(-6px)"
-                }}
-              >
-                &reg;
-              </span>
             </div>
             <div
               style={{
-                fontSize: 8.5,
-                fontWeight: 800,
-                letterSpacing: "0.14em",
-                color: "#475569",
+                fontSize: 8,
+                fontWeight: 700,
+                letterSpacing: "0.18em",
+                color: "#64748b",
                 textTransform: "uppercase",
-                marginTop: -2
+                marginTop: 2
               }}
             >
-              SINCE 1967 &bull; OIL SEAL SOLUTIONS
+              Intelligence Systems
             </div>
           </div>
         </div>
 
-        {/* Current Screen Breadcrumb Pill */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            background: "#f1f5f9",
-            border: "1px solid #e2e8f0",
-            borderRadius: 8,
-            padding: "4px 10px",
-            marginLeft: 8
-          }}
-        >
-          <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b" }}>
-            {breadcrumb.module}
-          </span>
-          <span style={{ fontSize: 10, color: "#94a3b8" }}>&rsaquo;</span>
-          <span style={{ fontSize: 11.5, fontWeight: 800, color: "#0f172a" }}>
-            {breadcrumb.screen}
-          </span>
-        </div>
 
       </div>
 
@@ -295,10 +252,11 @@ export function GlobalTopHeader({
             display: "flex",
             alignItems: "center",
             gap: 10,
-            padding: "4px 10px",
+            padding: "5px 12px",
             borderRadius: 10,
-            background: "#f8fafc",
-            border: "1px solid #e2e8f0"
+            background: "#ffffff",
+            border: "1px solid #e2e8f0",
+            boxShadow: "0 1px 3px rgba(0, 0, 0, 0.05)"
           }}
         >
           <div style={{ position: "relative" }}>
@@ -306,13 +264,13 @@ export function GlobalTopHeader({
               src="/avatar-kiran-bhalla.jpg"
               alt="Kiran Bhalla"
               style={{
-                width: 38,
-                height: 38,
+                width: 36,
+                height: 36,
                 borderRadius: "50%",
                 objectFit: "cover",
                 display: "block",
                 border: "2px solid #e2e8f0",
-                boxShadow: "0 2px 6px rgba(0,0,0,0.1)"
+                boxShadow: "0 1px 3px rgba(0,0,0,0.08)"
               }}
             />
             {/* Online indicator dot */}
@@ -356,7 +314,7 @@ export function GlobalTopHeader({
         </div>
 
         {/* Divider | */}
-        <div style={{ width: 1, height: 26, background: "#cbd5e1" }} />
+        <div style={{ width: 1, height: 26, background: "#e2e8f0" }} />
 
         {/* 2. DAY / NIGHT VIEW SWITCH */}
         <ThemeToggle />
@@ -371,7 +329,7 @@ export function GlobalTopHeader({
               width: 40,
               height: 40,
               borderRadius: 10,
-              background: "#f8fafc",
+              background: "#ffffff",
               border: "1px solid #e2e8f0",
               display: "flex",
               alignItems: "center",
@@ -379,15 +337,18 @@ export function GlobalTopHeader({
               color: "#475569",
               cursor: "pointer",
               transition: "all 0.15s",
-              position: "relative"
+              position: "relative",
+              boxShadow: "0 1px 3px rgba(0, 0, 0, 0.05)"
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.background = "#fee2e2";
               e.currentTarget.style.color = "#c51f28";
+              e.currentTarget.style.borderColor = "#c51f28";
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.background = "#f8fafc";
+              e.currentTarget.style.background = "#ffffff";
               e.currentTarget.style.color = "#475569";
+              e.currentTarget.style.borderColor = "#e2e8f0";
             }}
           >
             <ModuleIcons.Bell />
@@ -408,7 +369,7 @@ export function GlobalTopHeader({
                   alignItems: "center",
                   justifyContent: "center",
                   padding: "0 4px",
-                  boxShadow: "0 2px 6px rgba(197,31,40,0.5)"
+                  boxShadow: "0 2px 6px rgba(197,31,40,0.4)"
                 }}
               >
                 {notificationCount}
@@ -426,7 +387,7 @@ export function GlobalTopHeader({
                 width: 320,
                 background: "#ffffff",
                 borderRadius: 14,
-                boxShadow: "0 10px 30px rgba(0,0,0,0.18)",
+                boxShadow: "0 10px 30px rgba(0,0,0,0.15)",
                 border: "1px solid #e2e8f0",
                 padding: "14px 16px",
                 zIndex: 2000
@@ -463,38 +424,6 @@ export function GlobalTopHeader({
                 </span>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <div
-                  style={{
-                    fontSize: 11,
-                    padding: "8px 10px",
-                    background: "#f8fafc",
-                    borderRadius: 8,
-                    borderLeft: "3px solid #ef4444"
-                  }}
-                >
-                  <p style={{ fontWeight: 700, color: "#0f172a", margin: 0 }}>
-                    Moulding Compound Stock
-                  </p>
-                  <p style={{ color: "#64748b", margin: "2px 0 0" }}>
-                    Outer metal shell batch #B01 running below threshold.
-                  </p>
-                </div>
-                <div
-                  style={{
-                    fontSize: 11,
-                    padding: "8px 10px",
-                    background: "#f8fafc",
-                    borderRadius: 8,
-                    borderLeft: "3px solid #f59e0b"
-                  }}
-                >
-                  <p style={{ fontWeight: 700, color: "#0f172a", margin: 0 }}>
-                    BOM Moulding Transfer
-                  </p>
-                  <p style={{ color: "#64748b", margin: "2px 0 0" }}>
-                    Line 04 transfer slip #TR-884 awaiting QC sign-off.
-                  </p>
-                </div>
               </div>
               <button
                 onClick={() => {
@@ -521,7 +450,7 @@ export function GlobalTopHeader({
         </div>
 
         {/* Divider | */}
-        <div style={{ width: 1, height: 26, background: "#cbd5e1" }} />
+        <div style={{ width: 1, height: 26, background: "#e2e8f0" }} />
 
         {/* 3. DATE AND TIME (IN THE TOP RIGHT CORNER) */}
         <div
@@ -531,9 +460,9 @@ export function GlobalTopHeader({
             gap: 12,
             padding: "6px 14px",
             borderRadius: 10,
-            background: "#f8fafc",
+            background: "#ffffff",
             border: "1px solid #e2e8f0",
-            boxShadow: "0 1px 3px rgba(0,0,0,0.04)"
+            boxShadow: "0 1px 3px rgba(0, 0, 0, 0.05)"
           }}
         >
           {/* Calendar Icon in Brand Red */}

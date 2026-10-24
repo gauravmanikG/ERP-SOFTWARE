@@ -1,35 +1,56 @@
 import React, { useState, useEffect } from "react";
 import { formatDisplayDate } from "../../../shared/utils/dateFormat";
+import DateInput from "../../../shared/components/DateInput";
 import { reportApi } from "./api";
-import { inp, btn, card, errorBox, th, td, money, qty } from "./ui";
+import { inp, btn, card, errorBox, thFor, td, money, qty } from "./ui";
 
 const TABS = [
-  { key: "po-vs-pr", label: "PO vs PR" },
-  { key: "po-vs-pr-grn", label: "PO vs PR vs GRN" },
+  { key: "pr-vs-po", label: "PR vs PO" },
+  { key: "pr-vs-po-grn", label: "PR vs PO vs GRN" },
+  { key: "summary", label: "Summary" },
   { key: "legacy", label: "Legacy reconciliation" }
 ];
 
 // Purchase reports. Each tab calls one read-only endpoint; no figures are computed in the browser.
-export default function ReportsScreen({ initialTab = "po-vs-pr" }) {
+export default function ReportsScreen({ initialTab = "pr-vs-po" }) {
   const [tab, setTab] = useState(initialTab);
   const [filters, setFilters] = useState({ prNumber: "", poNumber: "", vendorCode: "" });
+  const [dates, setDates] = useState({ from: "", to: "" });
   const [rows, setRows] = useState([]);
   const [legacy, setLegacy] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const load = (f = filters) => {
+  // Summary tab: every item over a PR date range
+  const [sumDates, setSumDates] = useState({ from: "", to: "" });
+  const [itemSummary, setItemSummary] = useState(null);
+
+  const load = (f = filters, d = dates) => {
     setLoading(true);
     setError("");
-    const req = tab === "po-vs-pr" ? reportApi.poVsPr(f)
-      : tab === "po-vs-pr-grn" ? reportApi.poVsPrVsGrn(f)
-      : reportApi.legacyReconciliation();
+    let req;
+    if (tab === "pr-vs-po") req = reportApi.prVsPo({ from: d.from, to: d.to });
+    else if (tab === "pr-vs-po-grn") req = reportApi.poVsPrVsGrn(f);
+    else req = reportApi.legacyReconciliation();
     req.then((data) => {
       if (tab === "legacy") { setLegacy(data); setRows([]); } else { setRows(data); setLegacy(null); }
     }).catch((e) => setError(e.message)).finally(() => setLoading(false));
   };
 
-  useEffect(() => { load(); }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (tab !== "summary") load();
+  }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const showSummary = () => {
+    setError("");
+    if (!sumDates.from || !sumDates.to) return setError("Choose both From Date and To Date.");
+    if (sumDates.to < sumDates.from) return setError("To Date cannot be before From Date.");
+    setLoading(true);
+    reportApi.prVsPoItemSummary({ from: sumDates.from, to: sumDates.to })
+      .then(setItemSummary)
+      .catch((e) => { setItemSummary(null); setError(e.message); })
+      .finally(() => setLoading(false));
+  };
 
   return (
     <div style={{ display: "grid", gap: 14 }}>
@@ -40,21 +61,40 @@ export default function ReportsScreen({ initialTab = "po-vs-pr" }) {
         ))}
       </div>
 
-      {tab !== "legacy" && (
+      {tab === "pr-vs-po" && (
+        <div style={{ ...card, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "end" }}>
+          <DateFilter label="From" value={dates.from} onChange={(v) => setDates({ ...dates, from: v })} />
+          <DateFilter label="To" value={dates.to} onChange={(v) => setDates({ ...dates, to: v })} />
+          <button type="button" style={btn(true)} onClick={() => load()} disabled={loading}>Apply</button>
+          <button type="button" style={btn(false)} onClick={() => { const cleared = { from: "", to: "" }; setDates(cleared); load(filters, cleared); }}>Clear</button>
+        </div>
+      )}
+
+      {tab === "pr-vs-po-grn" && (
         <div style={{ ...card, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "end" }}>
           <Filter label="PR number" value={filters.prNumber} onChange={(v) => setFilters({ ...filters, prNumber: v })} />
           <Filter label="PO number" value={filters.poNumber} onChange={(v) => setFilters({ ...filters, poNumber: v })} />
           <Filter label="Vendor code" value={filters.vendorCode} onChange={(v) => setFilters({ ...filters, vendorCode: v })} />
-          <button type="button" style={btn(true)} onClick={load} disabled={loading}>Apply</button>
+          <button type="button" style={btn(true)} onClick={() => load()} disabled={loading}>Apply</button>
           <button type="button" style={btn(false)} onClick={() => { const cleared = { prNumber: "", poNumber: "", vendorCode: "" }; setFilters(cleared); load(cleared); }}>Clear</button>
+        </div>
+      )}
+
+      {tab === "summary" && (
+        <div style={{ ...card, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "end" }}>
+          <DateFilter label="From date" value={sumDates.from} onChange={(v) => setSumDates({ ...sumDates, from: v })} />
+          <DateFilter label="To date" value={sumDates.to} onChange={(v) => setSumDates({ ...sumDates, to: v })} />
+          <button type="button" style={btn(true)} onClick={showSummary} disabled={loading}>Show summary</button>
         </div>
       )}
 
       {error && <div style={errorBox}>{error}</div>}
       {loading && <div style={{ color: "#64748b", fontSize: 13 }}>Loading…</div>}
 
-      {!loading && tab === "po-vs-pr" && <PoVsPrTable rows={rows} />}
-      {!loading && tab === "po-vs-pr-grn" && <PoVsPrVsGrnTable rows={rows} />}
+      {!loading && tab === "pr-vs-po" && <PrVsPoTable rows={rows} />}
+      {!loading && tab === "pr-vs-po-grn" && <PrVsPoVsGrnTable rows={rows} />}
+      {!loading && tab === "summary" && itemSummary && <ItemSummaryTable rows={itemSummary} />}
+      {!loading && tab === "summary" && !itemSummary && <div style={{ color: "#64748b", fontSize: 13 }}>Choose From and To dates, then Show summary.</div>}
       {!loading && tab === "legacy" && legacy && <LegacyTable data={legacy} />}
     </div>
   );
@@ -69,44 +109,86 @@ function Filter({ label, value, onChange }) {
   );
 }
 
+function DateFilter({ label, value, onChange }) {
+  return (
+    <div style={{ width: 170 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", marginBottom: 4, textTransform: "uppercase" }}>{label}</div>
+      <DateInput style={inp} value={value} onChange={(e) => onChange(e.target.value)} />
+    </div>
+  );
+}
+
+// The header row stays in place while the rows scroll.
 function Table({ headers, children, empty }) {
   return (
-    <div style={{ ...card, padding: 0, overflowX: "auto" }}>
+    <div style={{ ...card, padding: 0, overflow: "auto", maxHeight: "65vh" }}>
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-        <thead><tr>{headers.map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
+        <thead>
+          <tr>
+            {headers.map((h) => (
+              <th key={h} style={{ ...thFor(h), position: "sticky", top: 0, zIndex: 2, background: "#f8fafc", boxShadow: "inset 0 -1px 0 #e2e8f0" }}>{h}</th>
+            ))}
+          </tr>
+        </thead>
         <tbody>{children.length ? children : <tr><td colSpan={headers.length} style={{ ...td, textAlign: "center", color: "#64748b", padding: 16 }}>{empty}</td></tr>}</tbody>
       </table>
     </div>
   );
 }
 
-function PoVsPrTable({ rows }) {
+function PrVsPoTable({ rows }) {
   return (
-    <Table empty="No PR lines match these filters."
-      headers={["PR", "Date", "Department", "PR status", "Item", "Requested", "Ordered", "via PO-by-PR", "Outside", "Remaining", "Received", "Lifecycle", "POs", "Vendors"]}>
+    <Table empty="No PR lines with a PO match these dates."
+      headers={["PR number", "PO number", "PR date", "PO date", "Days gap", "Item", "Department", "UOM", "Rate", "PR quantity", "PO quantity", "Balance quantity"]}>
       {rows.map((r, i) => (
         <tr key={i}>
           <td style={{ ...td, fontWeight: 700 }}>{r.prNumber}</td>
-          <td style={td}>{formatDisplayDate(r.prDate)}</td>
-          <td style={td}>{r.department}</td>
-          <td style={td}>{r.prStatus}</td>
-          <td style={td}>{r.itemCode}</td>
-          <td style={{ ...td, textAlign: "right" }}>{qty(r.requestedQty)}</td>
-          <td style={{ ...td, textAlign: "right" }}>{qty(r.orderedQty)}</td>
-          <td style={{ ...td, textAlign: "right" }}>{qty(r.orderedThroughPoByPrQty)}</td>
-          <td style={{ ...td, textAlign: "right", color: Number(r.orderedOutsidePoByPrQty) > 0 ? "#92400e" : undefined }}>{qty(r.orderedOutsidePoByPrQty)}</td>
-          <td style={{ ...td, textAlign: "right" }}>{qty(r.remainingToOrderQty)}</td>
-          <td style={{ ...td, textAlign: "right" }}>{qty(r.receivedQty)}</td>
-          <td style={td}>{r.lifecycle}</td>
-          <td style={td}>{r.poNumbers || "—"}</td>
-          <td style={td}>{r.vendors || "—"}</td>
+          <td style={{ ...td, fontWeight: 700 }}>{r.poNumber}</td>
+          <td style={{ ...td, whiteSpace: "nowrap" }}>{formatDisplayDate(r.prDate)}</td>
+          <td style={{ ...td, whiteSpace: "nowrap" }}>{formatDisplayDate(r.poDate)}</td>
+          <td style={{ ...td, textAlign: "center" }}>{r.daysGap ?? "—"}</td>
+          <td style={td}>
+            <div style={{ fontWeight: 700 }}>{r.itemCode}</div>
+            <div style={{ color: "#64748b", fontSize: 11 }}>{r.itemName}</div>
+          </td>
+          <td style={td}>
+            <div style={{ fontWeight: 700 }}>{r.department || "—"}</div>
+            <div style={{ color: "#64748b", fontSize: 11 }}>{r.requisitioner || "—"}</div>
+          </td>
+          <td style={td}>{r.uom || "—"}</td>
+          <td style={{ ...td, textAlign: "right" }}>{money(r.rate)}</td>
+          <td style={{ ...td, textAlign: "right" }}>{qty(r.prQty)}</td>
+          <td style={{ ...td, textAlign: "right" }}>{qty(r.poQty)}</td>
+          <td style={{ ...td, textAlign: "right", fontWeight: 700 }}>{qty(r.balanceQty)}</td>
         </tr>
       ))}
     </Table>
   );
 }
 
-function PoVsPrVsGrnTable({ rows }) {
+// One row per item. Amount is the sum of each PO's quantity x that PO's rate.
+function ItemSummaryTable({ rows }) {
+  return (
+    <Table empty="No purchase orders with PRs in these dates."
+      headers={["Item", "UOM", "PR quantity", "PO quantity", "Balance quantity", "Amount"]}>
+      {rows.map((r) => (
+        <tr key={r.itemCode}>
+          <td style={td}>
+            <div style={{ fontWeight: 700 }}>{r.itemCode}</div>
+            <div style={{ color: "#64748b", fontSize: 11 }}>{r.itemName}</div>
+          </td>
+          <td style={td}>{r.uom || "—"}</td>
+          <td style={{ ...td, textAlign: "right" }}>{qty(r.prQty)}</td>
+          <td style={{ ...td, textAlign: "right" }}>{qty(r.poQty)}</td>
+          <td style={{ ...td, textAlign: "right", fontWeight: 700 }}>{qty(r.balanceQty)}</td>
+          <td style={{ ...td, textAlign: "right", fontWeight: 700 }}>{money(r.amount)}</td>
+        </tr>
+      ))}
+    </Table>
+  );
+}
+
+function PrVsPoVsGrnTable({ rows }) {
   return (
     <Table empty="No PO-by-PR allocations match these filters."
       headers={["PO", "PO status", "Vendor", "PR", "Item", "Net ordered", "Received", "Accepted", "Rejected", "Pending", "GRNs"]}>

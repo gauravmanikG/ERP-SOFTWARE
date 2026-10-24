@@ -11,10 +11,27 @@ public final class PoByPrDtos {
 
     public enum Mode { FULL, PARTIAL }
 
-    /** One PR line the user is ordering. Quantity is ignored in FULL mode (the server uses the remaining quantity). */
-    public record LineRequest(Long prItemId, BigDecimal quantity) {}
+    /**
+     * One PR line the user is ordering. Quantity is ignored in FULL mode (the server uses the remaining quantity).
+     * discountPercent and manualDiscount apply to this PR line's share of the item's price; remarks are kept with it.
+     */
+    public record LineRequest(Long prItemId, BigDecimal quantity, BigDecimal discountPercent, BigDecimal manualDiscount, String remarks) {
+        public LineRequest(Long prItemId, BigDecimal quantity) {
+            this(prItemId, quantity, null, null, null);
+        }
+    }
 
-    public record CreatePoRequest(String vendorCode, LocalDate poDate, String mode, List<LineRequest> lines, String remarks) {}
+    /** PO-level charges (vendor freight, other charges, round off) and remarks, on top of the line totals. */
+    /** terms is optional: payment, freight and dispatch details chosen from the Masters screens and free text. */
+    /** schedules is optional: delivery lots per item (see DeliveryLots). */
+    public record CreatePoRequest(String vendorCode, LocalDate poDate, String mode, List<LineRequest> lines, String remarks,
+                                  BigDecimal deliveryFreight, BigDecimal otherCharges, BigDecimal roundOff,
+                                  com.silvermuller.seals.modules.masters.PurchaseOrderTerms terms,
+                                  List<DeliveryLots.Lot> schedules) {
+        public CreatePoRequest(String vendorCode, LocalDate poDate, String mode, List<LineRequest> lines, String remarks) {
+            this(vendorCode, poDate, mode, lines, remarks, null, null, null, null, null);
+        }
+    }
 
     /** One eligible PR line for the selected item, with the vendor's rate on the PO date and receipts so far. */
     public record EligiblePrLine(
@@ -53,7 +70,7 @@ public final class PoByPrDtos {
             String receivingStatus,
             String lifecycleStatus) {}
 
-    /** A PO line as it will be (or was) saved: one per item, with GST from the existing calculator. */
+    /** A PO line as it will be (or was) saved: one per item, with discount and GST from the existing calculator. */
     public record PlannedLine(
             String itemCode,
             String itemName,
@@ -63,12 +80,14 @@ public final class PoByPrDtos {
             BigDecimal unitRate,
             BigDecimal taxPercent,
             String taxType,
+            BigDecimal discountAmount,
             BigDecimal taxableAmount,
             BigDecimal cgstAmount,
             BigDecimal sgstAmount,
             BigDecimal igstAmount,
             BigDecimal taxAmount,
-            BigDecimal itemTotal) {}
+            BigDecimal itemTotal,
+            String remarks) {}
 
     /** Which PR line quantity goes into the PO line. */
     public record PlannedAllocation(Long prItemId, String prNumber, String itemCode, BigDecimal allocatedQty, BigDecimal unitPrice) {}

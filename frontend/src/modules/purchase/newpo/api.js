@@ -3,17 +3,14 @@
 const API_ROOT = (import.meta.env.VITE_API_URL || "http://localhost:4000") + "/api";
 export const NPO = `${API_ROOT}/new-po`;
 
+import { getSetting } from "../../../shared/utils/settingsStore";
+
 const USER_KEY = "SMS_CURRENT_USER";
 
-// The acting user is a UI preference used for the X-User-Name header, not business data.
+// The acting user is a UI setting used for the X-User-Name header; it is stored in PostgreSQL.
 export function loadUser() {
-  try {
-    const raw = localStorage.getItem(USER_KEY);
-    if (raw) {
-      const u = JSON.parse(raw);
-      if (u && u.name) return { name: u.name, role: u.role || "CREATOR" };
-    }
-  } catch (e) { /* storage unavailable */ }
+  const u = getSetting(USER_KEY, null);
+  if (u && u.name) return { name: u.name, role: u.role || "CREATOR" };
   return { name: "Current User", role: "CREATOR" };
 }
 
@@ -53,7 +50,10 @@ export const vendorRateApi = {
 };
 
 export const poByPrApi = {
-  eligibleItems: (q) => request("GET", `/pr/eligible-items?q=${enc(q || "")}`, null),
+  nextPoNumber: () => request("GET", "/pr/next-po-number", null),
+  // excludePrItemIds: PR lines already on the PO being built; items whose lines are all in it are left out
+  eligibleItems: (q, excludePrItemIds = []) =>
+    request("GET", `/pr/eligible-items?q=${enc(q || "")}&exclude=${enc(excludePrItemIds.join(","))}`, null),
   eligibleLines: (itemCode, vendorCode, poDate) =>
     request("GET", `/pr/eligible-lines?itemCode=${enc(itemCode)}&vendorCode=${enc(vendorCode)}&poDate=${poDate}`, null),
   preview: (body) => request("POST", "/pr/preview", null, body),
@@ -69,6 +69,8 @@ export const poRegisterApi = {
 export const reportApi = {
   poVsPr: (filters) => request("GET", `/reports/po-vs-pr${query(filters)}`, null),
   poVsPrVsGrn: (filters) => request("GET", `/reports/po-vs-pr-vs-grn${query(filters)}`, null),
+  prVsPo: (filters) => request("GET", `/reports/pr-vs-po${query(filters)}`, null),
+  prVsPoItemSummary: (filters) => request("GET", `/reports/pr-vs-po/item-summary${query(filters)}`, null),
   legacyReconciliation: () => request("GET", "/reports/legacy-reconciliation", null)
 };
 

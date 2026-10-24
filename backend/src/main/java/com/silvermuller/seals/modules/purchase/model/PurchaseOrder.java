@@ -11,7 +11,6 @@ public class PurchaseOrder {
     private String id;
     private String poNumber;
     private String poDate;
-    private String proposalNumber;
     private String prNumber;
     private String prDate;
     private String department;
@@ -84,8 +83,6 @@ public class PurchaseOrder {
     public String getPoDate() { return poDate; }
     public void setPoDate(String poDate) { this.poDate = poDate; }
 
-    public String getProposalNumber() { return proposalNumber; }
-    public void setProposalNumber(String proposalNumber) { this.proposalNumber = proposalNumber; }
 
     public String getPrNumber() { return prNumber; }
     public void setPrNumber(String prNumber) { this.prNumber = prNumber; }
@@ -189,14 +186,8 @@ public class PurchaseOrder {
     public String getCreatedAt() { return createdAt; }
     public void setCreatedAt(String createdAt) { this.createdAt = createdAt; }
 
-    private Long clubbingBatchId;
-    private String clubbingBatchNumber;
 
-    public Long getClubbingBatchId() { return clubbingBatchId; }
-    public void setClubbingBatchId(Long clubbingBatchId) { this.clubbingBatchId = clubbingBatchId; }
 
-    public String getClubbingBatchNumber() { return clubbingBatchNumber; }
-    public void setClubbingBatchNumber(String clubbingBatchNumber) { this.clubbingBatchNumber = clubbingBatchNumber; }
 
     public String getPoType() { return poType; }
     public void setPoType(String poType) { this.poType = poType; }

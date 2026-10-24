@@ -1,3 +1,4 @@
+import { setHandoff, getHandoff, removeHandoff } from "../../../shared/utils/handoffStore";
 import { formatDisplayDate, formatDisplayDateTime } from "../../../shared/utils/dateFormat";
 import DateInput from "../../../shared/components/DateInput";
 import { useResizableColumns, ResizableColGroup, ColumnResizeHandle } from "../../../shared/components/ResizableTable";
@@ -31,7 +32,6 @@ import {
   RotateCcw,
   Ban,
   Check,
-  Package,
   Filter,
   RefreshCw,
   Download
@@ -42,7 +42,6 @@ import { REAL_ITEM_MASTER_DATA } from "../../engineering/data/realItemMasterData
 
 // 2. Direct Import of REAL 14 Groups from Other Item Master
 import { INITIAL_GROUPS_DATA } from "../../engineering/pages/OtherItemMasterPage";
-import { PrClubbingTab } from "../components/PrClubbingTab";
 
 // =============================================================================
 // REAL MASTER DATASETS (Exact matches with Silver Muller Seals Master Tables)
@@ -144,13 +143,41 @@ export const formatAuditDateTime = (val) => {
 
 export const INITIAL_PR_DATA = [];
 
+// Today's date as YYYY-MM-DD in local time (toISOString() would use UTC and can show yesterday early in the morning)
+const todayIso = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
+// Requested By: each word starts with a capital letter, the rest are small letters (e.g. "Gaurav", "Kiran Bhalla")
+const formatPersonName = (value) => value.replace(/[A-Za-z]+/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+const PERSON_NAME_PATTERN = /^[A-Z][a-z]+( [A-Z][a-z]+)*$/;
+
+// Blank PR form: the user fills every field themselves. Only the PR date is stamped with today.
+const getBlankPrForm = () => ({
+  pr_number: "",
+  pr_date: todayIso(),
+  required_date: "",
+  requisitioner: "",
+  department: "",
+  store: "",
+  preferred_vendor: "",
+  priority: "",
+  requirement_type: "",
+  procurement_method: "",
+  pr_type: "",
+  cost_center: "",
+  project_reference: "",
+  remarks: "",
+  items: []
+});
+
 const PR_MAIN_COLUMNS = [
   { key: "checkbox", width: 36, min: 32 },
   { key: "sr", width: 60 },
   { key: "item", width: 240 },
   { key: "department", width: 150 },
   { key: "quantity", width: 95 },
-  { key: "uom", width: 70 },
   { key: "requiredBy", width: 130 },
   { key: "priority", width: 90 },
   { key: "status", width: 110 },
@@ -258,7 +285,7 @@ export function PurchaseRequisitionPage({
               item_code: it.item_code || it.sms_new_part_no,
               item_name: it.item_name || it.description_size || it.item_code,
               category: it.category || "Raw Material",
-              uom: it.uom || "PCS",
+              uom: it.purchased_uom || "", // the item's Purchase UOM from the item master
               current_stock: Number(it.current_stock || 0),
               reorder_level: Number(it.reorder_level || 50),
               est_rate: Number(it.price || it.est_rate || 0),
@@ -271,40 +298,6 @@ export function PurchaseRequisitionPage({
         console.warn("Could not fetch items from backend API, using local storage fallback:", err);
       }
 
-      // 2. Merge user-created Non-FG items from localStorage (NO PURGING!)
-      try {
-        const savedOther = localStorage.getItem("SMS_OTHER_ITEM_MASTER_DATA_REAL");
-        if (savedOther) {
-          const parsedOther = JSON.parse(savedOther);
-          if (Array.isArray(parsedOther)) {
-            parsedOther.forEach((it) => {
-              if (it && it.item_code) {
-                const existingIdx = combined.findIndex((c) => c.item_code === it.item_code);
-                const itemObj = {
-                  item_code: it.item_code,
-                  item_name: it.item_name || it.description || it.item_code,
-                  category: it.category || "Raw Material",
-                  uom: it.uom || "PCS",
-                  current_stock: Number(it.current_stock) || 0,
-                  reorder_level: Number(it.min_stock || it.reorder_qty) || 10,
-                  est_rate: Number(it.unit_price) || 0,
-                  hsn_code: it.hsn_code || it.hsnCode || "",
-                  item_type: "OTHER"
-                };
-                if (existingIdx !== -1) {
-                  combined[existingIdx] = { ...combined[existingIdx], ...itemObj };
-                } else {
-                  // Prepend so user's newly created other items appear right at top
-                  combined.unshift(itemObj);
-                }
-              }
-            });
-          }
-        }
-      } catch (e) {
-        console.error("Error reading Other Item Master from localStorage:", e);
-      }
-
       // 3. Fallback to bundled FG data if database was empty
       if (combined.length === 0 && Array.isArray(REAL_ITEM_MASTER_DATA)) {
         REAL_ITEM_MASTER_DATA.forEach((it) => {
@@ -312,7 +305,7 @@ export function PurchaseRequisitionPage({
             item_code: it.sms_new_part_no || (it.old_code ? `FG-${it.old_code}` : `ITM-${it.id}`),
             item_name: it.description_size || it.product || "Oil Seal",
             category: it.group_name || "FG",
-            uom: it.uom || "PCS",
+            uom: it.purchased_uom || "",
             current_stock: 0,
             reorder_level: 50,
             est_rate: Number(it.price) || 0,
@@ -326,21 +319,14 @@ export function PurchaseRequisitionPage({
 
     loadAllItems();
 
-    // 2. Real Categories from Group Master
-    try {
-      const savedGroups = localStorage.getItem("SMS_OTHER_ITEM_GROUPS_DATA_USER");
-      if (savedGroups) {
-        const parsed = JSON.parse(savedGroups);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const names = parsed.map((g) => g.name || g.group_name).filter(Boolean);
-          if (names.length > 0) {
-            setMasterCategories(names);
-          }
-        }
-      }
-    } catch (e) {
-      console.error("Error reading Category Master:", e);
-    }
+    // 2. Real Categories from Group Master (PostgreSQL)
+    fetch("http://localhost:4000/api/inventory/item-groups")
+      .then((res) => (res.ok ? res.json() : []))
+      .then((groups) => {
+        const names = groups.map((g) => g.name).filter(Boolean);
+        if (names.length > 0) setMasterCategories(names);
+      })
+      .catch((e) => console.error("Error reading Category Master:", e));
 
     // 3. Real Departments from Department Master backend API or fallback
     const fetchRealDepts = async () => {
@@ -446,17 +432,6 @@ export function PurchaseRequisitionPage({
     fetchRequisitions();
   }, []);
 
-  // Direct database source (no localStorage dependency)
-  useEffect(() => {
-    try {
-      localStorage.removeItem("SMS_PURCHASE_REQUISITION_DATA_REAL_V2");
-      localStorage.removeItem("SMS_PURCHASE_REQUISITIONS_DATA_V1");
-      localStorage.removeItem("SMS_PURCHASE_REQUISITIONS_DATA_V2");
-      localStorage.removeItem("SMS_PURCHASE_REQUISITION_DATA_V1");
-      localStorage.removeItem("SMS_PURCHASE_REQUISITION_DATA_V2");
-      localStorage.removeItem("SMS_PURCHASE_REQUISITION_DATA_REAL_V1");
-    } catch {}
-  }, []);
 
   // Toast Notification Message
   const [toastMessage, setToastMessage] = useState("");
@@ -465,9 +440,6 @@ export function PurchaseRequisitionPage({
     setTimeout(() => setToastMessage(""), 3500);
   };
 
-  // Main Module Tab: "all-prs" | "pr-clubbing"
-  const [activeMainTab, setActiveMainTab] = useState("all-prs");
-  const [eligibleClubbingCount, setEligibleClubbingCount] = useState(0);
 
   // HSN Master list for PR line item classification
   const [hsnMasterList, setHsnMasterList] = useState([]);
@@ -479,21 +451,6 @@ export function PurchaseRequisitionPage({
       })
       .catch((e) => console.warn("Could not load HSN codes in PR page:", e));
   }, []);
-
-  useEffect(() => {
-    const checkEligible = async () => {
-      try {
-        const res = await fetch("http://localhost:4000/api/purchase/clubbing/eligible-items");
-        if (res.ok) {
-          const data = await res.json();
-          if (Array.isArray(data)) setEligibleClubbingCount(data.length);
-        }
-      } catch (e) {
-        // ignore
-      }
-    };
-    checkEligible();
-  }, [prList]);
 
   // Selected PR IDs for bulk selection
   const [selectedIds, setSelectedIds] = useState(new Set());
@@ -507,7 +464,6 @@ export function PurchaseRequisitionPage({
     item: "",
     department: "",
     quantity: "",
-    uom: "",
     required_by: "",
     priority: "",
     status: ""
@@ -535,23 +491,7 @@ export function PurchaseRequisitionPage({
   const [itemSearchFilter, setItemSearchFilter] = useState("");
 
   // Form State
-  const [formData, setFormData] = useState({
-    pr_number: "",
-    pr_date: new Date().toISOString().slice(0, 10),
-    required_date: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
-    requisitioner: "Kiran Bhalla",
-    department: REAL_DEPARTMENTS_LIST[0] || "Store",
-    store: REAL_STORES_LIST[0] || "Raw Material Store",
-    preferred_vendor: "",
-    priority: "Normal",
-    requirement_type: "Production Requirement",
-    procurement_method: "Competitive Quotation",
-    pr_type: "Direct Material",
-    cost_center: "Moulding Press 01",
-    project_reference: "",
-    remarks: "",
-    items: []
-  });
+  const [formData, setFormData] = useState(getBlankPrForm);
   const [formErrors, setFormErrors] = useState({});
 
   // Related Quotations & Orders for Two-Way Navigation in Details Modal
@@ -597,12 +537,12 @@ export function PurchaseRequisitionPage({
     fetchRelated();
   }, [detailPr]);
 
-  // Watch for navigation from Quotation or PO screen via sessionStorage
+  // Watch for navigation from Quotation or PO screen via handoff
   useEffect(() => {
     try {
-      const selectedPrNum = sessionStorage.getItem("SMS_SELECTED_PR_NUMBER");
+      const selectedPrNum = getHandoff("SMS_SELECTED_PR_NUMBER");
       if (selectedPrNum && prList.length > 0) {
-        sessionStorage.removeItem("SMS_SELECTED_PR_NUMBER");
+        removeHandoff("SMS_SELECTED_PR_NUMBER");
         setSearchTerm(selectedPrNum);
         const match = prList.find((p) => p.pr_number === selectedPrNum || p.id === selectedPrNum);
         if (match) {
@@ -667,12 +607,6 @@ export function PurchaseRequisitionPage({
         if (!matchesQty) return false;
       }
 
-      if (colFilters.uom.trim()) {
-        const fu = colFilters.uom.toLowerCase();
-        const matchesUom = primaryItem && primaryItem.uom && primaryItem.uom.toLowerCase().includes(fu);
-        if (!matchesUom) return false;
-      }
-
       if (colFilters.required_by.trim()) {
         const fr = colFilters.required_by.toLowerCase();
         const matchesReq =
@@ -707,9 +641,6 @@ export function PurchaseRequisitionPage({
       } else if (sortField === "quantity") {
         aVal = a.items && a.items.length > 0 ? Number(a.items[0].req_qty || 0) : 0;
         bVal = b.items && b.items.length > 0 ? Number(b.items[0].req_qty || 0) : 0;
-      } else if (sortField === "uom") {
-        aVal = a.items && a.items.length > 0 ? a.items[0].uom : "";
-        bVal = b.items && b.items.length > 0 ? b.items[0].uom : "";
       }
 
       if (typeof aVal === "string") {
@@ -768,23 +699,6 @@ export function PurchaseRequisitionPage({
   // Open Create PR Modal (starts clean with real Item Master 945-05745)
   const handleOpenCreateModal = () => {
     setEditingPrId(null);
-    const targetReqDate = new Date();
-    targetReqDate.setDate(targetReqDate.getDate() + 7);
-    const prDateStr = new Date().toISOString().slice(0, 10);
-    const reqDateStr = targetReqDate.toISOString().slice(0, 10);
-
-    const firstRealItem = masterItems[0] || {
-      item_code: "945-05745",
-      item_name: "Oil Seal-NBR (Size:95x130x13)",
-      category: "FG",
-      uom: "PCS",
-      current_stock: 0,
-      reorder_level: 50,
-      est_rate: 0
-    };
-
-    const firstDept = masterDepartments[0] || "Store";
-
     // Dynamically calculate the highest sequence number in prList
     let maxSeq = 20;
     (prList || []).forEach((p) => {
@@ -802,44 +716,7 @@ export function PurchaseRequisitionPage({
     const curYear = new Date().getFullYear();
     const generatedPrNumber = `PR-${curYear}-${String(maxSeq + 1).padStart(5, "0")}`;
 
-    setFormData({
-      pr_number: generatedPrNumber,
-      pr_date: prDateStr,
-      required_date: reqDateStr,
-      requisitioner: "Kiran Bhalla",
-      department: firstDept,
-      store: "Raw Material Store",
-      preferred_vendor: "",
-      priority: "Normal",
-      requirement_type: "Production Requirement",
-      procurement_method: "Competitive Quotation",
-      pr_type: "Direct Material",
-      cost_center: "Moulding Press 01",
-      project_reference: "",
-      remarks: "",
-      items: [
-        {
-          id: Date.now(),
-          item_code: firstRealItem.item_code,
-          item_name: firstRealItem.item_name,
-          category: firstRealItem.category || "FG",
-          req_qty: 1,
-          ordered_qty: 0,
-          remaining_qty: 1,
-          uom: firstRealItem.uom || "PCS",
-          current_stock: firstRealItem.current_stock || 0,
-          reorder_level: firstRealItem.reorder_level || 50,
-          est_rate: firstRealItem.est_rate || 0,
-          line_total: 1 * (firstRealItem.est_rate || 0),
-          drawing_no: "",
-          manufacturer_brand: "",
-          hsn_code: firstRealItem.hsn_code || "",
-          required_by_date: reqDateStr,
-          required_date: reqDateStr,
-          remarks: ""
-        }
-      ]
-    });
+    setFormData({ ...getBlankPrForm(), pr_number: generatedPrNumber });
     setFormErrors({});
     setItemSearchFilter("");
     if (detailPr) setDetailPr(null);
@@ -912,39 +789,29 @@ export function PurchaseRequisitionPage({
 
   // Add Item Line to PR Form
   const handleAddFormItemRow = () => {
-    const itemToAdd = masterItems[0] || {
-      item_code: "945-05745",
-      item_name: "Oil Seal-NBR (Size:95x130x13)",
-      category: "FG",
-      uom: "PCS",
-      current_stock: 0,
-      reorder_level: 50,
-      est_rate: 0
-    };
-    const defaultDate = formData.required_date || new Date().toISOString().slice(0, 10);
-
+    // Blank line: the user picks the item and enters the quantity themselves
     setFormData((prev) => ({
       ...prev,
       items: [
         ...prev.items,
         {
           id: Date.now() + Math.random(),
-          item_code: itemToAdd.item_code,
-          item_name: itemToAdd.item_name,
-          category: itemToAdd.category || "FG",
-          req_qty: 1,
+          item_code: "",
+          item_name: "",
+          category: "",
+          req_qty: "",
           ordered_qty: 0,
-          remaining_qty: 1,
-          uom: itemToAdd.uom || "PCS",
-          current_stock: itemToAdd.current_stock || 0,
-          reorder_level: itemToAdd.reorder_level || 50,
-          est_rate: itemToAdd.est_rate || 0,
-          line_total: 1 * (itemToAdd.est_rate || 0),
+          remaining_qty: 0,
+          uom: "",
+          current_stock: 0,
+          reorder_level: 0,
+          est_rate: 0,
+          line_total: 0,
           drawing_no: "",
           manufacturer_brand: "",
-          hsn_code: itemToAdd.hsn_code || "",
-          required_by_date: defaultDate,
-          required_date: defaultDate,
+          hsn_code: "",
+          required_by_date: prev.required_date || "",
+          required_date: prev.required_date || "",
           remarks: ""
         }
       ]
@@ -977,7 +844,7 @@ export function PurchaseRequisitionPage({
           item_code: master.item_code,
           item_name: master.item_name,
           category: master.category,
-          uom: master.uom,
+          uom: master.uom || "", // auto-filled from the item's Purchase UOM
           current_stock: master.current_stock,
           reorder_level: master.reorder_level,
           est_rate: master.est_rate,
@@ -1011,11 +878,33 @@ export function PurchaseRequisitionPage({
   // Submit PR Form (Action: "DRAFT" or "SUBMIT")
   const handleSavePrWithAction = (actionType = "SUBMIT") => {
     const errors = {};
-    if (!formData.requisitioner.trim()) errors.requisitioner = "Requisitioner Name is required";
+    // Dates for a new PR: PR Date is today, and required/need dates cannot be in the past.
+    // Editing keeps the saved dates, so only new PRs are checked against today.
+    const today = todayIso();
+    const isEditing = editingPrId !== null;
+
+    if (!formData.requisitioner.trim()) {
+      errors.requisitioner = "Requisitioner Name is required";
+    } else if (!PERSON_NAME_PATTERN.test(formData.requisitioner.trim())) {
+      errors.requisitioner = "Use a capital first letter and small letters, e.g. Gaurav";
+    }
     if (!formData.department.trim()) errors.department = "Department is required";
-    if (!formData.required_date) errors.required_date = "Required Date is required";
-    if (formData.required_date < formData.pr_date) {
+    if (!isEditing && formData.pr_date !== today) errors.pr_date = "PR Date must be today's date";
+    if (!formData.required_date) {
+      errors.required_date = "Required Date is required";
+    } else if (!isEditing && formData.required_date < today) {
+      errors.required_date = "Required Date cannot be a past date";
+    } else if (formData.required_date < formData.pr_date) {
       errors.required_date = "Required Date cannot be earlier than PR Date";
+    }
+
+    // Validate item lines (the form starts blank, so every line must be filled in)
+    if (formData.items.length === 0) {
+      errors.items = "Add at least one item line.";
+    } else if (formData.items.some((item) => !item.item_code)) {
+      errors.items = "Select an item for every line.";
+    } else if (formData.items.some((item) => !item.uom)) {
+      errors.items = "Every line needs a UOM. Items without a Purchase UOM must be updated in the item master first.";
     }
 
     // Validate item quantities
@@ -1028,6 +917,10 @@ export function PurchaseRequisitionPage({
 
     if (invalidQtyFound) {
       errors.items = "All PR item quantities must be greater than 0.";
+    }
+
+    if (!isEditing && formData.items.some((item) => item.required_by_date && item.required_by_date < today)) {
+      errors.items = "Need Date of an item line cannot be a past date.";
     }
 
     if (Object.keys(errors).length > 0) {
@@ -1288,7 +1181,7 @@ export function PurchaseRequisitionPage({
   // Connection 1: PR -> Request for Quotation (Create RFQ from Approved PR)
   const handleCreateRfqFromPr = (pr) => {
     try {
-      sessionStorage.setItem("SMS_SELECTED_PR_FOR_RFQ", JSON.stringify(pr));
+      setHandoff("SMS_SELECTED_PR_FOR_RFQ", JSON.stringify(pr));
       showToast(`Selected PR "${pr.pr_number}". Opening Request for Quotation (RFQ)...`);
       if (detailPr) setDetailPr(null);
       if (onNavigate) onNavigate("rfq");
@@ -1300,10 +1193,10 @@ export function PurchaseRequisitionPage({
   // Connection 2: PR -> PO Processing (Approved PR with remaining qty)
   const handleProcessPoFromPr = (pr) => {
     try {
-      sessionStorage.setItem("SMS_SELECTED_PR_FOR_PO", JSON.stringify(pr));
+      setHandoff("SMS_SELECTED_PR_FOR_PO", JSON.stringify(pr));
       showToast(`Selected PR "${pr.pr_number}". Opening PO Processing screen...`);
       if (detailPr) setDetailPr(null);
-      if (onNavigate) onNavigate("purchase-processing");
+      if (onNavigate) onNavigate("new-po-po-by-pr");
     } catch (e) {
       console.error(e);
     }
@@ -1439,7 +1332,7 @@ export function PurchaseRequisitionPage({
         maxHeight: "calc(100vh - 68px)",
         overflow: "hidden",
         background: bg,
-        padding: "12px 20px 42px 20px",
+        padding: 0,
         boxSizing: "border-box",
         display: "flex",
         flexDirection: "column",
@@ -1448,18 +1341,16 @@ export function PurchaseRequisitionPage({
     >
       <div
         style={{
-          maxWidth: 1440,
           width: "100%",
-          margin: "0 auto",
           height: "100%",
           maxHeight: "100%",
           display: "flex",
           flexDirection: "column",
           minHeight: 0,
           overflow: "hidden",
-          borderRadius: 12,
-          border: "1px solid #e2e8f0",
-          boxShadow: "0 4px 20px rgba(0,0,0,0.06)",
+          borderRadius: 0,
+          border: "none",
+          boxShadow: "none",
           background: "#ffffff"
         }}
       >
@@ -1660,96 +1551,7 @@ export function PurchaseRequisitionPage({
           </div>
         </div>
 
-        {/* ========================================================================= */}
-        {/* MODULE TABS: ALL REQUISITIONS vs PR CLUBBING & CONSOLIDATION             */}
-        {/* ========================================================================= */}
-        <div
-          style={{
-            flexShrink: 0,
-            background: "#ffffff",
-            borderBottom: "1px solid #e2e8f0",
-            padding: "0 18px",
-            display: "flex",
-            alignItems: "center",
-            gap: 20
-          }}
-        >
-          <button
-            onClick={() => setActiveMainTab("all-prs")}
-            id="tab-all-prs"
-            style={{
-              background: "none",
-              border: "none",
-              borderBottom: activeMainTab === "all-prs" ? "2px solid #2563eb" : "2px solid transparent",
-              color: activeMainTab === "all-prs" ? "#2563eb" : "#64748b",
-              padding: "11px 8px",
-              fontSize: 13,
-              fontWeight: 700,
-              cursor: "pointer",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 8,
-              transition: "all 0.15s ease"
-            }}
-          >
-            <Layers size={14} />
-            <span>All Requisitions (PR)</span>
-            <span
-              style={{
-                background: activeMainTab === "all-prs" ? "#eff6ff" : "#f1f5f9",
-                color: activeMainTab === "all-prs" ? "#2563eb" : "#64748b",
-                padding: "2px 7px",
-                borderRadius: 10,
-                fontSize: 11,
-                fontWeight: 700
-              }}
-            >
-              {prList.length}
-            </span>
-          </button>
 
-          <button
-            onClick={() => setActiveMainTab("pr-clubbing")}
-            id="tab-pr-clubbing"
-            style={{
-              background: "none",
-              border: "none",
-              borderBottom: activeMainTab === "pr-clubbing" ? "2px solid #2563eb" : "2px solid transparent",
-              color: activeMainTab === "pr-clubbing" ? "#2563eb" : "#64748b",
-              padding: "11px 8px",
-              fontSize: 13,
-              fontWeight: 700,
-              cursor: "pointer",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 8,
-              transition: "all 0.15s ease"
-            }}
-          >
-            <Package size={14} />
-            <span>PR Clubbing &amp; Consolidation</span>
-            <span
-              style={{
-                background: activeMainTab === "pr-clubbing" ? "#2563eb" : "#059669",
-                color: "#ffffff",
-                padding: "2px 7px",
-                borderRadius: 10,
-                fontSize: 11,
-                fontWeight: 800
-              }}
-            >
-              {eligibleClubbingCount > 0 ? `${eligibleClubbingCount} Eligible` : "Clubbing"}
-            </span>
-          </button>
-        </div>
-
-        {activeMainTab === "pr-clubbing" ? (
-          <PrClubbingTab
-            dark={dark}
-            onNavigate={onNavigate}
-            showToast={showToast}
-          />
-        ) : (
           <>
 
         {/* ========================================================================= */}
@@ -1976,26 +1778,6 @@ export function PurchaseRequisitionPage({
                     fontWeight: 700,
                     color: "#334155",
                     whiteSpace: "nowrap",
-                    textAlign: "center",
-                    width: 70,
-                    cursor: "pointer"
-                  }}
-                  onClick={() => handleSort("uom")}
-                >
-                  UOM {sortField === "uom" && (sortDirection === "asc" ? "↑" : "↓")}
-                  <ColumnResizeHandle colKey="uom" resize={prMainResize} />
-                </th>
-                <th
-                  style={{
-                    position: "sticky",
-                    top: 0,
-                    zIndex: 22,
-                    background: "#f1f5f9",
-                    borderBottom: "1px solid #cbd5e1",
-                    padding: "8px 12px",
-                    fontWeight: 700,
-                    color: "#334155",
-                    whiteSpace: "nowrap",
                     cursor: "pointer"
                   }}
                   onClick={() => handleSort("requisitioner")}
@@ -2093,15 +1875,6 @@ export function PurchaseRequisitionPage({
                 <td style={{ position: "sticky", top: 37, zIndex: 21, background: "#f8fafc", borderBottom: "2px solid #cbd5e1", padding: "4px 8px", boxShadow: "0 2px 4px rgba(0,0,0,0.04)" }}>
                   <input
                     type="text"
-                    placeholder="UOM..."
-                    value={colFilters.uom}
-                    onChange={(e) => setColFilters({ ...colFilters, uom: e.target.value })}
-                    style={{ width: "100%", padding: "3px 6px", fontSize: 11, border: "1px solid #cbd5e1", borderRadius: 4, outline: "none", boxSizing: "border-box", textAlign: "center" }}
-                  />
-                </td>
-                <td style={{ position: "sticky", top: 37, zIndex: 21, background: "#f8fafc", borderBottom: "2px solid #cbd5e1", padding: "4px 8px", boxShadow: "0 2px 4px rgba(0,0,0,0.04)" }}>
-                  <input
-                    type="text"
                     placeholder="Req By..."
                     value={colFilters.required_by}
                     onChange={(e) => setColFilters({ ...colFilters, required_by: e.target.value })}
@@ -2134,7 +1907,7 @@ export function PurchaseRequisitionPage({
             <tbody>
               {filteredPrs.length === 0 ? (
                 <tr>
-                  <td colSpan={10} style={{ padding: "50px", textAlign: "center", color: "#64748b" }}>
+                  <td colSpan={9} style={{ padding: "50px", textAlign: "center", color: "#64748b" }}>
                     <p style={{ fontSize: 14, fontWeight: 700, margin: "0 0 8px", color: "#0f172a" }}>
                       No Purchase Requisitions found
                     </p>
@@ -2311,12 +2084,7 @@ export function PurchaseRequisitionPage({
                         </div>
                       </td>
 
-                      {/* 5. UOM */}
-                      <td style={{ padding: "10px 12px", textAlign: "center", fontWeight: 700, color: "#475569", whiteSpace: "nowrap" }}>
-                        {primaryItem ? primaryItem.uom : "PCS"}
-                      </td>
-
-                      {/* 6. Required By (Requisitioner + Req Date) */}
+                      {/* 5. Required By (Requisitioner + Req Date) */}
                       <td style={{ padding: "10px 12px", color: "#334155", whiteSpace: "nowrap" }}>
                         <div style={{ fontWeight: 700, color: "#0f172a" }}>{pr.requisitioner}</div>
                         <div style={{ fontSize: 11, color: "#64748b" }}>{formatDisplayDate(pr.required_date || pr.pr_date)}</div>
@@ -2651,13 +2419,11 @@ export function PurchaseRequisitionPage({
           )}
         </div>
         </>
-        )}
       </div>
 
       {/* ========================================================================= */}
       {/* BOTTOM DARK STATUS BAR (MATCHING ITEM MASTER FG REFERENCE UI)             */}
       {/* ========================================================================= */}
-      {activeMainTab === "all-prs" && (
         <div
           style={{
             position: "fixed",
@@ -2694,7 +2460,6 @@ export function PurchaseRequisitionPage({
             Silver Muller Seals &bull; Procurement &amp; Requisition Workflow System
           </div>
         </div>
-      )}
 
       {/* ========================================================================= */}
       {/* MODAL 1: CREATE / EDIT PURCHASE REQUISITION                               */}
@@ -2810,7 +2575,8 @@ export function PurchaseRequisitionPage({
                     </label>
                     <DateInput
                       value={formData.pr_date}
-                      onChange={(e) => setFormData({ ...formData, pr_date: e.target.value })}
+                      disabled
+                      title="PR Date is always today's date"
                       style={{
                         width: "100%",
                         padding: "7px 10px",
@@ -2818,9 +2584,14 @@ export function PurchaseRequisitionPage({
                         border: "1px solid #cbd5e1",
                         fontSize: 12,
                         boxSizing: "border-box",
-                        outline: "none"
+                        outline: "none",
+                        background: "#f1f5f9",
+                        color: "#334155"
                       }}
                     />
+                    {formErrors.pr_date && (
+                      <span style={{ fontSize: 10.5, color: "#ef4444" }}>{formErrors.pr_date}</span>
+                    )}
                   </div>
 
                   <div>
@@ -2841,6 +2612,7 @@ export function PurchaseRequisitionPage({
                         outline: "none"
                       }}
                     >
+                      <option value="">Select department</option>
                       {masterDepartments.map((d) => (
                         <option key={d} value={d}>
                           {d}
@@ -2855,6 +2627,7 @@ export function PurchaseRequisitionPage({
                     </label>
                     <DateInput
                       value={formData.required_date}
+                      min={editingPrId === null ? todayIso() : undefined}
                       onChange={(e) => setFormData({ ...formData, required_date: e.target.value })}
                       style={{
                         width: "100%",
@@ -2878,8 +2651,8 @@ export function PurchaseRequisitionPage({
                     <input
                       type="text"
                       value={formData.requisitioner}
-                      onChange={(e) => setFormData({ ...formData, requisitioner: e.target.value })}
-                      placeholder="Full Name"
+                      onChange={(e) => setFormData({ ...formData, requisitioner: formatPersonName(e.target.value) })}
+                      placeholder="e.g. Gaurav"
                       style={{
                         width: "100%",
                         padding: "7px 10px",
@@ -2909,6 +2682,7 @@ export function PurchaseRequisitionPage({
                         outline: "none"
                       }}
                     >
+                      <option value="">Select requirement type</option>
                       {REQUIREMENT_TYPES_LIST.map((rt) => (
                         <option key={rt} value={rt}>
                           {rt}
@@ -2922,7 +2696,7 @@ export function PurchaseRequisitionPage({
                       Procurement Method <span style={{ color: "#ef4444" }}>*</span>
                     </label>
                     <select
-                      value={formData.procurement_method || "Competitive Quotation"}
+                      value={formData.procurement_method}
                       onChange={(e) => setFormData({ ...formData, procurement_method: e.target.value })}
                       style={{
                         width: "100%",
@@ -2936,6 +2710,7 @@ export function PurchaseRequisitionPage({
                         outline: "none"
                       }}
                     >
+                      <option value="">Select procurement method</option>
                       {PROCUREMENT_METHODS_LIST.map((pm) => (
                         <option key={pm} value={pm}>
                           {pm}
@@ -2962,6 +2737,7 @@ export function PurchaseRequisitionPage({
                         outline: "none"
                       }}
                     >
+                      <option value="">Select priority</option>
                       {PRIORITY_LIST.map((p) => (
                         <option key={p} value={p}>
                           {p}
@@ -2975,7 +2751,7 @@ export function PurchaseRequisitionPage({
                       PR Type
                     </label>
                     <select
-                      value={formData.pr_type || "Direct Material"}
+                      value={formData.pr_type}
                       onChange={(e) => setFormData({ ...formData, pr_type: e.target.value })}
                       style={{
                         width: "100%",
@@ -2988,6 +2764,7 @@ export function PurchaseRequisitionPage({
                         outline: "none"
                       }}
                     >
+                      <option value="">Select PR type</option>
                       {PR_TYPES_LIST.map((t) => (
                         <option key={t} value={t}>
                           {t}
@@ -3001,7 +2778,7 @@ export function PurchaseRequisitionPage({
                       Cost Center
                     </label>
                     <select
-                      value={formData.cost_center || "Moulding Press 01"}
+                      value={formData.cost_center}
                       onChange={(e) => setFormData({ ...formData, cost_center: e.target.value })}
                       style={{
                         width: "100%",
@@ -3014,6 +2791,7 @@ export function PurchaseRequisitionPage({
                         outline: "none"
                       }}
                     >
+                      <option value="">Select cost center</option>
                       {COST_CENTERS_LIST.map((cc) => (
                         <option key={cc} value={cc}>
                           {cc}
@@ -3165,6 +2943,7 @@ export function PurchaseRequisitionPage({
                                 outline: "none"
                               }}
                             >
+                              <option value="">Select item</option>
                               {item.item_code &&
                                 !(filteredMasterItemsForDropdown.otherItems || []).some((m) => m.item_code === item.item_code) &&
                                 !(filteredMasterItemsForDropdown.fgItems || []).some((m) => m.item_code === item.item_code) && (
@@ -3270,9 +3049,17 @@ export function PurchaseRequisitionPage({
                             />
                           </td>
 
-                          {/* UOM */}
-                          <td style={{ padding: "6px", textAlign: "center", fontWeight: 700, color: "#334155" }}>
-                            {item.uom}
+                          {/* UOM (read-only: the item's Purchase UOM from the item master) */}
+                          <td
+                            title={item.uom ? "Purchase UOM from item master" : "This item has no Purchase UOM in the item master"}
+                            style={{
+                              padding: "6px",
+                              textAlign: "center",
+                              fontWeight: 700,
+                              color: item.uom ? "#334155" : "#ef4444"
+                            }}
+                          >
+                            {item.uom || "No UOM"}
                           </td>
 
                           {/* Est Rate */}
@@ -3302,6 +3089,7 @@ export function PurchaseRequisitionPage({
                           <td style={{ padding: "6px" }}>
                             <DateInput
                               value={item.required_by_date || item.required_date || formData.required_date || ""}
+                              min={editingPrId === null ? todayIso() : undefined}
                               onChange={(e) => handleItemLineChange(item.id, "required_by_date", e.target.value)}
                               style={{
                                 width: "100%",
@@ -3799,7 +3587,7 @@ export function PurchaseRequisitionPage({
                           <td style={{ padding: "6px 10px", textAlign: "center" }}>
                             <button
                               onClick={() => {
-                                sessionStorage.setItem("SMS_SELECTED_QUOTATION_NUMBER", q.quotationNumber);
+                                setHandoff("SMS_SELECTED_QUOTATION_NUMBER", q.quotationNumber);
                                 if (onNavigate) onNavigate("vendor-quotations");
                               }}
                               style={{
@@ -3901,8 +3689,8 @@ export function PurchaseRequisitionPage({
                           <td style={{ padding: "6px 10px", textAlign: "center" }}>
                             <button
                               onClick={() => {
-                                sessionStorage.setItem("SMS_SELECTED_PO_NUMBER", o.poNumber);
-                                if (onNavigate) onNavigate("purchase-orders");
+                                setHandoff("SMS_SELECTED_PO_NUMBER", o.poNumber);
+                                if (onNavigate) onNavigate("new-po-po-register");
                               }}
                               style={{
                                 background: "#1e293b",

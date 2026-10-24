@@ -5,11 +5,9 @@ import com.silvermuller.seals.modules.inventory.dto.CreateDepartmentRequest;
 import com.silvermuller.seals.modules.inventory.dto.DepartmentResponse;
 import com.silvermuller.seals.modules.inventory.model.Department;
 import com.silvermuller.seals.modules.inventory.model.DepartmentMaster;
-import com.silvermuller.seals.modules.inventory.model.OpeningBalance;
 import com.silvermuller.seals.modules.inventory.repository.DepartmentMasterRepository;
 import com.silvermuller.seals.modules.inventory.repository.DepartmentRepository;
 import com.silvermuller.seals.modules.inventory.repository.InventoryTransactionRepository;
-import com.silvermuller.seals.modules.inventory.repository.OpeningBalanceRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,17 +22,14 @@ public class DepartmentService {
 
     private final DepartmentRepository departmentRepository;
     private final DepartmentMasterRepository departmentMasterRepository;
-    private final OpeningBalanceRepository openingBalanceRepository;
     private final InventoryTransactionRepository transactionRepository;
 
     public DepartmentService(
             DepartmentRepository departmentRepository,
             DepartmentMasterRepository departmentMasterRepository,
-            OpeningBalanceRepository openingBalanceRepository,
             InventoryTransactionRepository transactionRepository) {
         this.departmentRepository = departmentRepository;
         this.departmentMasterRepository = departmentMasterRepository;
-        this.openingBalanceRepository = openingBalanceRepository;
         this.transactionRepository = transactionRepository;
     }
 
@@ -150,12 +145,6 @@ public class DepartmentService {
             }
         });
         if (!oldName.equalsIgnoreCase(trimmed)) {
-            List<OpeningBalance> obs = openingBalanceRepository.findByDepartmentNameIgnoreCase(oldName);
-            for (OpeningBalance ob : obs) {
-                ob.setDepartmentName(trimmed);
-                ob.setMainCode(ob.getItemCode() + "::" + ob.getCategoryName() + "::" + trimmed);
-            }
-            openingBalanceRepository.saveAll(obs);
             departmentRepository.findByNameIgnoreCase(oldName).ifPresent(live -> {
                 live.setName(trimmed);
                 departmentRepository.save(live);
@@ -202,7 +191,6 @@ public class DepartmentService {
                                 + "' because inventory transactions still use it. Remove those movements first.");
             }
         }
-        openingBalanceRepository.deleteByDepartmentNameIgnoreCase(master.getDepartmentName());
         if (live != null) {
             departmentRepository.delete(live);
         }

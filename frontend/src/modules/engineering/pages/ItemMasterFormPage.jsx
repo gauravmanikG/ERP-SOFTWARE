@@ -321,14 +321,6 @@ export function ItemMasterFormPage({
     });
   }, [formData?.description_size, savedItems, editingId]);
 
-  // Purge any old localStorage cached items to ensure pure PostgreSQL truth
-  useEffect(() => {
-    try {
-      localStorage.removeItem(STORAGE_KEY);
-      localStorage.removeItem("sms_engineering_item_master");
-      localStorage.removeItem("sms_engineering_item_master_v2");
-    } catch (e) {}
-  }, []);
 
   // Fetch all FG items directly from backend PostgreSQL item_master table
   const fetchDbItems = () => {
@@ -658,6 +650,11 @@ export function ItemMasterFormPage({
       return;
     }
 
+    if (editingId === null && !formData.hsn_code) {
+      alert("Please select the HSN / SAC Code - Required");
+      return;
+    }
+
     // Uniqueness validation for Item Description (case-insensitive)
     const duplicate = savedItems.find((it) => {
       if (editingId !== null && it.id === editingId) return false;
@@ -941,7 +938,7 @@ export function ItemMasterFormPage({
         maxHeight: "calc(100vh - 68px)",
         overflow: "hidden",
         background: bg,
-        padding: "12px 20px 42px 20px",
+        padding: 0,
         boxSizing: "border-box",
         display: "flex",
         flexDirection: "column",
@@ -950,18 +947,16 @@ export function ItemMasterFormPage({
     >
       <div
         style={{
-          maxWidth: 1440,
           width: "100%",
-          margin: "0 auto",
           height: "100%",
           maxHeight: "100%",
           display: "flex",
           flexDirection: "column",
           minHeight: 0,
           overflow: "hidden",
-          borderRadius: 12,
-          border: "1px solid #e2e8f0",
-          boxShadow: "0 4px 20px rgba(0,0,0,0.06)",
+          borderRadius: 0,
+          border: "none",
+          boxShadow: "none",
           background: "#ffffff"
         }}
       >
@@ -2632,7 +2627,7 @@ export function ItemMasterFormPage({
                     </div>
                     <div>
                       <label style={{ fontSize: 10, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 2 }}>
-                        HSN / SAC Code
+                        HSN / SAC Code{editingId === null && " *"}
                       </label>
                       <select
                         value={formData.hsn_code}

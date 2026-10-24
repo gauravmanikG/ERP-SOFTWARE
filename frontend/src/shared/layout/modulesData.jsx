@@ -113,7 +113,17 @@ export const MODULES_LIST = [
           { name: "Other", targetPage: "item-master-other", ready: true }
         ]
       },
-      { name: "BOM", targetPage: "moulding-bom", ready: true },
+      {
+        name: "Masters",
+        isParent: true,
+        children: [
+          { name: "Mode of Payment", targetPage: "masters-mode-of-payment", ready: true },
+          { name: "Credit Period Calculation From", targetPage: "masters-credit-period-basis", ready: true },
+          { name: "Payment Terms", targetPage: "masters-payment-terms", ready: true },
+          { name: "Freight Options", targetPage: "masters-freight-options", ready: true },
+          { name: "HSN Code", targetPage: "masters-hsn-code", ready: true }
+        ]
+      },
       { name: "Routing" },
       { name: "Operations" },
       { name: "Work Centers" },
@@ -129,30 +139,30 @@ export const MODULES_LIST = [
     submodules: [
       { name: "Suppliers", targetPage: "supplier-master", ready: true },
       { name: "Purchase Requisition", targetPage: "purchase-requisition", ready: true },
-      { name: "Purchase Processing", targetPage: "purchase-processing", ready: true },
-      { name: "PO Approval", targetPage: "po-approval", ready: true },
+      { name: "Vendor Rate Master", targetPage: "new-po-vendor-rates", ready: true },
       {
         name: "Purchase Orders",
         isParent: true,
         children: [
-          { name: "Standard PO", targetPage: "purchase-orders", ready: true },
-          { name: "Service PO", targetPage: "service-po", ready: true },
-          { name: "Capital PO", targetPage: "capital-po", ready: true }
-        ]
-      },
-      {
-        name: "New Purchase Order",
-        isParent: true,
-        children: [
-          { name: "Vendor Rate Master", targetPage: "new-po-vendor-rates", ready: true },
           { name: "PO by PR", targetPage: "new-po-po-by-pr", ready: true },
           { name: "Direct PO", targetPage: "new-po-direct-po", ready: true },
-          { name: "PO Register", targetPage: "new-po-po-register", ready: true },
-          { name: "PO vs PR Report", targetPage: "new-po-report-po-vs-pr", ready: true },
-          { name: "PO vs PR vs MRN/GRN Report", targetPage: "new-po-report-po-vs-pr-grn", ready: true },
+          { name: "Capital PO", targetPage: "capital-po", ready: true },
+          { name: "Service PO", targetPage: "service-po", ready: true },
+          { name: "PO Register", targetPage: "new-po-po-register", ready: true }
+        ]
+      },
+      { name: "GRN", targetPage: "grn", ready: true },
+      {
+        name: "Procurement Reports",
+        isParent: true,
+        children: [
+          { name: "PR vs PO Report", targetPage: "new-po-report-po-vs-pr", ready: true },
+          { name: "PR vs PO vs MRN/GRN Report", targetPage: "new-po-report-po-vs-pr-grn", ready: true },
           { name: "Legacy Reconciliation", targetPage: "new-po-reconciliation", ready: true }
         ]
       },
+      { name: "RFQ", targetPage: "rfq", ready: true },
+      { name: "Quotations", targetPage: "vendor-quotations", ready: true },
       {
         name: "Job Work",
         isParent: true,
@@ -169,9 +179,6 @@ export const MODULES_LIST = [
           { name: "Compliance & Reports", targetPage: "job-work-reports", ready: true }
         ]
       },
-      { name: "RFQ", targetPage: "rfq", ready: true },
-      { name: "Quotations", targetPage: "vendor-quotations", ready: true },
-      { name: "GRN", targetPage: "grn", ready: true },
       { name: "Purchase Returns" },
       { name: "Purchase Invoices" }
     ]
@@ -242,13 +249,11 @@ export const MODULES_LIST = [
     submodules: [
       { name: "Production Orders" },
       { name: "Job Cards" },
-      { name: "Material Consumption", targetPage: "moulding-bom", ready: true },
       { name: "WIP" },
       { name: "SFG" },
       { name: "FG" },
       { name: "Scrap" },
-      { name: "Rework" },
-      { name: "Production Entry", targetPage: "moulding-bom", ready: true }
+      { name: "Rework" }
     ]
   },
   {
@@ -318,7 +323,6 @@ export const MODULES_LIST = [
     name: "Settings",
     iconKey: "Settings",
     submodules: [
-      { name: "Company", targetPage: "company-master-form", ready: true },
       { name: "Departments", targetPage: "department-master", ready: true }
     ]
   }

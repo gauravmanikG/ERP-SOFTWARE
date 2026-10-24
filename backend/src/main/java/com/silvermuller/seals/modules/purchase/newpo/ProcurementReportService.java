@@ -4,10 +4,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import java.time.LocalDate;
+import java.util.*;
 
 /**
  * Read-only reports over PR lines, PO-by-PR allocations, GRN attribution and legacy records.
@@ -201,6 +199,116 @@ public class ProcurementReportService {
         if (ordered.compareTo(req) < 0) return "PARTIALLY_ORDERED";
         if (allocated.subtract(received).signum() > 0) return "FULLY_ORDERED_AWAITING_RECEIPT";
         return "ELIGIBLE_FOR_CLOSURE";
+    }
+
+    /**
+     * PR vs PO: one row per PR line allocated to a PO. Filtered by PR date (from/to are inclusive, either may be null).
+     * DaysGap is PO date minus PR date in days (0 when they are the same day).
+     * PO Quantity is the allocation net of releases; Balance Quantity is the PR line's quantity still not ordered.
+     */
+    public List<Map<String, Object>> prVsPo(LocalDate from, LocalDate to) {
+        List<Map<String, Object>> rows = jdbc.queryForList(
+                "SELECT a.pr_number, pr.pr_date, a.po_number, CAST(p.po_date AS DATE) AS po_date, " +
+                "a.item_code, pri.item_name, pri.uom, a.unit_price, pri.req_qty, pr.department, pr.requisitioner, " +
+                "a.allocated_qty - a.released_qty AS po_qty, pri.req_qty - pri.ordered_qty AS balance_qty " +
+                "FROM public.po_pr_allocations a " +
+                "JOIN public.purchase_orders p ON p.po_number = a.po_number " +
+                "JOIN public.purchase_requisitions pr ON pr.pr_number = a.pr_number " +
+                "JOIN public.purchase_requisition_items pri ON pri.id = a.pr_item_id " +
+                "WHERE (CAST(? AS DATE) IS NULL OR pr.pr_date >= CAST(? AS DATE)) " +
+                "AND (CAST(? AS DATE) IS NULL OR pr.pr_date <= CAST(? AS DATE)) " +
+                "ORDER BY pr.pr_date DESC, a.pr_number, a.po_number, a.id LIMIT 2000",
+                from, from, to, to);
+
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (Map<String, Object> r : rows) {
+            Map<String, Object> o = new LinkedHashMap<>();
+            o.put("prNumber", r.get("pr_number"));
+            o.put("prDate", r.get("pr_date"));
+            o.put("poNumber", r.get("po_number"));
+            o.put("poDate", r.get("po_date"));
+            o.put("daysGap", daysGap(r.get("pr_date"), r.get("po_date")));
+            o.put("itemCode", r.get("item_code"));
+            o.put("itemName", r.get("item_name"));
+            o.put("department", r.get("department"));
+            o.put("requisitioner", r.get("requisitioner"));
+            o.put("uom", r.get("uom"));
+            o.put("rate", num(r.get("unit_price")));
+            o.put("prQty", num(r.get("req_qty")));
+            o.put("poQty", num(r.get("po_qty")));
+            o.put("balanceQty", num(r.get("balance_qty")));
+            out.add(o);
+        }
+        return out;
+    }
+
+    /**
+     * One row per item that has a PO with a PR in the date range. PR and PO quantities are summed over all of its PRs and POs.
+     * amount is the sum of PO quantity x that PO's unit rate, so each PO is priced at its own rate.
+     */
+    public List<Map<String, Object>> prVsPoItemSummary(LocalDate from, LocalDate to) {
+        if (from == null || to == null) {
+            throw new VendorRateService.NewPoException(org.springframework.http.HttpStatus.BAD_REQUEST, "Choose a From date and a To date.");
+        }
+        if (to.isBefore(from)) {
+            throw new VendorRateService.NewPoException(org.springframework.http.HttpStatus.BAD_REQUEST, "To date cannot be before From date.");
+        }
+        // Latest PO first, so the first row seen for an item carries its latest rate
+        List<Map<String, Object>> rows = jdbc.queryForList(
+                "SELECT a.item_code, pri.item_name, pri.uom, a.pr_item_id, a.po_number, a.unit_price, " +
+                "pri.req_qty, pri.ordered_qty, a.allocated_qty - a.released_qty AS po_qty " +
+                "FROM public.po_pr_allocations a " +
+                "JOIN public.purchase_orders p ON p.po_number = a.po_number " +
+                "JOIN public.purchase_requisitions pr ON pr.pr_number = a.pr_number " +
+                "JOIN public.purchase_requisition_items pri ON pri.id = a.pr_item_id " +
+                "WHERE pr.pr_date >= CAST(? AS DATE) AND pr.pr_date <= CAST(? AS DATE) " +
+                "ORDER BY CAST(p.po_date AS DATE) DESC, a.po_number DESC, a.id DESC LIMIT 20000",
+                from, to);
+
+        Map<String, Map<String, Object>> byItem = new HashMap<>();
+        Map<String, Map<Long, BigDecimal[]>> prLines = new HashMap<>();            // item -> PR line -> {requested, ordered}
+        for (Map<String, Object> r : rows) {
+            String code = String.valueOf(r.get("item_code"));
+            Map<String, Object> item = byItem.computeIfAbsent(code, k -> {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("itemCode", k);
+                m.put("itemName", r.get("item_name"));
+                m.put("uom", r.get("uom"));
+                m.put("poQty", BigDecimal.ZERO);
+                m.put("amount", BigDecimal.ZERO);
+                return m;
+            });
+            BigDecimal poQty = num(r.get("po_qty"));
+            item.put("poQty", num(item.get("poQty")).add(poQty));
+            // Each PO's quantity is priced at that PO's own rate
+            item.put("amount", num(item.get("amount")).add(poQty.multiply(num(r.get("unit_price")))));
+            prLines.computeIfAbsent(code, k -> new HashMap<>())
+                    .putIfAbsent(((Number) r.get("pr_item_id")).longValue(),
+                            new BigDecimal[] { num(r.get("req_qty")), num(r.get("ordered_qty")) });
+        }
+
+        List<String> codes = new ArrayList<>(byItem.keySet());
+        Collections.sort(codes);
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (String code : codes) {
+            Map<String, Object> item = byItem.get(code);
+            BigDecimal prQty = BigDecimal.ZERO, balanceQty = BigDecimal.ZERO;
+            for (BigDecimal[] line : prLines.get(code).values()) {
+                prQty = prQty.add(line[0]);
+                balanceQty = balanceQty.add(line[0].subtract(line[1]));
+            }
+            Map<String, Object> o = new LinkedHashMap<>(item);
+            o.put("prQty", prQty);
+            o.put("balanceQty", balanceQty);
+            out.add(o);
+        }
+        return out;
+    }
+
+    /** PO date minus PR date in whole days. Both are java.sql.Date from the query; null when either is missing. */
+    private static Integer daysGap(Object prDate, Object poDate) {
+        if (!(prDate instanceof java.sql.Date pr) || !(poDate instanceof java.sql.Date po)) return null;
+        return (int) java.time.temporal.ChronoUnit.DAYS.between(pr.toLocalDate(), po.toLocalDate());
     }
 
     private static BigDecimal num(Object v) {

@@ -68,10 +68,8 @@ export const NAV = [
   { label: "Contact", page: "contact" },
   {
     label: "Admin",
-    page: "company-master-form",
+    page: "inventory-transactions",
     items: [
-      { label: "Entry Form (Screen 1)", page: "company-master-form" },
-      { label: "Records (Screen 2)", page: "company-master-list" },
       { label: "Inventory Slips", page: "inventory-transactions" },
     ],
   },

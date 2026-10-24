@@ -1,16 +1,13 @@
 import { useEffect, useState } from "react";
+import { getSetting, setSetting } from "./settingsStore";
 
-// Night view (dark theme) for the whole software. The choice is remembered per browser.
+// Night view (dark theme) for the whole software. The choice is saved in PostgreSQL (app_setting).
 // Applying it adds the `dark` class to <html>; index.css turns that class into the night palette.
-const STORAGE_KEY = "sms_theme";
+const SETTING_KEY = "sms_theme";
 const EVENT = "sms-theme-change";
 
 export function getTheme() {
-  try {
-    return localStorage.getItem(STORAGE_KEY) === "dark" ? "dark" : "light";
-  } catch {
-    return "light";
-  }
+  return getSetting(SETTING_KEY, "light") === "dark" ? "dark" : "light";
 }
 
 export function applyTheme(theme) {
@@ -21,11 +18,7 @@ export function applyTheme(theme) {
 }
 
 export function setTheme(theme) {
-  try {
-    localStorage.setItem(STORAGE_KEY, theme);
-  } catch {
-    // Storage unavailable: the theme still applies for this page view
-  }
+  setSetting(SETTING_KEY, theme);
   applyTheme(theme);
   window.dispatchEvent(new CustomEvent(EVENT, { detail: theme }));
 }
@@ -43,5 +36,3 @@ export function useTheme() {
   return { theme, dark: theme === "dark", setTheme };
 }
 
-// Apply the saved theme as soon as the app loads, before the first screen renders
-applyTheme(getTheme());

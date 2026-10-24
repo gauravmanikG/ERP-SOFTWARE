@@ -20,6 +20,23 @@ export const card = { background: "#fff", border: "1px solid #e2e8f0", borderRad
 export const errorBox = { background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 6, padding: "8px 10px", fontSize: 12, color: "#b91c1c", fontWeight: 600 };
 
 export const th = { padding: "8px 10px", fontWeight: 700, borderBottom: "1px solid #e2e8f0", textAlign: "left", whiteSpace: "nowrap", color: "#475569", background: "#f8fafc" };
+export const thRight = { ...th, textAlign: "right" };
+export const thCenter = { ...th, textAlign: "center" };
+
+const NUMERIC_HEADER_REGEX = /amount|total|qty|quantity|rate|price|gst|tax|disc|balance|received|ordered|allocated|released|remaining|pending|accepted|rejected|outside|requested|basic|invoiced|outstanding|value|to order|po-by-pr|cost|cgst|sgst|igst|%\b/i;
+const EXCLUDE_HEADER_REGEX = /status|date|remark|vendor|department|lifecycle|condition|inspection|by|responsible|description|action|reason|changes|trigger|category|type|slip|challan|invoice no|serial/i;
+
+export function isNumericHeader(h) {
+  if (!h || typeof h !== "string") return false;
+  const s = h.trim();
+  if (EXCLUDE_HEADER_REGEX.test(s) && !/qty|amount|rate|price|total|value|gst|tax/i.test(s)) return false;
+  return NUMERIC_HEADER_REGEX.test(s);
+}
+
+export function thFor(header) {
+  if (/days\s*gap/i.test(header)) return thCenter;
+  return isNumericHeader(header) ? thRight : th;
+}
 export const td = { padding: "7px 10px", borderBottom: "1px solid #f1f5f9", verticalAlign: "top" };
 
 export const money = (n) => (n === null || n === undefined || n === "" ? "—" : `₹${Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);

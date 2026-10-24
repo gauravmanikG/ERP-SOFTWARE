@@ -34,7 +34,8 @@ import static org.junit.jupiter.api.Assertions.*;
 class DirectPoIntegrationTest {
 
     private static final String VENDOR = "SUP-002";
-    private static final LocalDate PO_DATE = LocalDate.of(2026, 10, 19);
+    // PO date must be today or later (DirectPoService rejects past dates), so the fixture uses today.
+    private static final LocalDate PO_DATE = LocalDate.now();
     private static final String TAG = "DP" + UUID.randomUUID().toString().substring(0, 6).toUpperCase();
 
     @DynamicPropertySource

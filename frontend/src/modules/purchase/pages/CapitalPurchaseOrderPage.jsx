@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import * as XLSX from "xlsx";
 import DateInput from "../../../shared/components/DateInput";
 import { formatDisplayDate } from "../../../shared/utils/dateFormat";
+import { isNumericHeader } from "../newpo/ui";
 
 // ============================================================================
 // Capital Purchase Order (CAPEX). Uses capital_* tables and asset_master on the backend.
@@ -10,6 +11,8 @@ import { formatDisplayDate } from "../../../shared/utils/dateFormat";
 
 const API_ROOT = (import.meta.env.VITE_API_URL || "http://localhost:4000") + "/api";
 const CPO = `${API_ROOT}/capital-pos`;
+import { getSetting, setSetting } from "../../../shared/utils/settingsStore";
+
 const USER_KEY = "SMS_CURRENT_USER";
 const ROLES = ["CREATOR", "APPROVER", "RECEIVER", "ASSET_MANAGER", "ADMIN"];
 const CONDITIONS = ["GOOD", "DAMAGED", "PARTIAL"];
@@ -68,17 +71,12 @@ const money = (v) => {
 };
 
 function loadUser() {
-  try {
-    const raw = localStorage.getItem(USER_KEY);
-    if (raw) {
-      const u = JSON.parse(raw);
-      if (u && u.name) return { name: u.name, role: ROLES.includes(u.role) ? u.role : "CREATOR" };
-    }
-  } catch (e) { /* storage unavailable */ }
+  const u = getSetting(USER_KEY, null);
+  if (u && u.name) return { name: u.name, role: ROLES.includes(u.role) ? u.role : "CREATOR" };
   return { name: "Current User", role: "CREATOR" };
 }
 function saveUser(u) {
-  try { localStorage.setItem(USER_KEY, JSON.stringify(u)); } catch (e) { /* ignore */ }
+  setSetting(USER_KEY, u);
 }
 
 async function api(method, path, user, body) {
@@ -281,7 +279,19 @@ function Table({ headers, children, minWidth }) {
   return (
     <div style={{ overflowX: "auto", border: "1px solid #e2e8f0", borderRadius: 8 }}>
       <table style={{ width: "100%", minWidth, borderCollapse: "collapse", fontSize: 12 }}>
-        <thead><tr style={{ background: "#f8fafc" }}>{headers.map((h) => <th key={h} style={{ textAlign: "left", padding: "7px 8px", borderBottom: "1px solid #e2e8f0", color: "#334155", whiteSpace: "nowrap" }}>{h}</th>)}</tr></thead>
+        <thead>
+          <tr style={{ background: "#f8fafc" }}>
+            {headers.map((h) => {
+              const label = typeof h === "string" ? h : (h && h.label) || "";
+              const align = isNumericHeader(label) ? "right" : "left";
+              return (
+                <th key={label} style={{ textAlign: align, padding: "7px 8px", borderBottom: "1px solid #e2e8f0", color: "#334155", whiteSpace: "nowrap" }}>
+                  {label}
+                </th>
+              );
+            })}
+          </tr>
+        </thead>
         <tbody>{children}</tbody>
       </table>
     </div>
@@ -1294,8 +1304,8 @@ export function CapitalPurchaseOrderPage({ onBackToHome, onOpenSidebar, sidebarO
         </div>
       </div>
 
-      <div style={{ flex: 1, minHeight: 0, padding: 18, display: "flex", flexDirection: "column", boxSizing: "border-box" }}>
-        <div style={{ maxWidth: 1440, width: "100%", margin: "0 auto", flex: 1, minHeight: 0, display: "flex", flexDirection: "column", boxSizing: "border-box", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, padding: 16, overflowY: tab === "create" ? "auto" : "hidden" }}>
+      <div style={{ flex: 1, minHeight: 0, padding: 0, display: "flex", flexDirection: "column", boxSizing: "border-box" }}>
+        <div style={{ width: "100%", flex: 1, minHeight: 0, display: "flex", flexDirection: "column", boxSizing: "border-box", background: "#fff", border: "none", borderRadius: 0, padding: 16, overflowY: tab === "create" ? "auto" : "hidden" }}>
           <div style={{ fontSize: 12, color: "#64748b", marginBottom: 10 }}>
             Purchase › Purchase Order › <b style={{ color: "#0f172a" }}>Capital PO</b>
             <span style={{ marginLeft: 12 }}>Physical receipt, installation, commissioning and asset registration are recorded separately from approval.</span>

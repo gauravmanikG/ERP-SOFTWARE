@@ -1,3 +1,4 @@
+import { setHandoff, getHandoff, removeHandoff } from "../../../shared/utils/handoffStore";
 import { formatDisplayDate, formatDisplayDateTime } from "../../../shared/utils/dateFormat";
 import DateInput from "../../../shared/components/DateInput";
 import { useResizableColumns, ResizableColGroup, ColumnResizeHandle } from "../../../shared/components/ResizableTable";
@@ -229,33 +230,6 @@ export function RequestForQuotationPage({ dark = false, onBackToHome, onNavigate
           if (Array.isArray(data2)) combined = data2;
         }
       }
-      try {
-        const savedOther = localStorage.getItem("SMS_OTHER_ITEM_MASTER_DATA_REAL");
-        if (savedOther) {
-          const parsed = JSON.parse(savedOther);
-          if (Array.isArray(parsed)) {
-            parsed.forEach((it) => {
-              if (it && it.item_code) {
-                const idx = combined.findIndex((c) => (c.item_code || c.itemCode) === it.item_code);
-                const itemObj = {
-                  id: it.id || it.item_code,
-                  item_code: it.item_code,
-                  item_name: it.item_name || it.description || it.item_code,
-                  category: it.category || "Raw Material",
-                  uom: it.uom || "PCS",
-                  price: Number(it.unit_price || it.est_rate) || 0,
-                  est_rate: Number(it.unit_price || it.est_rate) || 0,
-                  item_type: "OTHER"
-                };
-                if (idx !== -1) combined[idx] = { ...combined[idx], ...itemObj };
-                else combined.unshift(itemObj);
-              }
-            });
-          }
-        }
-      } catch (err) {
-        // ignore
-      }
 
       // Normalize all items
       const normalized = combined
@@ -310,19 +284,19 @@ export function RequestForQuotationPage({ dark = false, onBackToHome, onNavigate
     }
   };
 
-  // Auto-load PR from sessionStorage if navigated from PR screen
+  // Auto-load PR from handoff if navigated from PR screen
   useEffect(() => {
     try {
-      const raw = sessionStorage.getItem("SMS_SELECTED_PR_FOR_RFQ");
+      const raw = getHandoff("SMS_SELECTED_PR_FOR_RFQ");
       if (raw) {
-        sessionStorage.removeItem("SMS_SELECTED_PR_FOR_RFQ");
+        removeHandoff("SMS_SELECTED_PR_FOR_RFQ");
         const pr = JSON.parse(raw);
         if (pr) {
           handleInitCreateFromPr(pr);
         }
       }
     } catch (e) {
-      console.error("Error reading sessionStorage for RFQ:", e);
+      console.error("Error reading handoff for RFQ:", e);
     }
   }, [suppliers]);
 
@@ -845,13 +819,13 @@ export function RequestForQuotationPage({ dark = false, onBackToHome, onNavigate
         }))
       };
 
-      sessionStorage.setItem("SMS_SELECTED_PR_FOR_PO", JSON.stringify(prData));
-      sessionStorage.setItem("SMS_SELECTED_QUOTATION_FOR_PO", JSON.stringify(winningQuote));
+      setHandoff("SMS_SELECTED_PR_FOR_PO", JSON.stringify(prData));
+      setHandoff("SMS_SELECTED_QUOTATION_FOR_PO", JSON.stringify(winningQuote));
 
       showToast(`🏆 Awarded RFQ #${rfq.rfqNumber} to ${winningQuote.vendorName}! Navigating to PO Processing...`);
       setWorkspaceModalOpen(false);
       if (onNavigate) {
-        onNavigate("purchase-processing");
+        onNavigate("purchase-requisition");
       }
     } catch (e) {
       console.error("Award Error:", e);
@@ -942,7 +916,7 @@ export function RequestForQuotationPage({ dark = false, onBackToHome, onNavigate
         maxHeight: "calc(100vh - 68px)",
         overflow: "hidden",
         background: bg,
-        padding: "12px 20px 42px 20px",
+        padding: 0,
         boxSizing: "border-box",
         display: "flex",
         flexDirection: "column",
@@ -980,18 +954,16 @@ export function RequestForQuotationPage({ dark = false, onBackToHome, onNavigate
       {/* Main Outer Card Container */}
       <div
         style={{
-          maxWidth: 1440,
           width: "100%",
-          margin: "0 auto",
           height: "100%",
           maxHeight: "100%",
           display: "flex",
           flexDirection: "column",
           minHeight: 0,
           overflow: "hidden",
-          borderRadius: 12,
-          border: `1px solid ${borderCol}`,
-          boxShadow: "0 4px 20px rgba(0, 0, 0, 0.05)",
+          borderRadius: 0,
+          border: "none",
+          boxShadow: "none",
           background: cardBg
         }}
       >

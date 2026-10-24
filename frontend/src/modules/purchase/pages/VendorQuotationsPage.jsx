@@ -1,3 +1,4 @@
+import { setHandoff, getHandoff, removeHandoff } from "../../../shared/utils/handoffStore";
 import { formatDisplayDate, formatDisplayDateTime } from "../../../shared/utils/dateFormat";
 import DateInput from "../../../shared/components/DateInput";
 import { useResizableColumns, ResizableColGroup, ColumnResizeHandle } from "../../../shared/components/ResizableTable";
@@ -307,28 +308,19 @@ export function VendorQuotationsPage({ onBackToHome, onOpenSidebar, sidebarOpen,
     }
   };
 
-  // Helper to load approved PRs from backend / localStorage for RFQ Picker
+  // Helper to load approved PRs from the backend for RFQ Picker
   const getApprovedPrsForPicker = () => {
     if (backendPrs.length > 0) {
       const valid = backendPrs.filter((p) => p.status === "Approved" || p.status === "Partially Ordered");
       if (valid.length > 0) return valid;
     }
-    try {
-      const raw = localStorage.getItem("SMS_PURCHASE_REQUISITION_DATA_REAL_V2");
-      if (raw) {
-        const list = JSON.parse(raw);
-        if (Array.isArray(list) && list.length > 0) {
-          return list.filter((p) => p.status === "Approved" || p.status === "Partially Ordered");
-        }
-      }
-    } catch {}
     return (INITIAL_PR_DATA || []).filter((p) => p.status === "Approved" || p.status === "Partially Ordered");
   };
 
   // Pre-load PR into Quotation Form / Navigate to RFQ
   const loadPrIntoRfqForm = (pr) => {
     try {
-      sessionStorage.setItem("SMS_SELECTED_PR_FOR_RFQ", JSON.stringify(pr));
+      setHandoff("SMS_SELECTED_PR_FOR_RFQ", JSON.stringify(pr));
     } catch (e) {
       console.error(e);
     }
@@ -416,31 +408,31 @@ export function VendorQuotationsPage({ onBackToHome, onOpenSidebar, sidebarOpen,
   // Connection 1: Check if navigated from PR or RFQ screen
   useEffect(() => {
     try {
-      const rawRfq = sessionStorage.getItem("SMS_SELECTED_RFQ_FOR_QUOTATION");
+      const rawRfq = getHandoff("SMS_SELECTED_RFQ_FOR_QUOTATION");
       if (rawRfq) {
-        sessionStorage.removeItem("SMS_SELECTED_RFQ_FOR_QUOTATION");
+        removeHandoff("SMS_SELECTED_RFQ_FOR_QUOTATION");
         const rfq = JSON.parse(rawRfq);
         if (rfq) {
           loadRfqIntoQuoteForm(rfq);
         }
       }
 
-      const raw = sessionStorage.getItem("SMS_SELECTED_PR_FOR_RFQ");
+      const raw = getHandoff("SMS_SELECTED_PR_FOR_RFQ");
       if (raw) {
-        sessionStorage.removeItem("SMS_SELECTED_PR_FOR_RFQ");
+        removeHandoff("SMS_SELECTED_PR_FOR_RFQ");
         const pr = JSON.parse(raw);
         if (pr) {
           loadPrIntoRfqForm(pr);
         }
       }
 
-      const selectedQuoteNum = sessionStorage.getItem("SMS_SELECTED_QUOTATION_NUMBER");
+      const selectedQuoteNum = getHandoff("SMS_SELECTED_QUOTATION_NUMBER");
       if (selectedQuoteNum) {
-        sessionStorage.removeItem("SMS_SELECTED_QUOTATION_NUMBER");
+        removeHandoff("SMS_SELECTED_QUOTATION_NUMBER");
         setSearchTerm(selectedQuoteNum);
       }
     } catch (err) {
-      console.warn("Error reading sessionStorage in VendorQuotationsPage:", err);
+      console.warn("Error reading handoff in VendorQuotationsPage:", err);
     }
   }, []);
 
@@ -520,28 +512,6 @@ export function VendorQuotationsPage({ onBackToHome, onOpenSidebar, sidebarOpen,
       }
 
       let combined = Array.isArray(data) ? [...data] : [];
-      try {
-        const savedOther = localStorage.getItem("SMS_OTHER_ITEM_MASTER_DATA_REAL");
-        if (savedOther) {
-          const parsed = JSON.parse(savedOther);
-          if (Array.isArray(parsed)) {
-            parsed.forEach((it) => {
-              if (it && it.item_code && !combined.some((c) => (c.item_code || c.sms_new_part_no) === it.item_code)) {
-                combined.unshift({
-                  id: it.id || Date.now(),
-                  item_code: it.item_code,
-                  sms_new_part_no: it.item_code,
-                  item_description: it.item_name || it.description || it.item_code,
-                  uom: it.uom || "PCS",
-                  price: it.price || it.est_rate || 0,
-                  category: it.category || "Other",
-                  item_type: "OTHER"
-                });
-              }
-            });
-          }
-        }
-      } catch (e) {}
 
       if (combined.length > 0) {
         setCatalogItems(combined);
@@ -2066,7 +2036,7 @@ export function VendorQuotationsPage({ onBackToHome, onOpenSidebar, sidebarOpen,
                               <span
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  sessionStorage.setItem("SMS_SELECTED_PR_NUMBER", q.prNumber);
+                                  setHandoff("SMS_SELECTED_PR_NUMBER", q.prNumber);
                                   if (onNavigate) onNavigate("purchase-requisition");
                                 }}
                                 style={{
@@ -3622,7 +3592,7 @@ export function VendorQuotationsPage({ onBackToHome, onOpenSidebar, sidebarOpen,
                   </div>
                   <button
                     onClick={() => {
-                      sessionStorage.setItem("SMS_SELECTED_PR_NUMBER", activeQuotationDetail.prNumber);
+                      setHandoff("SMS_SELECTED_PR_NUMBER", activeQuotationDetail.prNumber);
                       setIsDetailsModalOpen(false);
                       if (onNavigate) onNavigate("purchase-requisition");
                     }}
@@ -3872,13 +3842,13 @@ export function VendorQuotationsPage({ onBackToHome, onOpenSidebar, sidebarOpen,
                           alert("Quotation has expired and cannot be used for purchase processing.");
                           return;
                         }
-                        sessionStorage.setItem("SMS_SELECTED_QUOTATION_FOR_PO", JSON.stringify(activeQuotationDetail));
+                        setHandoff("SMS_SELECTED_QUOTATION_FOR_PO", JSON.stringify(activeQuotationDetail));
                         if (activeQuotationDetail.prNumber) {
-                          sessionStorage.setItem("SMS_SELECTED_PR_NUMBER", activeQuotationDetail.prNumber);
+                          setHandoff("SMS_SELECTED_PR_NUMBER", activeQuotationDetail.prNumber);
                         }
                         setIsDetailsModalOpen(false);
                         showToast(`Selected Quotation #${activeQuotationDetail.quotationNumber}. Opening Purchase Processing...`);
-                        if (onNavigate) onNavigate("purchase-processing");
+                        if (onNavigate) onNavigate("purchase-requisition");
                       }}
                       style={{
                         background: "#059669",

@@ -3,7 +3,9 @@ import DateInput from "../../../shared/components/DateInput";
 import { formatDisplayDate } from "../../../shared/utils/dateFormat";
 import SearchSelect from "./SearchSelect";
 import { lookupApi, request } from "./api";
-import { inp, label, btn, card, errorBox, th, td, money, qty, todayIso } from "./ui";
+import { inp, label, btn, card, errorBox, th, thFor, td, money, qty, todayIso } from "./ui";
+import PoTermsSection, { EMPTY_TERMS, termsToRequest, freightAmountOf } from "./PoTermsSection";
+import DeliverySchedule, { scheduleProblem, scheduleRequest } from "./DeliverySchedule";
 
 // Direct PO: items bought without a PR. These calls never read or change PR quantities.
 const directPoApi = {
@@ -20,14 +22,18 @@ const itemOption = (i) => ({
   hsn: i.hsn_code || ""
 });
 
-export default function DirectPoScreen({ user, flash }) {
+export default function DirectPoScreen({ user, flash, onCreated }) {
   const [vendor, setVendor] = useState(null);
   const [poDate, setPoDate] = useState(todayIso());
   const [expected, setExpected] = useState("");
+  const [terms, setTerms] = useState(EMPTY_TERMS);
   const [item, setItem] = useState(null);
   const [itemQty, setItemQty] = useState("");
   const [hsn, setHsn] = useState("");
   const [lines, setLines] = useState([]);
+  // Delivery schedule per item; the item's PO quantity is its line quantity
+  const [schedules, setSchedules] = useState({});
+  const scheduleItems = lines.map((l) => ({ itemCode: l.itemCode, itemName: l.sub || "", poQty: l.quantity }));
   const [preview, setPreview] = useState(null);
   const [previewError, setPreviewError] = useState("");
   const [addError, setAddError] = useState("");
@@ -43,6 +49,8 @@ export default function DirectPoScreen({ user, flash }) {
     vendorCode: vendor.key,
     poDate,
     expectedDeliveryDate: expected || null,
+    deliveryFreight: freightAmountOf(terms),
+    terms: termsToRequest(terms),
     lines: lines.map((l) => ({ itemCode: l.itemCode, quantity: l.quantity, hsnCode: l.hsnCode || null }))
   });
 
@@ -52,7 +60,7 @@ export default function DirectPoScreen({ user, flash }) {
     directPoApi.preview(body())
       .then((p) => { setPreview(p); setPreviewError(""); })
       .catch((e) => { setPreview(null); setPreviewError(e.message); });
-  }, [vendor, poDate, expected, lines]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [vendor, poDate, expected, lines, terms]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const addLine = () => {
     setAddError("");
@@ -69,12 +77,24 @@ export default function DirectPoScreen({ user, flash }) {
 
   const save = async () => {
     if (!vendor || lines.length === 0 || saving) return;
+    if (poDate < todayIso()) {
+      setSaveError("PO date cannot be in the past. Select today or a future date.");
+      return;
+    }
+    const problem = scheduleProblem(scheduleItems, schedules, poDate);
+    if (problem) {
+      setSaveError(problem);
+      return;
+    }
     setSaving(true);
     setSaveError("");
     try {
-      const created = await directPoApi.create(user, body());
+      const created = await directPoApi.create(user, { ...body(), schedules: scheduleRequest(scheduleItems, schedules) });
       flash(`${created.poNumber} created for ${created.po.vendorName}. Grand total ${money(created.po.grandTotal)}.`);
+      if (onCreated) onCreated(created.poNumber);
       setLines([]);
+      setSchedules({});
+      setTerms(EMPTY_TERMS);
       setPreview(null);
       loadOrders();
     } catch (e) {
@@ -90,9 +110,9 @@ export default function DirectPoScreen({ user, flash }) {
         <div>
           <span style={label}>Vendor</span>
           <SearchSelect placeholder="Search vendor name or code" search={lookupApi.vendors} toOption={vendorOption}
-            value={vendor} onChange={(v) => { setVendor(v); setLines([]); }} disabled={lines.length > 0} />
+            value={vendor} onChange={(v) => { setVendor(v); setLines([]); setSchedules({}); }} disabled={lines.length > 0} />
         </div>
-        <div><span style={label}>PO date</span><DateInput style={inp} value={poDate} onChange={(e) => setPoDate(e.target.value)} /></div>
+        <div><span style={label}>PO date</span><DateInput style={inp} value={poDate} min={todayIso()} onChange={(e) => setPoDate(e.target.value)} /></div>
         <div><span style={label}>Expected delivery</span><DateInput style={inp} value={expected} onChange={(e) => setExpected(e.target.value)} /></div>
       </div>
 
@@ -121,7 +141,7 @@ export default function DirectPoScreen({ user, flash }) {
 
         <div style={{ overflowX: "auto", border: "1px solid #e2e8f0", borderRadius: 8, marginTop: 12 }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-            <thead><tr>{["Item", "Description", "HSN", "Quantity", "Rate", "GST %", "Taxable", "GST", "Line total", ""].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
+            <thead><tr>{["Item", "Description", "HSN", "Quantity", "Rate", "GST %", "Taxable", "GST", "Line total", ""].map((h) => <th key={h} style={thFor(h)}>{h}</th>)}</tr></thead>
             <tbody>
               {lines.length === 0 && <tr><td colSpan={10} style={{ ...td, textAlign: "center", color: "#64748b", padding: 14 }}>No items added yet.</td></tr>}
               {lines.map((l) => {
@@ -148,6 +168,16 @@ export default function DirectPoScreen({ user, flash }) {
           </table>
         </div>
 
+        {lines.length > 0 && (
+          <DeliverySchedule items={scheduleItems} schedules={schedules} onChange={setSchedules} poDate={poDate} />
+        )}
+
+        {lines.length > 0 && (
+          <div style={{ marginTop: 14 }}>
+            <PoTermsSection terms={terms} onChange={setTerms} />
+          </div>
+        )}
+
         {previewError && <div style={{ ...errorBox, marginTop: 10 }}>{previewError}</div>}
         {preview && (
           <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 10, fontSize: 13, fontWeight: 800 }}>
@@ -156,7 +186,7 @@ export default function DirectPoScreen({ user, flash }) {
         )}
         {saveError && <div style={{ ...errorBox, marginTop: 10 }}>{saveError}</div>}
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
-          <button type="button" style={btn(false)} onClick={() => setLines([])} disabled={lines.length === 0 || saving}>Clear</button>
+          <button type="button" style={btn(false)} onClick={() => { setLines([]); setSchedules({}); }} disabled={lines.length === 0 || saving}>Clear</button>
           <button type="button" style={btn(true)} onClick={save} disabled={!preview || saving || !!previewError}>
             {saving ? "Creating PO…" : "Create Direct PO"}
           </button>
@@ -168,7 +198,7 @@ export default function DirectPoScreen({ user, flash }) {
         {listError && <div style={errorBox}>{listError}</div>}
         <div style={{ overflowX: "auto", border: "1px solid #e2e8f0", borderRadius: 8 }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-            <thead><tr>{["PO", "Date", "Vendor", "Expected delivery", "Status", "Total"].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
+            <thead><tr>{["PO", "Date", "Vendor", "Expected delivery", "Status", "Total"].map((h) => <th key={h} style={thFor(h)}>{h}</th>)}</tr></thead>
             <tbody>
               {orders.length === 0 && <tr><td colSpan={6} style={{ ...td, textAlign: "center", color: "#64748b" }}>No Direct POs yet.</td></tr>}
               {orders.map((o) => (

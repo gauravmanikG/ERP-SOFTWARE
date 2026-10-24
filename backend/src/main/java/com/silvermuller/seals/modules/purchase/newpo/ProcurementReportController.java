@@ -31,6 +31,18 @@ public class ProcurementReportController {
         return reports.poVsPrVsGrn(blankToNull(poNumber), blankToNull(prNumber), blankToNull(vendorCode));
     }
 
+    @GetMapping("/pr-vs-po")
+    public List<Map<String, Object>> prVsPo(@RequestParam(required = false) java.time.LocalDate from,
+                                            @RequestParam(required = false) java.time.LocalDate to) {
+        return reports.prVsPo(from, to);
+    }
+
+    @GetMapping("/pr-vs-po/item-summary")
+    public List<Map<String, Object>> prVsPoItemSummary(@RequestParam(required = false) java.time.LocalDate from,
+                                                       @RequestParam(required = false) java.time.LocalDate to) {
+        return reports.prVsPoItemSummary(from, to);
+    }
+
     @GetMapping("/legacy-reconciliation")
     public Map<String, Object> legacyReconciliation() {
         return reports.legacyReconciliation();

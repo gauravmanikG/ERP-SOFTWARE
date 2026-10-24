@@ -1,56 +1,7 @@
--- Customer Master Schema Definition & Seed Data from CUST-00001 to CUST-00033
-CREATE TABLE IF NOT EXISTS public.customer_master (
-    id BIGSERIAL PRIMARY KEY,
-    customer_id VARCHAR(50) NOT NULL,
-    customer_code VARCHAR(50) NOT NULL UNIQUE,
-    customer_name VARCHAR(255) NOT NULL,
-    customer_alias VARCHAR(150),
-    company_id VARCHAR(50) NOT NULL DEFAULT 'COMP-001',
-    customer_type VARCHAR(50) DEFAULT 'OEM',
-    domestic_export VARCHAR(50),
-    gstin VARCHAR(50),
-    pan VARCHAR(30),
-    udyam_no VARCHAR(50),
-    msme_category VARCHAR(50) DEFAULT 'NOT_MSME',
-    gst_registration_type VARCHAR(50) NOT NULL DEFAULT 'REGISTERED',
-    check_by_accounts BOOLEAN DEFAULT FALSE,
-    check_by_sales BOOLEAN DEFAULT TRUE,
-    billing_source VARCHAR(100),
-    supplier_code_sms VARCHAR(100),
-    contact_person VARCHAR(255),
-    sales_person VARCHAR(255),
-    phone VARCHAR(150),
-    sales_contact VARCHAR(150),
-    email TEXT,
-    sales_email TEXT,
-    mode_of_payment_reminder VARCHAR(100),
-    accounts_contact_details TEXT,
-    payment_terms_id VARCHAR(50) DEFAULT 'PT-30',
-    credit_days INTEGER DEFAULT 30,
-    credit_limit NUMERIC(15, 2) DEFAULT 500000.00,
-    currency VARCHAR(10) DEFAULT 'INR',
-    scm VARCHAR(255),
-    status VARCHAR(30) NOT NULL DEFAULT 'ACTIVE',
-    bill_to_address TEXT,
-    ship_to_address TEXT,
-    customer_address TEXT,
-    address TEXT,
-    city VARCHAR(100),
-    state VARCHAR(100),
-    state_code VARCHAR(10),
-    country VARCHAR(100) DEFAULT 'India',
-    pincode VARCHAR(20),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    created_by VARCHAR(50) NOT NULL DEFAULT 'SYSTEM',
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_by VARCHAR(50) NOT NULL DEFAULT 'SYSTEM'
-);
-
-ALTER TABLE public.customer_master ALTER COLUMN email TYPE TEXT;
-ALTER TABLE public.customer_master ALTER COLUMN phone TYPE VARCHAR(255);
-ALTER TABLE public.customer_master ALTER COLUMN contact_person TYPE TEXT;
-
-TRUNCATE TABLE public.customer_master RESTART IDENTITY CASCADE;
+-- startup-guard: bulk-seed-when-empty public.customer_master
+-- Customer master CUST-00001 to CUST-00033.
+-- Loaded by DataInitializer ONLY when public.customer_master is empty. Data rows only: the table,
+-- columns and indexes are defined in schema.sql. Enforced by StartupSafetyGuardTest.
 
 INSERT INTO public.customer_master (
     id, customer_id, customer_code, customer_name, customer_alias, company_id, customer_type,
@@ -78,7 +29,7 @@ PHASE-III, PLOT NO.443, EPIP HSIIDC, KUNDLI, Sonipat, Haryana, 131028', 'Silver 
 PHASE-III, PLOT NO.443, EPIP HSIIDC, KUNDLI, Sonipat, Haryana, 131028',
     NULL, 'Haryana', '06', 'India', '',
     CURRENT_TIMESTAMP, 'SYSTEM', CURRENT_TIMESTAMP, 'SYSTEM'
-);
+) ON CONFLICT DO NOTHING;
 INSERT INTO public.customer_master (
     id, customer_id, customer_code, customer_name, customer_alias, company_id, customer_type,
     domestic_export, gstin, pan, udyam_no, msme_category, gst_registration_type,
@@ -99,7 +50,7 @@ INSERT INTO public.customer_master (
     'GROUND FLOOR, 2935, HAMILTON ROAD,, KASHMERE GATE, New Delhi, Delhi, 110006', 'GROUND FLOOR, 2935, HAMILTON ROAD,, KASHMERE GATE, New Delhi, Delhi, 110006', 'GROUND FLOOR, 2935, HAMILTON ROAD,, KASHMERE GATE, New Delhi, Delhi, 110006', 'GROUND FLOOR, 2935, HAMILTON ROAD,, KASHMERE GATE, New Delhi, Delhi, 110006',
     'India', 'Delhi', '07', 'India', '',
     CURRENT_TIMESTAMP, 'SYSTEM', CURRENT_TIMESTAMP, 'SYSTEM'
-);
+) ON CONFLICT DO NOTHING;
 INSERT INTO public.customer_master (
     id, customer_id, customer_code, customer_name, customer_alias, company_id, customer_type,
     domestic_export, gstin, pan, udyam_no, msme_category, gst_registration_type,
@@ -126,7 +77,7 @@ dadasaheb.thorat@alsn.com',
     'Plot Number 01 Gat Number 51/1-3, 52-54, 56-59,, Global Industrial Park, Post-Vasuli, Taluka Khed,, Bhamboli, Pune, Maharashtra, 410501', 'Plot Number 01 Gat Number 51/1-3, 52-54, 56-59,, Global Industrial Park, Post-Vasuli, Taluka Khed,, Bhamboli, Pune, Maharashtra, 410501', 'Plot Number 01 Gat Number 51/1-3, 52-54, 56-59,, Global Industrial Park, Post-Vasuli, Taluka Khed,, Bhamboli, Pune, Maharashtra, 410501', 'Plot Number 01 Gat Number 51/1-3, 52-54, 56-59,, Global Industrial Park, Post-Vasuli, Taluka Khed,, Bhamboli, Pune, Maharashtra, 410501',
     NULL, 'Maharashtra', '27', 'India', '',
     CURRENT_TIMESTAMP, 'SYSTEM', CURRENT_TIMESTAMP, 'SYSTEM'
-);
+) ON CONFLICT DO NOTHING;
 INSERT INTO public.customer_master (
     id, customer_id, customer_code, customer_name, customer_alias, company_id, customer_type,
     domestic_export, gstin, pan, udyam_no, msme_category, gst_registration_type,
@@ -150,7 +101,7 @@ PHASE-III, PLOT NO.443, EPIP HSIIDC, KUNDLI, Sonipat, Haryana, 131028', 'PO Box 
 PHASE-III, PLOT NO.443, EPIP HSIIDC, KUNDLI, Sonipat, Haryana, 131028',
     NULL, NULL, NULL, 'Dubai', '',
     CURRENT_TIMESTAMP, 'SYSTEM', CURRENT_TIMESTAMP, 'SYSTEM'
-);
+) ON CONFLICT DO NOTHING;
 INSERT INTO public.customer_master (
     id, customer_id, customer_code, customer_name, customer_alias, company_id, customer_type,
     domestic_export, gstin, pan, udyam_no, msme_category, gst_registration_type,
@@ -178,7 +129,7 @@ PHASE-III, PLOT NO.443, EPIP HSIIDC, KUNDLI, Sonipat, Haryana, 131028', 'GLOBAL 
 PHASE-III, PLOT NO.443, EPIP HSIIDC, KUNDLI, Sonipat, Haryana, 131028',
     NULL, NULL, NULL, 'Germany', '',
     CURRENT_TIMESTAMP, 'SYSTEM', CURRENT_TIMESTAMP, 'SYSTEM'
-);
+) ON CONFLICT DO NOTHING;
 INSERT INTO public.customer_master (
     id, customer_id, customer_code, customer_name, customer_alias, company_id, customer_type,
     domestic_export, gstin, pan, udyam_no, msme_category, gst_registration_type,
@@ -199,7 +150,7 @@ INSERT INTO public.customer_master (
     'S-5, BEHIND KARACHI DARBAR RESTAURANT, AL MAKTOUM HOSPITAL ROAD, DEIRA, DUBAI, U.A.E', 'S-5, BEHIND KARACHI DARBAR RESTAURANT, AL MAKTOUM HOSPITAL ROAD, DEIRA, DUBAI, U.A.E', NULL, 'S-5, BEHIND KARACHI DARBAR RESTAURANT, AL MAKTOUM HOSPITAL ROAD, DEIRA, DUBAI, U.A.E',
     NULL, NULL, NULL, 'UAE', '',
     CURRENT_TIMESTAMP, 'SYSTEM', CURRENT_TIMESTAMP, 'SYSTEM'
-);
+) ON CONFLICT DO NOTHING;
 INSERT INTO public.customer_master (
     id, customer_id, customer_code, customer_name, customer_alias, company_id, customer_type,
     domestic_export, gstin, pan, udyam_no, msme_category, gst_registration_type,
@@ -220,7 +171,7 @@ INSERT INTO public.customer_master (
     'S-5, BEHIND KARACHI DARBAR RESTAURANT, AL MAKTOUM HOSPITAL ROAD, DEIRA, DUBAI, U.A.E', 'S-5, BEHIND KARACHI DARBAR RESTAURANT, AL MAKTOUM HOSPITAL ROAD, DEIRA, DUBAI, U.A.E', 'S-5, BEHIND KARACHI DARBAR RESTAURANT, AL MAKTOUM HOSPITAL ROAD, DEIRA, DUBAI, U.A.E', 'S-5, BEHIND KARACHI DARBAR RESTAURANT, AL MAKTOUM HOSPITAL ROAD, DEIRA, DUBAI, U.A.E',
     NULL, NULL, NULL, 'UAE', '',
     CURRENT_TIMESTAMP, 'SYSTEM', CURRENT_TIMESTAMP, 'SYSTEM'
-);
+) ON CONFLICT DO NOTHING;
 INSERT INTO public.customer_master (
     id, customer_id, customer_code, customer_name, customer_alias, company_id, customer_type,
     domestic_export, gstin, pan, udyam_no, msme_category, gst_registration_type,
@@ -257,7 +208,7 @@ Fax-04 8808525, MOBILE+971 55 956 9488', 'Plot # M209 Street # N400 , JAFZA Nort
 Fax-04 8808525, MOBILE+971 55 956 9488',
     'Jebel Ali Free Zone , Dubai', NULL, NULL, 'UAE', '',
     CURRENT_TIMESTAMP, 'SYSTEM', CURRENT_TIMESTAMP, 'SYSTEM'
-);
+) ON CONFLICT DO NOTHING;
 INSERT INTO public.customer_master (
     id, customer_id, customer_code, customer_name, customer_alias, company_id, customer_type,
     domestic_export, gstin, pan, udyam_no, msme_category, gst_registration_type,
@@ -280,7 +231,7 @@ avinashkumar.p@jkfenner.com',
     'C/O SEABIRD LOGISOLUTION LTD, NO.19., VILL-DABODHA,KHASRA NO.4/18,22,23,24,5//11,6//2,3,4, FARRUKHNAGAR,GURUGRAM,HARYANA-122506', 'C/O SEABIRD LOGISOLUTION LTD, NO.19., VILL-DABODHA,KHASRA NO.4/18,22,23,24,5//11,6//2,3,4, FARRUKHNAGAR,GURUGRAM,HARYANA-122506', 'C/O SEABIRD LOGISOLUTION LTD, NO.19., VILL-DABODHA,KHASRA NO.4/18,22,23,24,5//11,6//2,3,4, FARRUKHNAGAR,GURUGRAM,HARYANA-122506', 'C/O SEABIRD LOGISOLUTION LTD, NO.19., VILL-DABODHA,KHASRA NO.4/18,22,23,24,5//11,6//2,3,4, FARRUKHNAGAR,GURUGRAM,HARYANA-122506',
     NULL, 'Haryana', '06', 'India', '',
     CURRENT_TIMESTAMP, 'SYSTEM', CURRENT_TIMESTAMP, 'SYSTEM'
-);
+) ON CONFLICT DO NOTHING;
 INSERT INTO public.customer_master (
     id, customer_id, customer_code, customer_name, customer_alias, company_id, customer_type,
     domestic_export, gstin, pan, udyam_no, msme_category, gst_registration_type,
@@ -317,7 +268,7 @@ saravana.kumar1@safexpress.com',
     'J.K-FENNER (INDIA) LTD, F-21 & 22,SIPCOT INDUSTRIAL PARK, SRIPERUMBADUR, KANCHEEPURAM-602 105, TAMIL NADU', 'J.K-FENNER (INDIA) LTD, F-21 & 22,SIPCOT INDUSTRIAL PARK, SRIPERUMBADUR, KANCHEEPURAM-602 105, TAMIL NADU', 'J.K-FENNER (INDIA) LTD, F-21 & 22,SIPCOT INDUSTRIAL PARK, SRIPERUMBADUR, KANCHEEPURAM-602 105, TAMIL NADU', 'J.K-FENNER (INDIA) LTD, F-21 & 22,SIPCOT INDUSTRIAL PARK, SRIPERUMBADUR, KANCHEEPURAM-602 105, TAMIL NADU',
     'KANCHEEPURAM', 'Tamil Nadu', '33', 'India', '',
     CURRENT_TIMESTAMP, 'SYSTEM', CURRENT_TIMESTAMP, 'SYSTEM'
-);
+) ON CONFLICT DO NOTHING;
 INSERT INTO public.customer_master (
     id, customer_id, customer_code, customer_name, customer_alias, company_id, customer_type,
     domestic_export, gstin, pan, udyam_no, msme_category, gst_registration_type,
@@ -347,7 +298,7 @@ WZ 76, TODAPUR, NEW DELHI 110012', 'HOLIDAY INN, GATEWAY AVENUE, FESTIVAL CITY, 
 WZ 76, TODAPUR, NEW DELHI 110012',
     NULL, NULL, NULL, 'UAE', '',
     CURRENT_TIMESTAMP, 'SYSTEM', CURRENT_TIMESTAMP, 'SYSTEM'
-);
+) ON CONFLICT DO NOTHING;
 INSERT INTO public.customer_master (
     id, customer_id, customer_code, customer_name, customer_alias, company_id, customer_type,
     domestic_export, gstin, pan, udyam_no, msme_category, gst_registration_type,
@@ -368,7 +319,7 @@ INSERT INTO public.customer_master (
     'Plot No. F-40/308, Transport Nagar Phase II,, Kanpur Road, Lukhnow, Uttar Pradesh, 226012', 'Plot No. F-40/308, Transport Nagar Phase II,, Kanpur Road, Lukhnow, Uttar Pradesh, 226012', 'Plot No. F-40/308, Transport Nagar Phase II,, Kanpur Road, Lukhnow, Uttar Pradesh, 226012', 'Plot No. F-40/308, Transport Nagar Phase II,, Kanpur Road, Lukhnow, Uttar Pradesh, 226012',
     NULL, 'Uttar Pradesh', '09', 'India', '',
     CURRENT_TIMESTAMP, 'SYSTEM', CURRENT_TIMESTAMP, 'SYSTEM'
-);
+) ON CONFLICT DO NOTHING;
 INSERT INTO public.customer_master (
     id, customer_id, customer_code, customer_name, customer_alias, company_id, customer_type,
     domestic_export, gstin, pan, udyam_no, msme_category, gst_registration_type,
@@ -401,7 +352,7 @@ gorlov.o@forum-auto.ru',
     '4,SOLNECHNOGORORSKY PROEZD,125413, MOSCOW,RUSSIA FEDERATION', '4,SOLNECHNOGORORSKY PROEZD,125413, MOSCOW,RUSSIA FEDERATION', '4,SOLNECHNOGORORSKY PROEZD,125413, MOSCOW,RUSSIA FEDERATION', '4,SOLNECHNOGORORSKY PROEZD,125413, MOSCOW,RUSSIA FEDERATION',
     NULL, NULL, NULL, 'Russia', '',
     CURRENT_TIMESTAMP, 'SYSTEM', CURRENT_TIMESTAMP, 'SYSTEM'
-);
+) ON CONFLICT DO NOTHING;
 INSERT INTO public.customer_master (
     id, customer_id, customer_code, customer_name, customer_alias, company_id, customer_type,
     domestic_export, gstin, pan, udyam_no, msme_category, gst_registration_type,
@@ -432,7 +383,7 @@ Laxmikant.Somnathe@cummins.com',
     'CVA Warehouse, Gate No.34, Taluka Maval, Near Talegaon, Pune-412106, Maharashtra', 'CVA Warehouse, Gate No.34, Taluka Maval, Near Talegaon, Pune-412106, Maharashtra', 'CVA Warehouse, Gate No.34, Taluka Maval, Near Talegaon, Pune-412106, Maharashtra', 'CVA Warehouse, Gate No.34, Taluka Maval, Near Talegaon, Pune-412106, Maharashtra',
     'PUNE', 'Maharashtra', '27', 'India', '',
     CURRENT_TIMESTAMP, 'SYSTEM', CURRENT_TIMESTAMP, 'SYSTEM'
-);
+) ON CONFLICT DO NOTHING;
 INSERT INTO public.customer_master (
     id, customer_id, customer_code, customer_name, customer_alias, company_id, customer_type,
     domestic_export, gstin, pan, udyam_no, msme_category, gst_registration_type,
@@ -465,7 +416,7 @@ DABRI INDUSTRIAL AREA,
 NEW DELHI-110045 (INDIA)"',
     NULL, 'Delhi', '07', 'India', '',
     CURRENT_TIMESTAMP, 'SYSTEM', CURRENT_TIMESTAMP, 'SYSTEM'
-);
+) ON CONFLICT DO NOTHING;
 INSERT INTO public.customer_master (
     id, customer_id, customer_code, customer_name, customer_alias, company_id, customer_type,
     domestic_export, gstin, pan, udyam_no, msme_category, gst_registration_type,
@@ -490,7 +441,7 @@ WZ-76, TODAPUR, DELHI, SOUTH WEST DELHI, DELHI-110012', 'KOHLI AUTO TRADERS
 WZ-76, TODAPUR, DELHI, SOUTH WEST DELHI, DELHI-110012',
     'NEW DELHI', 'DELHI', '07', 'INDIA', '',
     CURRENT_TIMESTAMP, 'SYSTEM', CURRENT_TIMESTAMP, 'SYSTEM'
-);
+) ON CONFLICT DO NOTHING;
 INSERT INTO public.customer_master (
     id, customer_id, customer_code, customer_name, customer_alias, company_id, customer_type,
     domestic_export, gstin, pan, udyam_no, msme_category, gst_registration_type,
@@ -511,7 +462,7 @@ INSERT INTO public.customer_master (
     'PHASE-III, PLOT NO.443, EPIP HSIIDC, KUNDLI, Sonipat, Haryana, 131028', 'PHASE-III, PLOT NO.443, EPIP HSIIDC, KUNDLI, Sonipat, Haryana, 131028', 'PHASE-III, PLOT NO.443, EPIP HSIIDC, KUNDLI, Sonipat, Haryana, 131028', 'PHASE-III, PLOT NO.443, EPIP HSIIDC, KUNDLI, Sonipat, Haryana, 131028',
     'KUNDLI', 'Haryana', '06', 'India', '',
     CURRENT_TIMESTAMP, 'SYSTEM', CURRENT_TIMESTAMP, 'SYSTEM'
-);
+) ON CONFLICT DO NOTHING;
 INSERT INTO public.customer_master (
     id, customer_id, customer_code, customer_name, customer_alias, company_id, customer_type,
     domestic_export, gstin, pan, udyam_no, msme_category, gst_registration_type,
@@ -532,7 +483,7 @@ INSERT INTO public.customer_master (
     'HISSA NO 6, SURVEY NO 115, GHODBUNDER VILLAGE ROAD, MIRA ROAD EAST, THANE, MAHARASHTRA- 401107', 'HISSA NO 6, SURVEY NO 115, GHODBUNDER VILLAGE ROAD, MIRA ROAD EAST, THANE, MAHARASHTRA- 401107', 'HISSA NO 6, SURVEY NO 115, GHODBUNDER VILLAGE ROAD, MIRA ROAD EAST, THANE, MAHARASHTRA- 401107', 'HISSA NO 6, SURVEY NO 115, GHODBUNDER VILLAGE ROAD, MIRA ROAD EAST, THANE, MAHARASHTRA- 401107',
     NULL, 'Maharashtra', '27', 'India', '',
     CURRENT_TIMESTAMP, 'SYSTEM', CURRENT_TIMESTAMP, 'SYSTEM'
-);
+) ON CONFLICT DO NOTHING;
 INSERT INTO public.customer_master (
     id, customer_id, customer_code, customer_name, customer_alias, company_id, customer_type,
     domestic_export, gstin, pan, udyam_no, msme_category, gst_registration_type,
@@ -553,7 +504,7 @@ INSERT INTO public.customer_master (
     'WZ 76, TODAPUR, NEW DELHI 110012', NULL, 'WZ 76, TODAPUR, NEW DELHI 110012', 'WZ 76, TODAPUR, NEW DELHI 110012',
     NULL, NULL, NULL, NULL, '',
     CURRENT_TIMESTAMP, 'SYSTEM', CURRENT_TIMESTAMP, 'SYSTEM'
-);
+) ON CONFLICT DO NOTHING;
 INSERT INTO public.customer_master (
     id, customer_id, customer_code, customer_name, customer_alias, company_id, customer_type,
     domestic_export, gstin, pan, udyam_no, msme_category, gst_registration_type,
@@ -574,7 +525,7 @@ INSERT INTO public.customer_master (
     '96/99, Bhatwara, Shahpeer Gate, Shohrab Gate, Meerut, Uttar Pradesh 250002', '96/99, Bhatwara, Shahpeer Gate, Shohrab Gate, Meerut, Uttar Pradesh 250002', '96/99, Bhatwara, Shahpeer Gate, Shohrab Gate, Meerut, Uttar Pradesh 250002', '96/99, Bhatwara, Shahpeer Gate, Shohrab Gate, Meerut, Uttar Pradesh 250002',
     NULL, 'Uttar Pradesh', NULL, 'India', '',
     CURRENT_TIMESTAMP, 'SYSTEM', CURRENT_TIMESTAMP, 'SYSTEM'
-);
+) ON CONFLICT DO NOTHING;
 INSERT INTO public.customer_master (
     id, customer_id, customer_code, customer_name, customer_alias, company_id, customer_type,
     domestic_export, gstin, pan, udyam_no, msme_category, gst_registration_type,
@@ -596,7 +547,7 @@ INSERT INTO public.customer_master (
 Gujarat, 370001', 'UMARWADA, VPUNE KUMBHARIA ROAD, SARDAR COMPLEX, SHOP NO.B-50,ROYAL TOWNSHIP', 'UMARWADA, VPUNE KUMBHARIA ROAD, SARDAR COMPLEX, SHOP NO.B-50,ROYAL TOWNSHIP',
     'SURAT', 'GUJRAT', '24', 'India', '',
     CURRENT_TIMESTAMP, 'SYSTEM', CURRENT_TIMESTAMP, 'SYSTEM'
-);
+) ON CONFLICT DO NOTHING;
 INSERT INTO public.customer_master (
     id, customer_id, customer_code, customer_name, customer_alias, company_id, customer_type,
     domestic_export, gstin, pan, udyam_no, msme_category, gst_registration_type,
@@ -617,7 +568,7 @@ INSERT INTO public.customer_master (
     'SHOP NO 5, 29-B, NAVAKAR BLDG SHOP NO 5, KENNEDY BRIDGE, OPERA HOUSE, MUMBAI', '115, TRUCK TERMINAL, NEXT TOO STEEL TOWN PETROL PUMP, KALAMBOLI, Raigad, Maharashtra, 410218', 'SHOP NO 5, 29-B, NAVAKAR BLDG SHOP NO 5, KENNEDY BRIDGE, OPERA HOUSE, MUMBAI', 'SHOP NO 5, 29-B, NAVAKAR BLDG SHOP NO 5, KENNEDY BRIDGE, OPERA HOUSE, MUMBAI',
     'KALAMBOLI', 'MAHARASHTRA', '27', 'India', '',
     CURRENT_TIMESTAMP, 'SYSTEM', CURRENT_TIMESTAMP, 'SYSTEM'
-);
+) ON CONFLICT DO NOTHING;
 INSERT INTO public.customer_master (
     id, customer_id, customer_code, customer_name, customer_alias, company_id, customer_type,
     domestic_export, gstin, pan, udyam_no, msme_category, gst_registration_type,
@@ -638,7 +589,7 @@ INSERT INTO public.customer_master (
     'PHASE-III, PLOT NO.443, EPIP HSIIDC, KUNDLI, Sonipat, Haryana, 131028', 'PHASE-III, PLOT NO.443, EPIP HSIIDC, KUNDLI, Sonipat, Haryana, 131028', NULL, 'PHASE-III, PLOT NO.443, EPIP HSIIDC, KUNDLI, Sonipat, Haryana, 131028',
     NULL, 'Haryana', NULL, 'India', '',
     CURRENT_TIMESTAMP, 'SYSTEM', CURRENT_TIMESTAMP, 'SYSTEM'
-);
+) ON CONFLICT DO NOTHING;
 INSERT INTO public.customer_master (
     id, customer_id, customer_code, customer_name, customer_alias, company_id, customer_type,
     domestic_export, gstin, pan, udyam_no, msme_category, gst_registration_type,
@@ -659,7 +610,7 @@ INSERT INTO public.customer_master (
     '4-C, PURSHOTTAM BUILDING, TRIBHUVAN ROAD, MUMBAI-400004', '4-C, PURSHOTTAM BUILDING, TRIBHUVAN ROAD, MUMBAI-400004', NULL, '4-C, PURSHOTTAM BUILDING, TRIBHUVAN ROAD, MUMBAI-400004',
     'TRIBHUVAN ROAD', 'MAHARASHTRA', '27', 'India', '',
     CURRENT_TIMESTAMP, 'SYSTEM', CURRENT_TIMESTAMP, 'SYSTEM'
-);
+) ON CONFLICT DO NOTHING;
 INSERT INTO public.customer_master (
     id, customer_id, customer_code, customer_name, customer_alias, company_id, customer_type,
     domestic_export, gstin, pan, udyam_no, msme_category, gst_registration_type,
@@ -680,7 +631,7 @@ INSERT INTO public.customer_master (
     NULL, NULL, NULL, NULL,
     NULL, NULL, NULL, NULL, '',
     CURRENT_TIMESTAMP, 'SYSTEM', CURRENT_TIMESTAMP, 'SYSTEM'
-);
+) ON CONFLICT DO NOTHING;
 INSERT INTO public.customer_master (
     id, customer_id, customer_code, customer_name, customer_alias, company_id, customer_type,
     domestic_export, gstin, pan, udyam_no, msme_category, gst_registration_type,
@@ -701,7 +652,7 @@ INSERT INTO public.customer_master (
     'C/O SEABIRD LOGISOLUTION LTD, NO.19., VILL-DABODHA,KHASRA NO.4/18,22,23,24,5//11,6//2,3,4, FARRUKHNAGAR,GURUGRAM,HARYANA-122506', 'C/O SEABIRD LOGISOLUTION LTD, NO.19., VILL-DABODHA,KHASRA NO.4/18,22,23,24,5//11,6//2,3,4, FARRUKHNAGAR,GURUGRAM,HARYANA-122506', 'C/O SEABIRD LOGISOLUTION LTD, NO.19., VILL-DABODHA,KHASRA NO.4/18,22,23,24,5//11,6//2,3,4, FARRUKHNAGAR,GURUGRAM,HARYANA-122506', 'C/O SEABIRD LOGISOLUTION LTD, NO.19., VILL-DABODHA,KHASRA NO.4/18,22,23,24,5//11,6//2,3,4, FARRUKHNAGAR,GURUGRAM,HARYANA-122506',
     NULL, 'Haryana', '06', 'India', '',
     CURRENT_TIMESTAMP, 'SYSTEM', CURRENT_TIMESTAMP, 'SYSTEM'
-);
+) ON CONFLICT DO NOTHING;
 INSERT INTO public.customer_master (
     id, customer_id, customer_code, customer_name, customer_alias, company_id, customer_type,
     domestic_export, gstin, pan, udyam_no, msme_category, gst_registration_type,
@@ -725,7 +676,7 @@ TEL: 022-67675000 FAX: 022-27835004', NULL, 'PLOT NO. 10, SECTOR 19D, NEAR APMC 
 TEL: 022-67675000 FAX: 022-27835004',
     NULL, 'MAHARASHTRA', NULL, 'INDIA', '',
     CURRENT_TIMESTAMP, 'SYSTEM', CURRENT_TIMESTAMP, 'SYSTEM'
-);
+) ON CONFLICT DO NOTHING;
 INSERT INTO public.customer_master (
     id, customer_id, customer_code, customer_name, customer_alias, company_id, customer_type,
     domestic_export, gstin, pan, udyam_no, msme_category, gst_registration_type,
@@ -747,7 +698,7 @@ INSERT INTO public.customer_master (
 ( BILLING & SHIPPING ADDRESS IMPORTANT MENTION IN BILL)', NULL, '3520/1 CHUTTANI MANZIL NICHOLSON ROAD MORI GATE DELHI 110006',
     NULL, 'Delhi', '07', 'India', '',
     CURRENT_TIMESTAMP, 'SYSTEM', CURRENT_TIMESTAMP, 'SYSTEM'
-);
+) ON CONFLICT DO NOTHING;
 INSERT INTO public.customer_master (
     id, customer_id, customer_code, customer_name, customer_alias, company_id, customer_type,
     domestic_export, gstin, pan, udyam_no, msme_category, gst_registration_type,
@@ -781,7 +732,7 @@ Khatipura Road, Jaipur - 302006,
 India .',
     NULL, 'RAJASTHAN', NULL, 'INDIA', '',
     CURRENT_TIMESTAMP, 'SYSTEM', CURRENT_TIMESTAMP, 'SYSTEM'
-);
+) ON CONFLICT DO NOTHING;
 INSERT INTO public.customer_master (
     id, customer_id, customer_code, customer_name, customer_alias, company_id, customer_type,
     domestic_export, gstin, pan, udyam_no, msme_category, gst_registration_type,
@@ -824,7 +775,7 @@ Situated Near SH 15A,
 122506 GURGAON, HARYANA, INDIA',
     NULL, 'Haryana', '06', 'INDIA', '',
     CURRENT_TIMESTAMP, 'SYSTEM', CURRENT_TIMESTAMP, 'SYSTEM'
-);
+) ON CONFLICT DO NOTHING;
 INSERT INTO public.customer_master (
     id, customer_id, customer_code, customer_name, customer_alias, company_id, customer_type,
     domestic_export, gstin, pan, udyam_no, msme_category, gst_registration_type,
@@ -862,7 +813,7 @@ P.O. BOX 644272, DUBAI, UAE, PHONE : +97148879220, truckmotorsdubai@gmail.com', 
 P.O. BOX 644272, DUBAI, UAE, PHONE : +97148879220, truckmotorsdubai@gmail.com',
     NULL, NULL, NULL, 'DUBAI', '',
     CURRENT_TIMESTAMP, 'SYSTEM', CURRENT_TIMESTAMP, 'SYSTEM'
-);
+) ON CONFLICT DO NOTHING;
 INSERT INTO public.customer_master (
     id, customer_id, customer_code, customer_name, customer_alias, company_id, customer_type,
     domestic_export, gstin, pan, udyam_no, msme_category, gst_registration_type,
@@ -883,7 +834,7 @@ INSERT INTO public.customer_master (
     'PLOT NO 191, GROUND FLOOR, DSIDC PKT M SEC 5, NEAR LABOUR CHOWK SEC 5, Bawana Industrial Area, NEW DELHI, NORTH WEST DELHI, DELHI, 110039', 'PLOT NO 191, GROUND FLOOR, DSIDC PKT M SEC 5, NEAR LABOUR CHOWK SEC 5, Bawana Industrial Area, NEW DELHI, NORTH WEST DELHI, DELHI, 110039', NULL, 'PLOT NO 191, GROUND FLOOR, DSIDC PKT M SEC 5, NEAR LABOUR CHOWK SEC 5, Bawana Industrial Area, NEW DELHI, NORTH WEST DELHI, DELHI, 110039',
     NULL, 'Delhi', '07', 'india', '',
     CURRENT_TIMESTAMP, 'SYSTEM', CURRENT_TIMESTAMP, 'SYSTEM'
-);
+) ON CONFLICT DO NOTHING;
 INSERT INTO public.customer_master (
     id, customer_id, customer_code, customer_name, customer_alias, company_id, customer_type,
     domestic_export, gstin, pan, udyam_no, msme_category, gst_registration_type,
@@ -914,6 +865,6 @@ Pune, 411045 GSTIN/UIN: 27AABCE7337G1ZN
 State Name : Maharashtra, Code : 27',
     NULL, 'MAHARASHTRA', '27', 'INDIA', '',
     CURRENT_TIMESTAMP, 'SYSTEM', CURRENT_TIMESTAMP, 'SYSTEM'
-);
+) ON CONFLICT DO NOTHING;
 
 SELECT setval('public.customer_master_id_seq', 34, true);

@@ -1,28 +1,10 @@
--- Machine Master DDL & Seeds
-CREATE TABLE IF NOT EXISTS public.machine_master (
-  id              BIGSERIAL PRIMARY KEY,
-  s_no            INT,
-  machine_no      VARCHAR(50) NOT NULL,
-  description     VARCHAR(255) NOT NULL,
-  department      VARCHAR(100),
-  location        VARCHAR(150),
-  specification   TEXT,
-  capacity        VARCHAR(150),
-  make            VARCHAR(255),
-  remarks         TEXT,
-  category        VARCHAR(100) DEFAULT 'General',
-  status          VARCHAR(50) DEFAULT 'ACTIVE',
-  created_at      TIMESTAMPTZ DEFAULT NOW(),
-  updated_at      TIMESTAMPTZ DEFAULT NOW()
-);
+-- startup-guard: bulk-seed-when-empty public.machine_master
+-- Machine master list. Also safe to re-run by hand: inserts nothing if rows exist.
+-- Loaded by DataInitializer ONLY when public.machine_master is empty. Data rows only: the table,
+-- columns and indexes are defined in schema.sql. Enforced by StartupSafetyGuardTest.
 
-CREATE INDEX IF NOT EXISTS idx_machine_master_no ON public.machine_master(machine_no);
-CREATE INDEX IF NOT EXISTS idx_machine_master_dept ON public.machine_master(department);
-CREATE INDEX IF NOT EXISTS idx_machine_master_status ON public.machine_master(status);
-
-TRUNCATE TABLE public.machine_master RESTART IDENTITY;
-
-INSERT INTO public.machine_master (s_no, machine_no, description, department, location, specification, capacity, make, remarks, category, status) VALUES
+INSERT INTO public.machine_master (s_no, machine_no, description, department, location, specification, capacity, make, remarks, category, status)
+SELECT * FROM (VALUES
 (1, 'M/C -1', 'DIESEL GENERATR (DG)', 'Gate / Utility', 'GATE AREA', '160KVA, 3PHASES, 415VOLTS,222.6 AMP
 FUEL TANK CAPACITY-300L,1500RPM,PF-0.8', '160 KVA', 'JAKSON CUMMINS INDIA LIMITED', NULL, 'Utility / Power', 'ACTIVE'),
 (3, 'M/C -43', 'AIR COMPRESSOR', 'Store / Utility', 'STORE AREA', 'MODEL -AHS30A,RATING-22KW,POWER-30HP
@@ -166,4 +148,6 @@ Newton, Min.Strap Size-1.5m/sec, Strap Width
 (51, 'M/C -39', 'BUF GRINDERS', 'Packing', 'PACKING AREA', 'Size-10 inch, Power- 1 hp, Material- Cast Iron
 Phase-3, Volt-415, RPM-1400', '1400 RPM', 'Generic India 2018', NULL, 'Tool Room & Machining', 'ACTIVE'),
 (52, 'M/C -48', 'LIQUID SPRAY PAINT BOOTH', 'Packing', 'PACKING AREA', 'Booth size-10x6 feet, Air-flow direction-Cross-flow
-Body material-mild steel ,Blower motor-2 hp', '10x6 feet', 'Krishna Scientific Works 2020', NULL, 'Packaging & Dispatch', 'ACTIVE');
+Body material-mild steel ,Blower motor-2 hp', '10x6 feet', 'Krishna Scientific Works 2020', NULL, 'Packaging & Dispatch', 'ACTIVE')
+) AS seed
+WHERE NOT EXISTS (SELECT 1 FROM public.machine_master);

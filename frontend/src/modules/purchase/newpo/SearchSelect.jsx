@@ -26,20 +26,23 @@ export default function SearchSelect({ placeholder, search, toOption, value, onC
 
   if (value) {
     return (
-      <div style={{ display: "flex", alignItems: "center", gap: 8, border: "1px solid #cbd5e1", borderRadius: 6, padding: "6px 9px", background: "#eff6ff" }}>
-        <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: "#1e3a8a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, border: "1px solid #cbd5e1", borderRadius: 6, padding: "6px 9px", background: "#eff6ff", width: "100%", boxSizing: "border-box", minWidth: 0 }}>
+        <span
+          style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, color: "#1e3a8a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+          title={`${value.label}${value.sub ? ` (${value.sub})` : ""}`}
+        >
           {value.label}
           {value.sub && <span style={{ fontWeight: 400, color: "#64748b", marginLeft: 8 }}>{value.sub}</span>}
         </span>
-        {!disabled && <button type="button" onClick={() => onChange(null)} style={{ ...btn(false), padding: "2px 8px", fontSize: 11 }}>Change</button>}
+        {!disabled && <button type="button" onClick={() => onChange(null)} style={{ ...btn(false), padding: "2px 8px", fontSize: 11, flexShrink: 0 }}>Change</button>}
       </div>
     );
   }
 
   return (
-    <div style={{ position: "relative" }}>
+    <div style={{ position: "relative", width: "100%", minWidth: 0 }}>
       <input
-        style={inp}
+        style={{ ...inp, width: "100%", boxSizing: "border-box" }}
         placeholder={placeholder}
         value={q}
         disabled={disabled}

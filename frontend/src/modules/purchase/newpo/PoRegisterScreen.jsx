@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { formatDisplayDate } from "../../../shared/utils/dateFormat";
 import { poRegisterApi } from "./api";
-import { inp, btn, card, errorBox, th, td, money, qty } from "./ui";
+import { inp, btn, card, errorBox, th, thFor, td, money, qty } from "./ui";
 
 // PO register for orders raised through PO by PR. Every figure is read from PostgreSQL on each refresh.
 export default function PoRegisterScreen({ user, flash }) {
@@ -81,7 +81,7 @@ export default function PoRegisterScreen({ user, flash }) {
         {listError && <div style={errorBox}>{listError}</div>}
         <div style={{ overflowX: "auto", border: "1px solid #e2e8f0", borderRadius: 8 }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-            <thead><tr>{["PO", "Date", "Vendor", "Status", "Total"].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
+            <thead><tr>{["PO", "Date", "Vendor", "Status", "Total"].map((h) => <th key={h} style={thFor(h)}>{h}</th>)}</tr></thead>
             <tbody>
               {loading && <tr><td colSpan={5} style={{ ...td, textAlign: "center", color: "#64748b" }}>Loading…</td></tr>}
               {!loading && !listError && orders.length === 0 && (
@@ -120,7 +120,7 @@ export default function PoRegisterScreen({ user, flash }) {
               <div style={{ fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 4 }}>Allocations to PR lines</div>
               <div style={{ overflowX: "auto", border: "1px solid #e2e8f0", borderRadius: 8 }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-                  <thead><tr>{["PR", "Item", "Allocated", "Released", "Received", "Rate"].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
+                  <thead><tr>{["PR", "Item", "Allocated", "Released", "Received", "Rate"].map((h) => <th key={h} style={thFor(h)}>{h}</th>)}</tr></thead>
                   <tbody>
                     {detail.allocations.map((a) => (
                       <tr key={a.id}>
@@ -142,7 +142,7 @@ export default function PoRegisterScreen({ user, flash }) {
               <div style={{ fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 4 }}>PO lines and tax</div>
               <div style={{ overflowX: "auto", border: "1px solid #e2e8f0", borderRadius: 8 }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-                  <thead><tr>{["Item", "HSN", "GST %", "Qty", "Rate", "Taxable", "Tax", "Total"].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
+                  <thead><tr>{["Item", "HSN", "GST %", "Qty", "Rate", "Taxable", "Tax", "Total"].map((h) => <th key={h} style={thFor(h)}>{h}</th>)}</tr></thead>
                   <tbody>
                     {detail.lines.map((l, i) => (
                       <tr key={`${l.itemCode}-${i}`}>

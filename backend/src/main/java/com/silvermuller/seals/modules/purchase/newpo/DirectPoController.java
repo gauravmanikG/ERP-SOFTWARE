@@ -27,10 +27,13 @@ public class DirectPoController {
         this.purchaseProcessing = purchaseProcessing;
     }
 
-    /** Body: vendorCode, poDate, expectedDeliveryDate, lines [{itemCode, quantity}], remarks. */
-    public record Body(String vendorCode, LocalDate poDate, LocalDate expectedDeliveryDate, List<Line> lines, String remarks) {
+    /** Body: vendorCode, poDate, expectedDeliveryDate, lines [{itemCode, quantity}], remarks, deliveryFreight, terms. */
+    public record Body(String vendorCode, LocalDate poDate, LocalDate expectedDeliveryDate, List<Line> lines, String remarks,
+                       java.math.BigDecimal deliveryFreight,
+                       com.silvermuller.seals.modules.masters.PurchaseOrderTerms terms,
+                       List<DeliveryLots.Lot> schedules) {
         Request toRequest() {
-            return new Request(vendorCode, poDate, expectedDeliveryDate, lines, remarks);
+            return new Request(vendorCode, poDate, expectedDeliveryDate, lines, remarks, deliveryFreight, terms, schedules);
         }
     }
 

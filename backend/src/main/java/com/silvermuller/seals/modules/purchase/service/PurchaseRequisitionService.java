@@ -221,6 +221,7 @@ public class PurchaseRequisitionService {
                            List<PurchaseRequisitionItem> items) {
         KeyHolder kh = new GeneratedKeyHolder();
         jdbc.update(con -> {
+            // startup-guard: allow demo PR seeding is disabled: seedInitialRequisitionsIfEmpty returns before calling this
             PreparedStatement ps = con.prepareStatement(
                 "INSERT INTO purchase_requisitions (pr_number, pr_date, required_date, requisitioner, department, store, " +
                 "preferred_vendor, priority, requirement_type, procurement_method, purpose, remarks, status, created_by, " +
@@ -257,6 +258,7 @@ public class PurchaseRequisitionService {
         long prId = prIdNum != null ? prIdNum.longValue() : 0L;
 
         for (PurchaseRequisitionItem it : items) {
+            // startup-guard: allow demo PR seeding is disabled: seedInitialRequisitionsIfEmpty returns before calling this
             jdbc.update(
                 "INSERT INTO purchase_requisition_items (pr_id, pr_number, item_code, item_name, description, category, uom, req_qty, " +
                 "ordered_qty, remaining_qty, est_rate, est_total, remarks) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -280,14 +282,10 @@ public class PurchaseRequisitionService {
             );
             pr.setItems(items);
 
-            // Fetch any generated PO numbers from purchase_orders or clubbing allocations
+            // Fetch any generated PO numbers for this PR
             List<String> pos = jdbc.queryForList(
-                "SELECT po_number FROM purchase_orders WHERE pr_number = ? " +
-                "UNION " +
-                "SELECT DISTINCT po_number FROM pr_clubbing_allocations WHERE pr_number = ? AND po_number IS NOT NULL " +
-                "ORDER BY po_number ASC",
+                "SELECT po_number FROM purchase_orders WHERE pr_number = ? ORDER BY po_number ASC",
                 String.class,
-                pr.getPrNumber(),
                 pr.getPrNumber()
             );
             pr.setGeneratedPos(pos);
@@ -309,12 +307,8 @@ public class PurchaseRequisitionService {
             pr.getId()
         ));
         List<String> pos = jdbc.queryForList(
-            "SELECT po_number FROM purchase_orders WHERE pr_number = ? " +
-            "UNION " +
-            "SELECT DISTINCT po_number FROM pr_clubbing_allocations WHERE pr_number = ? AND po_number IS NOT NULL " +
-            "ORDER BY po_number ASC",
+            "SELECT po_number FROM purchase_orders WHERE pr_number = ? ORDER BY po_number ASC",
             String.class,
-            pr.getPrNumber(),
             pr.getPrNumber()
         );
         pr.setGeneratedPos(pos);

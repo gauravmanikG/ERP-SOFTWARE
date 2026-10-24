@@ -1,3 +1,5 @@
+# Regenerates backend/src/main/resources/machine_master.sql and the frontend machinesData.json.
+# The table is defined in schema.sql. The generated SQL refuses to run if machine_master already has rows.
 import csv
 import json
 import re
@@ -87,31 +89,13 @@ with open(json_path, "w", encoding="utf-8") as f:
 
 # Write SQL
 with open(sql_path, "w", encoding="utf-8") as f:
-    f.write("-- Machine Master DDL & Seeds\n")
-    f.write("""CREATE TABLE IF NOT EXISTS public.machine_master (
-  id              BIGSERIAL PRIMARY KEY,
-  s_no            INT,
-  machine_no      VARCHAR(50) NOT NULL,
-  description     VARCHAR(255) NOT NULL,
-  department      VARCHAR(100),
-  location        VARCHAR(150),
-  specification   TEXT,
-  capacity        VARCHAR(150),
-  make            VARCHAR(255),
-  remarks         TEXT,
-  category        VARCHAR(100) DEFAULT 'General',
-  status          VARCHAR(50) DEFAULT 'ACTIVE',
-  created_at      TIMESTAMPTZ DEFAULT NOW(),
-  updated_at      TIMESTAMPTZ DEFAULT NOW()
-);
+    f.write("""-- startup-guard: bulk-seed-when-empty public.machine_master
+-- Machine master list. Also safe to re-run by hand: inserts nothing if rows exist.
+-- Loaded by DataInitializer ONLY when public.machine_master is empty. Data rows only: the table,
+-- columns and indexes are defined in schema.sql. Enforced by StartupSafetyGuardTest.
 
-CREATE INDEX IF NOT EXISTS idx_machine_master_no ON public.machine_master(machine_no);
-CREATE INDEX IF NOT EXISTS idx_machine_master_dept ON public.machine_master(department);
-CREATE INDEX IF NOT EXISTS idx_machine_master_status ON public.machine_master(status);
-
-TRUNCATE TABLE public.machine_master RESTART IDENTITY;
-
-INSERT INTO public.machine_master (s_no, machine_no, description, department, location, specification, capacity, make, remarks, category, status) VALUES
+INSERT INTO public.machine_master (s_no, machine_no, description, department, location, specification, capacity, make, remarks, category, status)
+SELECT * FROM (VALUES
 """)
     values = []
     for m in machines:
@@ -123,6 +107,6 @@ INSERT INTO public.machine_master (s_no, machine_no, description, department, lo
         v = f"({m['sNo']}, {esc(m['machineNo'])}, {esc(m['description'])}, {esc(m['department'])}, {esc(m['location'])}, {esc(m['specification'])}, {esc(m['capacity'])}, {esc(m['make'])}, {esc(m['remarks'])}, {esc(m['category'])}, 'ACTIVE')"
         values.append(v)
     f.write(",\n".join(values))
-    f.write(";\n")
+    f.write("\n) AS seed\nWHERE NOT EXISTS (SELECT 1 FROM public.machine_master);\n")
 
 print(f"Successfully generated {len(machines)} machines in SQL and JSON!")

@@ -66,6 +66,7 @@ public class ProcurementMigrations implements ApplicationRunner {
      * Once every row is filled the column is set NOT NULL (idempotent).
      */
     public void ensureAcceptedQtyOnAttributions() {
+        // startup-guard: allow fills accepted_qty only where it is still NULL; never overwrites a stored value
         int filled = jdbc.update(
                 "UPDATE public.grn_item_allocations g SET accepted_qty = ROUND(g.received_qty * COALESCE(gi.accepted_qty, 0) / NULLIF(gi.received_qty, 0), 2) " +
                 "FROM public.goods_receipt_note_items gi WHERE gi.id = g.grn_item_id AND g.accepted_qty IS NULL AND gi.received_qty > 0");

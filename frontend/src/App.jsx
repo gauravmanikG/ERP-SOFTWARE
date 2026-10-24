@@ -9,11 +9,11 @@ import { CustomerMasterPage } from "./modules/crm/pages/CustomerMasterPage";
 import { DepartmentMasterPage } from "./modules/settings/pages/DepartmentMasterPage";
 import { MachineMasterPage } from "./modules/maintenance/pages/MachineMasterPage";
 import { PurchaseRequisitionPage } from "./modules/purchase/pages/PurchaseRequisitionPage";
-import { PurchaseOrderPage } from "./modules/purchase/pages/PurchaseOrderPage";
 import { ServicePurchaseOrderPage } from "./modules/purchase/pages/ServicePurchaseOrderPage";
 import { CapitalPurchaseOrderPage } from "./modules/purchase/pages/CapitalPurchaseOrderPage";
 import { JobWorkPage } from "./modules/purchase/pages/JobWorkPage";
 import { NewPurchaseOrderPage } from "./modules/purchase/newpo/NewPurchaseOrderPage";
+import { MastersPage } from "./modules/masters/MastersPage";
 import { VendorQuotationsPage } from "./modules/purchase/pages/VendorQuotationsPage";
 import { GoodsReceiptNotePage } from "./modules/purchase/pages/GoodsReceiptNotePage";
 import { RequestForQuotationPage } from "./modules/purchase/pages/RequestForQuotationPage";
@@ -24,10 +24,10 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [jobWorkScreen, setJobWorkScreen] = useState("dashboard");
   const [newPoScreen, setNewPoScreen] = useState("vendor-rates");
+  const [mastersScreen, setMastersScreen] = useState("mode-of-payment");
 
   const handleNavigateToPage = (targetPage) => {
     let page = targetPage;
-    if (page === "purchase-order") page = "purchase-orders";
     if (page === "quotations" || page === "quotation") page = "vendor-quotations";
 
     if (page === "home") {
@@ -60,12 +60,10 @@ export default function App() {
     ) {
       setCurrentView("vendor-quotations");
       setSidebarOpen(false);
-    } else if (
-      page === "purchase-orders" ||
-      page === "purchase-processing" ||
-      page === "po-approval"
-    ) {
-      setCurrentView(page);
+    } else if (page && page.startsWith("masters-")) {
+      setMastersScreen(page.replace("masters-", ""));
+      setCurrentView("masters");
+      setSidebarOpen(false);
     } else if (page && page.startsWith("new-po-")) {
       setNewPoScreen(page.replace("new-po-", ""));
       setCurrentView("new-po");
@@ -109,16 +107,14 @@ export default function App() {
     currentView === "department-master" ||
     currentView === "machine-master" ||
     currentView === "purchase-requisition" ||
-    currentView === "purchase-orders" ||
-    currentView === "purchase-processing" ||
-    currentView === "po-approval" ||
     currentView === "vendor-quotations" ||
     currentView === "rfq" ||
     currentView === "grn" ||
     currentView === "service-po" ||
     currentView === "capital-po" ||
     currentView === "job-work" ||
-    currentView === "new-po";
+    currentView === "new-po" ||
+    currentView === "masters";
 
   return (
     <div
@@ -221,24 +217,6 @@ export default function App() {
           />
         )}
 
-        {(currentView === "purchase-orders" ||
-          currentView === "purchase-processing" ||
-          currentView === "po-approval") && (
-          <PurchaseOrderPage
-            initialTab={
-              currentView === "po-approval"
-                ? "approval"
-                : currentView === "purchase-orders"
-                ? "orders"
-                : "processing"
-            }
-            onBackToHome={handleBackToHome}
-            onOpenSidebar={() => setSidebarOpen((v) => !v)}
-            sidebarOpen={sidebarOpen}
-            onNavigate={handleNavigateToPage}
-          />
-        )}
-
         {currentView === "job-work" && (
           <JobWorkPage
             screen={jobWorkScreen}
@@ -250,6 +228,16 @@ export default function App() {
         {currentView === "new-po" && (
           <NewPurchaseOrderPage
             screen={newPoScreen}
+            onNavigate={handleNavigateToPage}
+            onBackToHome={handleBackToHome}
+            onOpenSidebar={() => setSidebarOpen((v) => !v)}
+            sidebarOpen={sidebarOpen}
+          />
+        )}
+
+        {currentView === "masters" && (
+          <MastersPage
+            screen={mastersScreen}
             onBackToHome={handleBackToHome}
             onOpenSidebar={() => setSidebarOpen((v) => !v)}
             sidebarOpen={sidebarOpen}

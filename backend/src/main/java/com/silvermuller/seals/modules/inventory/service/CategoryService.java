@@ -5,11 +5,9 @@ import com.silvermuller.seals.modules.inventory.dto.CreateCategoryRequest;
 import com.silvermuller.seals.modules.inventory.model.CategoryMaster;
 import com.silvermuller.seals.modules.inventory.model.InventoryTransaction;
 import com.silvermuller.seals.modules.inventory.model.Master;
-import com.silvermuller.seals.modules.inventory.model.OpeningBalance;
 import com.silvermuller.seals.modules.inventory.repository.CategoryMasterRepository;
 import com.silvermuller.seals.modules.inventory.repository.InventoryTransactionRepository;
 import com.silvermuller.seals.modules.inventory.repository.MasterRepository;
-import com.silvermuller.seals.modules.inventory.repository.OpeningBalanceRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,17 +24,14 @@ public class CategoryService {
 
     private final CategoryMasterRepository categoryMasterRepository;
     private final MasterRepository masterRepository;
-    private final OpeningBalanceRepository openingBalanceRepository;
     private final InventoryTransactionRepository transactionRepository;
 
     public CategoryService(
             CategoryMasterRepository categoryMasterRepository,
             MasterRepository masterRepository,
-            OpeningBalanceRepository openingBalanceRepository,
             InventoryTransactionRepository transactionRepository) {
         this.categoryMasterRepository = categoryMasterRepository;
         this.masterRepository = masterRepository;
-        this.openingBalanceRepository = openingBalanceRepository;
         this.transactionRepository = transactionRepository;
     }
 
@@ -75,18 +70,11 @@ public class CategoryService {
         }
 
         Set<String> itemCodes = new LinkedHashSet<>();
-        for (OpeningBalance ob : openingBalanceRepository.findByCategoryNameIgnoreCase(name)) {
-            if (ob.getItemCode() != null && !ob.getItemCode().isBlank()) {
-                itemCodes.add(ob.getItemCode().trim());
-            }
-        }
         for (Master master : masterRepository.findByCategoryIgnoreCase(name)) {
             if (master.getCode() != null && !master.getCode().isBlank()) {
                 itemCodes.add(master.getCode().trim());
             }
         }
-
-        openingBalanceRepository.deleteByCategoryNameIgnoreCase(name);
 
         for (String code : itemCodes) {
             masterRepository.findByCodeIgnoreCase(code).ifPresent(this::retargetOrDeleteMaster);
@@ -96,37 +84,24 @@ public class CategoryService {
     }
 
     private void retargetOrDeleteMaster(Master master) {
-        List<OpeningBalance> rest = openingBalanceRepository.findByItemCodeIgnoreCase(master.getCode());
         List<InventoryTransaction> itemTxs =
                 transactionRepository.findByMasterIdOrderByTransactionDateAscIdAsc(master.getId());
-        if (rest.isEmpty() && itemTxs.isEmpty()) {
+        if (itemTxs.isEmpty()) {
             masterRepository.delete(master);
             return;
         }
-        BigDecimal total = rest.stream()
-                .map(ob -> ob.getOpeningBalance() == null ? BigDecimal.ZERO : ob.getOpeningBalance())
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        master.setOpeningBalance(total);
-        if (!rest.isEmpty()) {
-            master.setCategory(rest.get(0).getCategoryName());
-            if (rest.get(0).getDepartmentName() != null && !rest.get(0).getDepartmentName().isBlank()) {
-                master.setStoreName(rest.get(0).getDepartmentName());
-            }
-        } else {
-            String fromTx = itemTxs.stream()
-                    .map(InventoryTransaction::getCategory)
-                    .filter(c -> c != null && !c.isBlank())
-                    .findFirst()
-                    .orElse("General");
-            master.setCategory(fromTx);
-        }
+        String fromTx = itemTxs.stream()
+                .map(InventoryTransaction::getCategory)
+                .filter(c -> c != null && !c.isBlank())
+                .findFirst()
+                .orElse("General");
+        master.setCategory(fromTx);
         masterRepository.save(master);
     }
 
     private Map<String, Object> usageFor(CategoryMaster category) {
         String name = category.getCategoryName();
         long masters = masterRepository.countByCategoryIgnoreCase(name);
-        long openings = openingBalanceRepository.countByCategoryNameIgnoreCase(name);
         long transactions = transactionRepository.countByCategoryIgnoreCase(name);
         boolean canDelete = transactions == 0;
 
@@ -134,15 +109,13 @@ public class CategoryService {
         body.put("id", category.getId());
         body.put("categoryName", name);
         body.put("masterCount", masters);
-        body.put("openingCount", openings);
         body.put("transactionCount", transactions);
         body.put("canDelete", canDelete);
         if (!canDelete) {
             body.put("message", "Cannot delete '" + name + "' because " + transactions
                     + " inventory transaction(s) still use it. Reverse or remove those movements first.");
-        } else if (masters > 0 || openings > 0) {
-            body.put("message", "'" + name + "' has " + masters + " item(s) and " + openings
-                    + " opening balance(s), and no inventory movements. Delete will remove those openings for this category. Items that only existed in this category (no movements) will also be removed.");
+        } else if (masters > 0) {
+            body.put("message", "'" + name + "' has " + masters + " item(s) and no inventory movements. Delete will remove items that only existed in this category.");
         } else {
             body.put("message", "'" + name + "' is not used. It can be deleted.");
         }

@@ -1,296 +1,75 @@
 package com.silvermuller.seals.common.config;
 
-import com.silvermuller.seals.modules.inventory.model.Department;
-import com.silvermuller.seals.modules.inventory.model.Master;
-import com.silvermuller.seals.modules.inventory.model.TransactionType;
-import com.silvermuller.seals.modules.inventory.repository.DepartmentRepository;
-import com.silvermuller.seals.modules.inventory.repository.MasterRepository;
-import com.silvermuller.seals.modules.inventory.repository.TransactionTypeRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 
-import java.math.BigDecimal;
 import java.util.List;
+import java.util.Objects;
 
+/**
+ * Loads the bulk master-data seed files once per database, and only into an empty table, so an ordinary restart
+ * never touches existing rows and a table the user has emptied on purpose is not refilled.
+ *
+ * Startup data responsibilities (see docs/startup-data-rules.md):
+ *   schema.sql             DDL only, every start.
+ *   seed-data.sql          default rows: system rows restored if missing, user-managed rows seeded once.
+ *   this class             bulk seed files, once per database, only into an empty table.
+ *   StartupDataMigrations  deliberate one-time data changes, recorded per database.
+ * StartupSafetyGuardTest fails the build if any of these rules is broken.
+ */
 @Configuration
 public class DataInitializer {
 
+    private static final Logger log = LoggerFactory.getLogger(DataInitializer.class);
+
+    /** A seed file and the table it fills. The file's first line must be "-- startup-guard: bulk-seed-when-empty TABLE". */
+    public record BulkSeed(String table, String file) {}
+
+    public static final List<BulkSeed> BULK_SEEDS = List.of(
+            new BulkSeed("public.supplier_master", "vendor_master.sql"),
+            new BulkSeed("public.customer_master", "customer_master.sql"),
+            new BulkSeed("public.machine_master", "machine_master.sql"),
+            new BulkSeed("public.hsn_tax_master", "init_hsn_and_phase15.sql"));
+
     @Bean
-    public CommandLineRunner initDatabase(
-            JdbcTemplate jdbc,
-            DepartmentRepository deptRepo,
-            TransactionTypeRepository txTypeRepo,
-            MasterRepository masterRepo) {
+    public CommandLineRunner initDatabase(JdbcTemplate jdbc, SeedRegistry registry) {
         return args -> {
-            try {
-                // 1. Ensure companies table exists across all databases (PostgreSQL & H2)
-                jdbc.execute("""
-                    CREATE TABLE IF NOT EXISTS companies (
-                        id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-                        company_code VARCHAR(100) NOT NULL,
-                        company_name VARCHAR(255) NOT NULL,
-                        legal_name VARCHAR(255) DEFAULT '',
-                        short_name VARCHAR(100) DEFAULT '',
-                        business_type VARCHAR(100) DEFAULT 'Manufacturing',
-                        industry VARCHAR(100) DEFAULT '',
-                        logo TEXT DEFAULT '',
-                        status VARCHAR(50) DEFAULT 'Active',
-                        pan_no VARCHAR(50) DEFAULT '',
-                        gstin VARCHAR(50) DEFAULT '',
-                        cin_llpin VARCHAR(50) DEFAULT '',
-                        tan VARCHAR(50) DEFAULT '',
-                        msme_registration VARCHAR(50) DEFAULT '',
-                        factory_license_no VARCHAR(50) DEFAULT '',
-                        iec VARCHAR(50) DEFAULT '',
-                        pf_establishment_code VARCHAR(50) DEFAULT '',
-                        esi_code VARCHAR(50) DEFAULT '',
-                        professional_tax_no VARCHAR(50) DEFAULT '',
-                        pollution_certificate_no VARCHAR(50) DEFAULT '',
-                        registered_office TEXT DEFAULT '',
-                        factory_address TEXT DEFAULT '',
-                        branch_address TEXT DEFAULT '',
-                        city VARCHAR(100) DEFAULT '',
-                        state VARCHAR(100) DEFAULT '',
-                        country VARCHAR(100) DEFAULT 'India',
-                        pin_code VARCHAR(20) DEFAULT '',
-                        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-                        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-                    )
-                """);
-
-                // 2. Ensure inventory_transaction table exists across all databases
-                jdbc.execute("""
-                    CREATE TABLE IF NOT EXISTS inventory_transaction (
-                        id BIGSERIAL PRIMARY KEY,
-                        transaction_number VARCHAR(50) NOT NULL,
-                        slip_number VARCHAR(100),
-                        transaction_type_id BIGINT NOT NULL,
-                        master_id BIGINT NOT NULL,
-                        from_department_id BIGINT NOT NULL,
-                        to_department_id BIGINT,
-                        category VARCHAR(150),
-                        quantity NUMERIC(15, 2) NOT NULL,
-                        transaction_date TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-                        remarks TEXT,
-                        reversed_transaction_id BIGINT
-                    )
-                """);
-            } catch (Exception e) {
-                System.err.println("Note: Table initialization: " + e.getMessage());
-            }
-
-            // 2. Seed transaction types from operation names only (no ISSUE / RECEIPT / REVERSE)
-            List<String> types = List.of(
-                "Material Transfer",
-                "Internal Material Return",
-                "Rejection Tfd to Burning",
-                "Rejection tfd to Scrap Yard",
-                "Recycle Material Issue",
-                "Material Send for Job work",
-                "Customer Rejection Receipt",
-                "Customer Rejection Dismentle & SFG Recover",
-                "FG Dismantling & SFG Recovery",
-                "Rework"
-            );
-            for (String t : types) {
-                if (txTypeRepo.findByTypeIgnoreCase(t).isEmpty()) {
-                    TransactionType tt = new TransactionType();
-                    tt.setType(t);
-                    txTypeRepo.save(tt);
-                }
-            }
-            try {
-                jdbc.update("""
-                    DELETE FROM transaction_type
-                    WHERE UPPER(type) IN ('ISSUE', 'RECEIPT', 'REVERSE', 'TRANSFER')
-                      AND id NOT IN (
-                        SELECT DISTINCT transaction_type_id FROM inventory_transaction
-                        WHERE transaction_type_id IS NOT NULL
-                      )
-                    """);
-            } catch (Exception e) {
-                System.err.println("Note: Could not drop legacy transaction types: " + e.getMessage());
-            }
-
-            // 2b. Remove 'Gaurav' department and its references from everywhere
-            try {
-                List<Long> gauravIds = jdbc.queryForList(
-                    "SELECT id FROM department WHERE LOWER(name) = 'gaurav'", Long.class);
-                for (Long gId : gauravIds) {
-                    jdbc.update("DELETE FROM inventory_transaction WHERE from_department_id = ? OR to_department_id = ?", gId, gId);
-                    jdbc.update("DELETE FROM department WHERE id = ?", gId);
-                }
-                jdbc.update("DELETE FROM opening_balance WHERE LOWER(department_name) = 'gaurav'");
-                jdbc.update("DELETE FROM public.department_master WHERE LOWER(department_name) = 'gaurav'");
-                try {
-                    jdbc.update("DELETE FROM sms_inventory.department_master WHERE LOWER(department_name) = 'gaurav'");
-                } catch (Exception ignored) {}
-                System.out.println("Removed 'Gaurav' department and its references from everywhere.");
-            } catch (Exception e) {
-                System.err.println("Note: Cleanup 'Gaurav' department: " + e.getMessage());
-            }
-
-            // 3. Seed / Synchronize all 18 Departments with exact numbers and types
-            record DeptSeed(int num, String code, String name, double seq, String type) {}
-            List<DeptSeed> deptsList = List.of(
-                new DeptSeed(1, "DPT-001", "Store", 1.0, "Material Store"),
-                new DeptSeed(2, "DPT-002", "Power Press Die Making", 2.0, "Process"),
-                new DeptSeed(3, "DPT-003", "Power Press Rubber Die Making", 3.0, "Process"),
-                new DeptSeed(4, "DPT-004", "Power Press Circle Cutting", 4.0, "Process"),
-                new DeptSeed(5, "DPT-005", "LASER", 5.0, "Process"),
-                new DeptSeed(6, "DPT-006", "CNC", 6.0, "Process"),
-                new DeptSeed(7, "DPT-007", "Moulding", 7.0, "Process"),
-                new DeptSeed(8, "DPT-008", "Finishing", 8.0, "Process"),
-                new DeptSeed(9, "DPT-009", "Tambling", 9.0, "Process"),
-                new DeptSeed(10, "DPT-010", "Sand", 10.0, "Process"),
-                new DeptSeed(11, "DPT-011", "Burning", 11.0, "Process"),
-                new DeptSeed(12, "DPT-012", "T/Room", 12.0, "Process"),
-                new DeptSeed(13, "DPT-013", "Packing", 13.0, "Process"),
-                new DeptSeed(14, "DPT-014", "FG STORE", 14.0, "Finished Goods Store"),
-                new DeptSeed(15, "DPT-015", "Dispatch", 15.0, "Outward"),
-                new DeptSeed(16, "DPT-016", "Rejection Store", 16.0, "Rejection"),
-                new DeptSeed(17, "DPT-017", "Rework-Burning", 17.0, "Rework"),
-                new DeptSeed(18, "DPT-018", "Gate", 18.0, "Movement/Control")
-            );
-
-            for (DeptSeed ds : deptsList) {
-                // Ensure entry in department table
-                if (deptRepo.findByNameIgnoreCase(ds.name()).isEmpty()) {
-                    Department dept = new Department();
-                    dept.setName(ds.name());
-                    deptRepo.save(dept);
-                }
-
-                // Upsert in public.department_master
-                try {
-                    jdbc.update("""
-                        INSERT INTO public.department_master (dept_code, dept_number, department_name, process_sequence, category, status)
-                        VALUES (?, ?, ?, ?, ?, 'ACTIVE')
-                        ON CONFLICT (department_name) DO UPDATE SET
-                            dept_code = EXCLUDED.dept_code,
-                            dept_number = EXCLUDED.dept_number,
-                            process_sequence = EXCLUDED.process_sequence,
-                            category = EXCLUDED.category,
-                            status = EXCLUDED.status
-                    """, ds.code(), ds.num(), ds.name(), BigDecimal.valueOf(ds.seq()), ds.type());
-                } catch (Exception e) {
-                    System.err.println("Note: public.department_master upsert for " + ds.name() + ": " + e.getMessage());
-                }
-
-                // Upsert in sms_inventory.department_master
-                try {
-                    jdbc.update("""
-                        INSERT INTO sms_inventory.department_master (dept_code, dept_number, department_name, process_sequence, category, status)
-                        VALUES (?, ?, ?, ?, ?, 'ACTIVE')
-                        ON CONFLICT (department_name) DO UPDATE SET
-                            dept_code = EXCLUDED.dept_code,
-                            dept_number = EXCLUDED.dept_number,
-                            process_sequence = EXCLUDED.process_sequence,
-                            category = EXCLUDED.category,
-                            status = EXCLUDED.status
-                    """, ds.code(), ds.num(), ds.name(), BigDecimal.valueOf(ds.seq()), ds.type());
-                } catch (Exception ignored) {}
-            }
-            System.out.println("Seeded and synchronized all 18 departments into database.");
-
-
-            // 4. Seed Material Master Items if empty
-            if (masterRepo.count() == 0) {
-                masterRepo.save(createMaster("MAT-001", "Steel Sheet", "Raw Material", "KG", new BigDecimal("5000"), "Main Store"));
-                masterRepo.save(createMaster("MAT-002", "Stainless Steel Rod", "Raw Material", "KG", new BigDecimal("2500"), "Main Store"));
-                masterRepo.save(createMaster("MAT-003", "Bearing 6205", "Spare Parts", "PCS", new BigDecimal("150"), "Maintenance Store"));
-                masterRepo.save(createMaster("MAT-004", "Lubricating Oil", "Consumables", "LTR", new BigDecimal("500"), "Maintenance Store"));
-                masterRepo.save(createMaster("MAT-005", "Welding Electrode", "Consumables", "KG", new BigDecimal("300"), "Production Store"));
-                System.out.println("Seeded 5 material master items.");
-            }
-
-            // 5. Seed Supplier / Vendor Master from vendor_master.sql if table is empty
-            try {
-                Long vendorCount = jdbc.queryForObject("SELECT count(*) FROM supplier_master", Long.class);
-                if (vendorCount == null || vendorCount == 0) {
-                    org.springframework.core.io.ClassPathResource res = new org.springframework.core.io.ClassPathResource("vendor_master.sql");
-                    if (res.exists()) {
-                        org.springframework.jdbc.datasource.init.ResourceDatabasePopulator populator =
-                                new org.springframework.jdbc.datasource.init.ResourceDatabasePopulator(res);
-                        populator.setContinueOnError(true);
-                        populator.execute(java.util.Objects.requireNonNull(jdbc.getDataSource()));
-                        System.out.println("Seeded supplier_master from vendor_master.sql.");
-                    }
-                }
-            } catch (Exception e) {
-                System.err.println("Note: Supplier master seeding check: " + e.getMessage());
-            }
-
-            // 6. Seed Customer Master from customer_master.sql
-            try {
-                org.springframework.core.io.ClassPathResource res = new org.springframework.core.io.ClassPathResource("customer_master.sql");
-                if (res.exists()) {
-                    org.springframework.jdbc.datasource.init.ResourceDatabasePopulator populator =
-                            new org.springframework.jdbc.datasource.init.ResourceDatabasePopulator(res);
-                    populator.setContinueOnError(true);
-                    populator.execute(java.util.Objects.requireNonNull(jdbc.getDataSource()));
-                    System.out.println("Seeded customer_master from customer_master.sql.");
-                }
-            } catch (Exception e) {
-                System.err.println("Note: Customer master seeding check: " + e.getMessage());
-            }
-
-            // 7. Seed Machine Master from machine_master.sql
-            try {
-                org.springframework.core.io.ClassPathResource res = new org.springframework.core.io.ClassPathResource("machine_master.sql");
-                if (res.exists()) {
-                    org.springframework.jdbc.datasource.init.ResourceDatabasePopulator populator =
-                            new org.springframework.jdbc.datasource.init.ResourceDatabasePopulator(res);
-                    populator.setContinueOnError(true);
-                    populator.execute(java.util.Objects.requireNonNull(jdbc.getDataSource()));
-                    System.out.println("Seeded machine_master from machine_master.sql.");
-                }
-                jdbc.update("UPDATE public.machine_master SET machine_no = REGEXP_REPLACE(machine_no, '(?i)m/c\\s*-?\\s*', 'M/C -') WHERE machine_no ~* 'm/c'");
-                System.out.println("Standardized all machine codes to 'M/C -X' format.");
-            } catch (Exception e) {
-                System.err.println("Note: Machine master seeding check: " + e.getMessage());
-            }
-
-            // 8. Seed HSN Tax Master from init_hsn_and_phase15.sql if empty
-            try {
-                Long hsnCount = jdbc.queryForObject("SELECT count(*) FROM public.hsn_tax_master", Long.class);
-                if (hsnCount == null || hsnCount == 0) {
-                    org.springframework.core.io.ClassPathResource res = new org.springframework.core.io.ClassPathResource("init_hsn_and_phase15.sql");
-                    if (res.exists()) {
-                        org.springframework.jdbc.datasource.init.ResourceDatabasePopulator populator =
-                                new org.springframework.jdbc.datasource.init.ResourceDatabasePopulator(res);
-                        populator.setContinueOnError(true);
-                        populator.execute(java.util.Objects.requireNonNull(jdbc.getDataSource()));
-                        System.out.println("Seeded hsn_tax_master from init_hsn_and_phase15.sql.");
-                    }
-                }
-            } catch (Exception e) {
-                try {
-                    org.springframework.core.io.ClassPathResource res = new org.springframework.core.io.ClassPathResource("init_hsn_and_phase15.sql");
-                    if (res.exists()) {
-                        org.springframework.jdbc.datasource.init.ResourceDatabasePopulator populator =
-                                new org.springframework.jdbc.datasource.init.ResourceDatabasePopulator(res);
-                        populator.setContinueOnError(true);
-                        populator.execute(java.util.Objects.requireNonNull(jdbc.getDataSource()));
-                        System.out.println("Created and seeded hsn_tax_master from init_hsn_and_phase15.sql.");
-                    }
-                } catch (Exception ex) {
-                    System.err.println("Note: HSN tax master seeding check: " + ex.getMessage());
-                }
+            for (BulkSeed seed : BULK_SEEDS) {
+                seedOnce(jdbc, registry, seed);
             }
         };
     }
 
-    private Master createMaster(String code, String desc, String category, String uom, BigDecimal opening, String store) {
-        Master m = new Master();
-        m.setCode(code);
-        m.setDescription(desc);
-        m.setCategory(category);
-        m.setUnitOfMeasurement(uom);
-        m.setOpeningBalance(opening);
-        m.setStoreName(store);
-        return m;
+    /**
+     * First start on a database: loads the file if the table is empty, and records it as seeded either way (an
+     * existing table's rows are adopted as-is). Later starts do nothing, even if every row has since been deleted.
+     */
+    public static boolean seedOnce(JdbcTemplate jdbc, SeedRegistry registry, BulkSeed seed) {
+        boolean[] loaded = {false};
+        registry.seedOnce("bulk:" + seed.file(), () -> loaded[0] = loadIfEmpty(jdbc, seed));
+        return loaded[0];
+    }
+
+    /** Runs the seed file only when the table has no rows. A failing seed stops startup instead of being ignored. */
+    static boolean loadIfEmpty(JdbcTemplate jdbc, BulkSeed seed) {
+        Long rows = jdbc.queryForObject("SELECT count(*) FROM " + seed.table(), Long.class);
+        if (rows != null && rows > 0) {
+            return false;
+        }
+        ClassPathResource res = new ClassPathResource(seed.file());
+        if (!res.exists()) {
+            throw new IllegalStateException("Seed file not found on the classpath: " + seed.file());
+        }
+        ResourceDatabasePopulator populator = new ResourceDatabasePopulator(res);
+        populator.setSqlScriptEncoding("UTF-8");
+        populator.execute(Objects.requireNonNull(jdbc.getDataSource()));
+        log.info("Seeded {} from {}.", seed.table(), seed.file());
+        return true;
     }
 }

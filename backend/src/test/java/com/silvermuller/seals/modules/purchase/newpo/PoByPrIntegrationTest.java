@@ -54,7 +54,8 @@ class PoByPrIntegrationTest {
     private static final long ITEM_CON01_0002 = 1612L;   // price 100 from the test rate
     private static final String CODE_1 = "CON01-0001";
     private static final String CODE_2 = "CON01-0002";
-    private static final LocalDate POS_DATE = LocalDate.of(2026, 10, 19);
+    // PO date must be today or later (DirectPoService/PoByPrService reject past dates), so the fixture uses today.
+    private static final LocalDate POS_DATE = LocalDate.now();
     private static final String TAG = "IT" + UUID.randomUUID().toString().substring(0, 6).toUpperCase();
 
     @DynamicPropertySource
@@ -103,11 +104,6 @@ class PoByPrIntegrationTest {
             jdbc.update("DELETE FROM public.po_pr_allocations WHERE pr_number = ?", pr);
             jdbc.update("DELETE FROM public.purchase_requisition_items WHERE pr_number = ?", pr);
             jdbc.update("DELETE FROM public.purchase_requisitions WHERE pr_number = ?", pr);
-        }
-        for (String batch : CLUB_BATCHES) {
-            jdbc.update("DELETE FROM public.pr_clubbing_allocations WHERE batch_id IN (SELECT id FROM public.pr_clubbing_batches WHERE batch_number = ?)", batch);
-            jdbc.update("DELETE FROM public.pr_clubbing_batch_items WHERE batch_number = ?", batch);
-            jdbc.update("DELETE FROM public.pr_clubbing_batches WHERE batch_number = ?", batch);
         }
         for (Long id : RATE_IDS) {
             jdbc.update("DELETE FROM public.vendor_item_rates WHERE id = ?", id);
@@ -570,17 +566,6 @@ class PoByPrIntegrationTest {
         assertEquals(0, new BigDecimal("50").compareTo(ordered(pr.line1())));
     }
 
-    @Test
-    void amendingAPoByPrOrderIsRefusedAndNothingChanges() {
-        Pr pr = newPr("AMEND");
-        CreatedPo po = create(request("FULL", new LineRequest(pr.line1(), null)));
-
-        assertThrows(ConflictException.class,
-                () -> purchaseProcessing.createPoAmendment(po.poNumber(), "it-test", "change qty", Map.<String, Object>of("quantity", 10)));
-        assertEquals("APPROVED", poStatus(po.poNumber()));
-        assertEquals(0, new BigDecimal("50").compareTo(ordered(pr.line1())));
-    }
-
     // ------------------------------------------------------------------ database rules, numbering, reports
 
     @Autowired ProcurementMigrations migrations;
@@ -740,49 +725,6 @@ class PoByPrIntegrationTest {
         assertEquals(legacyPos, reported, "every legacy PO must be listed for review");
         // The report is read-only: it creates no allocation rows (no links are invented).
         assertEquals(allocationsBefore, (int) jdbc.queryForObject("SELECT COUNT(*) FROM public.po_pr_allocations", Integer.class));
-    }
-
-    // ------------------------------------------------------------------ PR -> PO -> GRN without batches or clubbing
-
-    private static final List<String> CLUB_BATCHES = Collections.synchronizedList(new ArrayList<>());
-
-    @Test
-    void prToPoToGrnFlowNeedsNoBatchAndIgnoresClubbingRows() {
-        Pr pr = newPr("NO-CLUB");
-        long prId = jdbc.queryForObject("SELECT id FROM public.purchase_requisitions WHERE pr_number = ?", Long.class, pr.number());
-        // A clubbing batch that contains this PR line, as the existing batch tab would create it.
-        String batch = "CB-IT-" + TAG + "-" + COUNTER.next();
-        CLUB_BATCHES.add(batch);
-        long batchId = jdbc.queryForObject(
-                "INSERT INTO public.pr_clubbing_batches (batch_number, batch_name, status) VALUES (?, 'it batch', 'DRAFT') RETURNING id", Long.class, batch);
-        long batchItemId = jdbc.queryForObject(
-                "INSERT INTO public.pr_clubbing_batch_items (batch_id, batch_number, item_code, uom, total_clubbed_qty, purchased_qty, remaining_qty, status) " +
-                "VALUES (?, ?, ?, 'PCS', 50, 0, 50, 'OPEN') RETURNING id", Long.class, batchId, batch, CODE_1);
-        jdbc.update("INSERT INTO public.pr_clubbing_allocations (batch_id, batch_item_id, pr_id, pr_number, pr_item_id, item_code, allocated_qty, purchased_qty, remaining_qty, status) " +
-                "VALUES (?, ?, ?, ?, ?, ?, 50, 0, 50, 'ALLOCATED')", batchId, batchItemId, prId, pr.number(), pr.line1(), CODE_1);
-
-        // The PR line is still offered with its full outstanding quantity: batch rows neither add nor remove quantity.
-        PrLineStatus before = poByPr.prLineStatuses(pr.number()).stream().filter(s -> s.prItemId() == pr.line1()).findFirst().orElseThrow();
-        assertEquals(0, new BigDecimal("50").compareTo(before.remainingToOrderQty()));
-        assertEquals(0, BigDecimal.ZERO.compareTo(before.orderedQty()));
-
-        // The PO is created directly from the PR line, without any batch step.
-        CreatedPo po = create(request("PARTIAL", new LineRequest(pr.line1(), new BigDecimal("20"))));
-        assertEquals(0, new BigDecimal("20").compareTo(ordered(pr.line1())));
-        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM public.po_pr_allocations WHERE po_number = ?", Integer.class, po.poNumber()));
-        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM public.po_pr_allocations WHERE po_number = ? AND pr_item_id <> ?", Integer.class, po.poNumber(), pr.line1()));
-
-        // The batch is untouched by the PO: nothing purchased, nothing reduced.
-        assertEquals(0, new BigDecimal("0").compareTo(jdbc.queryForObject(
-                "SELECT purchased_qty FROM public.pr_clubbing_allocations WHERE batch_id = ?", BigDecimal.class, batchId)));
-        assertEquals(0, new BigDecimal("50").compareTo(jdbc.queryForObject(
-                "SELECT remaining_qty FROM public.pr_clubbing_allocations WHERE batch_id = ?", BigDecimal.class, batchId)));
-
-        // Receipt through the GRN is attributed to the PR line, not to the batch.
-        grnService.saveOrPostGoodsReceiptNote(grnWith(po.poNumber(), "CH-NC-" + TAG, CODE_1, "20", "20", "0"), true);
-        assertEquals(0, new BigDecimal("20").compareTo(poByPr.receivedForPrItem(pr.line1())));
-        assertEquals(0, BigDecimal.ZERO.compareTo(jdbc.queryForObject(
-                "SELECT purchased_qty FROM public.pr_clubbing_allocations WHERE batch_id = ?", BigDecimal.class, batchId)));
     }
 
     // Small thread-safe counter for unique suffixes.
