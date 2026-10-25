@@ -11,25 +11,8 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto; -- for gen_random_uuid()
 
 -- =============================================================================
 -- ERP Inventory / Transaction Management Module
+-- Consolidated: master → item_master, department → department_master
 -- =============================================================================
-
--- 1. Department Table
-CREATE TABLE IF NOT EXISTS department (
-  id   BIGSERIAL PRIMARY KEY,
-  name VARCHAR(255) NOT NULL UNIQUE
-);
-
--- 2. Master Table (Material Master)
-CREATE TABLE IF NOT EXISTS master (
-  id                  BIGSERIAL PRIMARY KEY,
-  code                VARCHAR(100) NOT NULL UNIQUE,
-  description         VARCHAR(255) NOT NULL,
-  category            VARCHAR(100) NOT NULL DEFAULT 'General',
-  unit_of_measurement VARCHAR(50) NOT NULL,
-  store_name          VARCHAR(100) NOT NULL
-);
-
-ALTER TABLE master ADD COLUMN IF NOT EXISTS category VARCHAR(100) NOT NULL DEFAULT 'General';
 
 -- =============================================================================
 -- SMS Inventory Module — Item Master
@@ -74,30 +57,15 @@ CREATE TABLE IF NOT EXISTS public.item_master (
   updated_at               TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Backward compatibility columns for item_master
 ALTER TABLE public.item_master
   ADD COLUMN IF NOT EXISTS hsn_code VARCHAR(50),
-  ADD COLUMN IF NOT EXISTS segment VARCHAR(255),
-  ADD COLUMN IF NOT EXISTS region VARCHAR(255),
-  ADD COLUMN IF NOT EXISTS application VARCHAR(255),
-  ADD COLUMN IF NOT EXISTS ref_no VARCHAR(255),
-  ADD COLUMN IF NOT EXISTS oem VARCHAR(255),
-  ADD COLUMN IF NOT EXISTS corteco_no VARCHAR(255),
-  ADD COLUMN IF NOT EXISTS category VARCHAR(255),
-  ADD COLUMN IF NOT EXISTS image TEXT,
-  ADD COLUMN IF NOT EXISTS material VARCHAR(255),
-  ADD COLUMN IF NOT EXISTS color VARCHAR(255),
-  ADD COLUMN IF NOT EXISTS uom VARCHAR(100),
-  ADD COLUMN IF NOT EXISTS price NUMERIC(15,2),
-  ADD COLUMN IF NOT EXISTS type VARCHAR(255),
-  ADD COLUMN IF NOT EXISTS fitting_position VARCHAR(255),
-  ADD COLUMN IF NOT EXISTS swirl_type VARCHAR(255),
-  ADD COLUMN IF NOT EXISTS file_name VARCHAR(255),
-  ADD COLUMN IF NOT EXISTS domestic_exports VARCHAR(255),
-  ADD COLUMN IF NOT EXISTS cross_reference VARCHAR(255),
   ADD COLUMN IF NOT EXISTS drawing_image TEXT,
   ADD COLUMN IF NOT EXISTS safety_lead_time NUMERIC(10,2),
   ADD COLUMN IF NOT EXISTS procurement_lead_time NUMERIC(10,2),
-  ADD COLUMN IF NOT EXISTS total_lead_time NUMERIC(10,2);
+  ADD COLUMN IF NOT EXISTS total_lead_time NUMERIC(10,2),
+  ADD COLUMN IF NOT EXISTS item_group_id BIGINT REFERENCES public.item_group(id),
+  ADD COLUMN IF NOT EXISTS item_subgroup_id BIGINT REFERENCES public.item_subgroup(id);
 
 -- Table 2: department_master
 CREATE TABLE IF NOT EXISTS public.department_master (
@@ -113,11 +81,6 @@ CREATE TABLE IF NOT EXISTS public.department_master (
   updated_at       TIMESTAMPTZ DEFAULT NOW()
 );
 
-ALTER TABLE public.department_master ADD COLUMN IF NOT EXISTS dept_code VARCHAR(50);
-ALTER TABLE public.department_master ADD COLUMN IF NOT EXISTS dept_number INT;
-ALTER TABLE public.department_master ADD COLUMN IF NOT EXISTS category VARCHAR(100);
-ALTER TABLE public.department_master ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'ACTIVE';
-ALTER TABLE public.department_master ADD COLUMN IF NOT EXISTS notes TEXT;
 
 -- Table 3: operation_master
 CREATE TABLE IF NOT EXISTS public.operation_master (
@@ -1345,7 +1308,7 @@ CREATE TABLE IF NOT EXISTS public.job_work_indent_lines (
   id                    BIGSERIAL PRIMARY KEY,
   indent_id             BIGINT NOT NULL REFERENCES public.job_work_indents(id) ON DELETE CASCADE,
   line_no               INT NOT NULL,
-  master_id             BIGINT NOT NULL REFERENCES public.master(id),
+  item_master_id        BIGINT NOT NULL REFERENCES public.item_master(id),
   item_code             VARCHAR(255) NOT NULL,
   item_name             VARCHAR(500),
   category              VARCHAR(255) NOT NULL,
@@ -1393,7 +1356,7 @@ CREATE TABLE IF NOT EXISTS public.job_work_order_lines (
   id                    BIGSERIAL PRIMARY KEY,
   jwo_id                BIGINT NOT NULL REFERENCES public.job_work_orders(id) ON DELETE CASCADE,
   line_no               INT NOT NULL,
-  master_id             BIGINT NOT NULL REFERENCES public.master(id),
+  item_master_id        BIGINT NOT NULL REFERENCES public.item_master(id),
   item_code             VARCHAR(255) NOT NULL,
   item_name             VARCHAR(500),
   category              VARCHAR(255) NOT NULL,
@@ -1448,7 +1411,7 @@ CREATE TABLE IF NOT EXISTS public.job_work_challan_lines (
   id                    BIGSERIAL PRIMARY KEY,
   challan_id            BIGINT NOT NULL REFERENCES public.job_work_challans(id) ON DELETE CASCADE,
   jwo_line_id           BIGINT NOT NULL REFERENCES public.job_work_order_lines(id),
-  master_id             BIGINT NOT NULL REFERENCES public.master(id),
+  item_master_id        BIGINT NOT NULL REFERENCES public.item_master(id),
   category              VARCHAR(255) NOT NULL,
   batch_no              VARCHAR(100),
   qty                   NUMERIC(15,2) NOT NULL,
@@ -1474,7 +1437,7 @@ CREATE TABLE IF NOT EXISTS public.job_work_receipt_lines (
   id                    BIGSERIAL PRIMARY KEY,
   receipt_id            BIGINT NOT NULL REFERENCES public.job_work_receipts(id) ON DELETE CASCADE,
   jwo_line_id           BIGINT NOT NULL REFERENCES public.job_work_order_lines(id),
-  master_id             BIGINT NOT NULL REFERENCES public.master(id),
+  item_master_id        BIGINT NOT NULL REFERENCES public.item_master(id),
   category              VARCHAR(255) NOT NULL,
   qty_received          NUMERIC(15,2) NOT NULL,
   unused_returned_qty   NUMERIC(15,2) NOT NULL DEFAULT 0,
@@ -1487,8 +1450,8 @@ CREATE TABLE IF NOT EXISTS public.job_work_receipt_lines (
   inspection_remarks    TEXT,
   inspected_by          VARCHAR(150),
   inspected_at          TIMESTAMPTZ,
-  receive_transaction_id   BIGINT REFERENCES public.inventory_transaction(id),
-  unused_transaction_id    BIGINT REFERENCES public.inventory_transaction(id),
+  receive_transaction_id   BIGINT,   -- legacy: the inventory transaction table was removed
+  unused_transaction_id    BIGINT,   -- legacy: the inventory transaction table was removed
   CONSTRAINT ck_jwr_line_qty CHECK (qty_received >= 0 AND unused_returned_qty >= 0),
   CONSTRAINT ck_jwr_line_status CHECK (inspection_status IN ('PENDING','INSPECTED')),
   CONSTRAINT ck_jwr_line_disposition CHECK (
@@ -1502,7 +1465,7 @@ CREATE TABLE IF NOT EXISTS public.job_work_stock_ledger (
   job_worker_id         BIGINT NOT NULL REFERENCES public.job_workers(id),
   jwo_id                BIGINT NOT NULL REFERENCES public.job_work_orders(id),
   jwo_line_id           BIGINT NOT NULL REFERENCES public.job_work_order_lines(id),
-  master_id             BIGINT NOT NULL REFERENCES public.master(id),
+  item_master_id        BIGINT NOT NULL REFERENCES public.item_master(id),
   category              VARCHAR(255) NOT NULL,
   movement_type         VARCHAR(30) NOT NULL,   -- SENT / RECEIVED / RETURNED_UNUSED / REVERSED_SENT
   qty                   NUMERIC(15,2) NOT NULL, -- signed: + material with worker, - material back
@@ -1515,7 +1478,7 @@ CREATE TABLE IF NOT EXISTS public.job_work_stock_ledger (
   CONSTRAINT ck_jwl_nonzero CHECK (qty <> 0),
   CONSTRAINT ck_jwl_balance CHECK (balance_after >= 0)
 );
-CREATE INDEX IF NOT EXISTS idx_jwl_worker_item ON public.job_work_stock_ledger(job_worker_id, master_id, category);
+CREATE INDEX IF NOT EXISTS idx_jwl_worker_item ON public.job_work_stock_ledger(job_worker_id, item_master_id, category);
 
 -- Approval and status history for indents, orders, challans, receipts and workers.
 CREATE TABLE IF NOT EXISTS public.job_work_history (
@@ -1581,7 +1544,7 @@ CREATE TABLE IF NOT EXISTS public.job_work_adjustments (
   jwo_id                BIGINT NOT NULL REFERENCES public.job_work_orders(id),
   jwo_line_id           BIGINT NOT NULL REFERENCES public.job_work_order_lines(id),
   job_worker_id         BIGINT NOT NULL REFERENCES public.job_workers(id),
-  master_id             BIGINT NOT NULL REFERENCES public.master(id),
+  item_master_id        BIGINT NOT NULL REFERENCES public.item_master(id),
   category              VARCHAR(255) NOT NULL,
   adjustment_type       VARCHAR(30) NOT NULL,
   qty                   NUMERIC(15,2) NOT NULL,
@@ -1593,7 +1556,7 @@ CREATE TABLE IF NOT EXISTS public.job_work_adjustments (
   decided_by            VARCHAR(150),
   decided_at            TIMESTAMPTZ,
   decision_comments     TEXT,
-  inventory_transaction_id BIGINT REFERENCES public.inventory_transaction(id),
+  inventory_transaction_id BIGINT,   -- legacy: the inventory transaction table was removed
   CONSTRAINT ck_jw_adj_type CHECK (adjustment_type IN ('SCRAP_DISPOSAL','SHORTAGE','PROCESS_LOSS')),
   CONSTRAINT ck_jw_adj_status CHECK (status IN ('PENDING','APPROVED','REJECTED')),
   CONSTRAINT ck_jw_adj_qty CHECK (qty > 0)
@@ -1722,3 +1685,6 @@ CREATE TABLE IF NOT EXISTS public.app_seed_registry (
   policy              VARCHAR(10) NOT NULL,
   first_seeded_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Note: master_id → item_master_id rename is already applied to the database via previous startup.
+-- Do not re-apply; columns are already named item_master_id in all tables.
