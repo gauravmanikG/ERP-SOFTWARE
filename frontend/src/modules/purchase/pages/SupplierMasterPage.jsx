@@ -116,6 +116,7 @@ export function SupplierMasterPage({
   const [allItems, setAllItems] = useState([]);
   const [supplierItems, setSupplierItems] = useState([]);
   const [itemsLoading, setItemsLoading] = useState(false);
+  const [selectedItemId, setSelectedItemId] = useState(null);
 
   // Determine API base URL
   const getApiUrl = () => {
@@ -268,6 +269,25 @@ export function SupplierMasterPage({
 
       return updated;
     });
+  };
+
+  // Add item to supplier items list
+  const handleAddItem = () => {
+    if (!selectedItemId) {
+      alert("Please select an item");
+      return;
+    }
+    if (supplierItems.includes(Number(selectedItemId))) {
+      alert("This item is already added");
+      return;
+    }
+    setSupplierItems([...supplierItems, Number(selectedItemId)]);
+    setSelectedItemId(null);
+  };
+
+  // Remove item from supplier items list
+  const handleRemoveItem = (itemId) => {
+    setSupplierItems(supplierItems.filter(id => id !== itemId));
   };
 
   // Save Supplier Items
@@ -1512,7 +1532,7 @@ export function SupplierMasterPage({
                 <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                   <div>
                     <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 10 }}>
-                      Select Items Supplied by This Vendor (FG & Other Items)
+                      Add Items Supplied by This Vendor
                     </label>
                     {!editingId && (
                       <p style={{ fontSize: 12, color: "#64748b", marginBottom: 12 }}>
@@ -1521,57 +1541,114 @@ export function SupplierMasterPage({
                     )}
                   </div>
 
-                  {itemsLoading ? (
-                    <div style={{ padding: 20, textAlign: "center", color: "#64748b" }}>
-                      Loading items...
-                    </div>
-                  ) : allItems.length === 0 ? (
-                    <div style={{ padding: 20, textAlign: "center", color: "#64748b" }}>
-                      No items found in the system.
-                    </div>
-                  ) : (
-                    <div>
+                  {/* Item Selection Dropdown & Add Button */}
+                  <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
+                    <div style={{ flex: 1 }}>
+                      <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 6 }}>
+                        Select Item from Item Master
+                      </label>
                       <select
-                        multiple
-                        value={supplierItems.map(String)}
-                        onChange={(e) => {
-                          const selectedIds = Array.from(e.target.selectedOptions, option => Number(option.value));
-                          setSupplierItems(selectedIds);
-                        }}
+                        value={selectedItemId || ""}
+                        onChange={(e) => setSelectedItemId(e.target.value ? Number(e.target.value) : null)}
+                        disabled={itemsLoading || allItems.length === 0}
                         style={{
                           width: "100%",
-                          minHeight: "300px",
-                          padding: "12px",
+                          padding: "10px 12px",
                           borderRadius: 6,
                           border: "1px solid #cbd5e1",
                           fontSize: 13,
                           boxSizing: "border-box",
-                          fontFamily: "inherit",
                           backgroundColor: "#ffffff",
-                          cursor: "pointer"
+                          cursor: itemsLoading || allItems.length === 0 ? "not-allowed" : "pointer"
                         }}
                       >
-                        {allItems.map((item) => (
-                          <option key={item.id} value={item.id} style={{ padding: "8px" }}>
-                            {item.smsNewPartNo || item.mainFgCode || item.oldCode || `ITM-${item.id}`} - {item.descriptionSize || item.subgroup || "Item"}
-                          </option>
-                        ))}
+                        <option value="">-- Select an item --</option>
+                        {itemsLoading ? (
+                          <option disabled>Loading items...</option>
+                        ) : allItems.length === 0 ? (
+                          <option disabled>No items found</option>
+                        ) : (
+                          allItems.map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {item.smsNewPartNo || item.mainFgCode || item.oldCode || `ITM-${item.id}`} - {item.descriptionSize || item.subgroup || "Item"}
+                            </option>
+                          ))
+                        )}
                       </select>
-                      <p style={{ fontSize: 11, color: "#64748b", marginTop: 6 }}>
-                        💡 Tip: Hold Ctrl/Cmd + Click to select multiple items, or use Shift + Click for range selection
-                      </p>
                     </div>
-                  )}
+                    <button
+                      type="button"
+                      onClick={handleAddItem}
+                      disabled={!selectedItemId || !editingId}
+                      style={{
+                        padding: "10px 20px",
+                        borderRadius: 6,
+                        border: "none",
+                        background: selectedItemId && editingId ? "#2563eb" : "#cbd5e1",
+                        color: "#ffffff",
+                        fontSize: 13,
+                        fontWeight: 600,
+                        cursor: selectedItemId && editingId ? "pointer" : "not-allowed",
+                        whiteSpace: "nowrap"
+                      }}
+                    >
+                      + Add Item
+                    </button>
+                  </div>
 
-                  <div style={{
-                    padding: 12,
-                    background: "#f0fdf4",
-                    borderRadius: 8,
-                    border: "1px solid #bbf7d0",
-                    fontSize: 12,
-                    color: "#166534"
-                  }}>
-                    <strong>{supplierItems.length}</strong> item(s) selected for this supplier
+                  {/* Selected Items List */}
+                  <div>
+                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 10 }}>
+                      Selected Items ({supplierItems.length})
+                    </label>
+                    {supplierItems.length === 0 ? (
+                      <div style={{ padding: 16, background: "#f8fafc", borderRadius: 6, border: "1px solid #e2e8f0", color: "#64748b", fontSize: 13, textAlign: "center" }}>
+                        No items added yet. Select an item above and click "Add Item".
+                      </div>
+                    ) : (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        {supplierItems.map((itemId) => {
+                          const item = allItems.find(i => i.id === itemId);
+                          return (
+                            <div key={itemId} style={{
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              padding: "12px",
+                              background: "#f0fdf4",
+                              border: "1px solid #bbf7d0",
+                              borderRadius: 6,
+                              fontSize: 13
+                            }}>
+                              <div>
+                                <div style={{ fontWeight: 600, color: "#0f172a" }}>
+                                  {item?.smsNewPartNo || item?.mainFgCode || item?.oldCode || `ITM-${itemId}`}
+                                </div>
+                                <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
+                                  {item?.descriptionSize || item?.subgroup || "Item"}
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveItem(itemId)}
+                                style={{
+                                  padding: "6px 12px",
+                                  borderRadius: 4,
+                                  border: "none",
+                                  background: "#fee2e2",
+                                  color: "#dc2626",
+                                  fontSize: 12,
+                                  fontWeight: 600,
+                                  cursor: "pointer"
+                                }}
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
