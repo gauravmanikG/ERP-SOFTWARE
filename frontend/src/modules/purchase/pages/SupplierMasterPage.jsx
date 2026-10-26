@@ -1512,7 +1512,7 @@ export function SupplierMasterPage({
                 <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                   <div>
                     <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 10 }}>
-                      Select Items Supplied by This Vendor
+                      Select Items Supplied by This Vendor (FG & Other Items)
                     </label>
                     {!editingId && (
                       <p style={{ fontSize: 12, color: "#64748b", marginBottom: 12 }}>
@@ -1530,53 +1530,36 @@ export function SupplierMasterPage({
                       No items found in the system.
                     </div>
                   ) : (
-                    <div style={{
-                      border: "1px solid #cbd5e1",
-                      borderRadius: 8,
-                      maxHeight: "400px",
-                      overflowY: "auto",
-                      padding: 12,
-                      background: "#f8fafc"
-                    }}>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                        {allItems.map((item) => {
-                          const isSelected = supplierItems.includes(item.id);
-                          return (
-                            <label key={item.id} style={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: 8,
-                              padding: 10,
-                              borderRadius: 6,
-                              background: isSelected ? "#dbeafe" : "#ffffff",
-                              border: isSelected ? "1px solid #0284c7" : "1px solid #cbd5e1",
-                              cursor: "pointer",
-                              transition: "all 0.15s ease"
-                            }}>
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setSupplierItems([...supplierItems, item.id]);
-                                  } else {
-                                    setSupplierItems(supplierItems.filter(id => id !== item.id));
-                                  }
-                                }}
-                                style={{ cursor: "pointer" }}
-                              />
-                              <div style={{ flex: 1, fontSize: 12 }}>
-                                <div style={{ fontWeight: 600, color: "#0f172a" }}>
-                                  {item.smsNewPartNo || item.mainFgCode || item.oldCode || `ITM-${item.id}`}
-                                </div>
-                                <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>
-                                  {item.descriptionSize || item.subgroup || "Item"}
-                                </div>
-                              </div>
-                            </label>
-                          );
-                        })}
-                      </div>
+                    <div>
+                      <select
+                        multiple
+                        value={supplierItems.map(String)}
+                        onChange={(e) => {
+                          const selectedIds = Array.from(e.target.selectedOptions, option => Number(option.value));
+                          setSupplierItems(selectedIds);
+                        }}
+                        style={{
+                          width: "100%",
+                          minHeight: "300px",
+                          padding: "12px",
+                          borderRadius: 6,
+                          border: "1px solid #cbd5e1",
+                          fontSize: 13,
+                          boxSizing: "border-box",
+                          fontFamily: "inherit",
+                          backgroundColor: "#ffffff",
+                          cursor: "pointer"
+                        }}
+                      >
+                        {allItems.map((item) => (
+                          <option key={item.id} value={item.id} style={{ padding: "8px" }}>
+                            {item.smsNewPartNo || item.mainFgCode || item.oldCode || `ITM-${item.id}`} - {item.descriptionSize || item.subgroup || "Item"}
+                          </option>
+                        ))}
+                      </select>
+                      <p style={{ fontSize: 11, color: "#64748b", marginTop: 6 }}>
+                        💡 Tip: Hold Ctrl/Cmd + Click to select multiple items, or use Shift + Click for range selection
+                      </p>
                     </div>
                   )}
 
