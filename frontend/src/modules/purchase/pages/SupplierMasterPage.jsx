@@ -1570,7 +1570,7 @@ export function SupplierMasterPage({
                         ) : (
                           allItems.map((item) => (
                             <option key={item.id} value={item.id}>
-                              {item.smsNewPartNo || item.mainFgCode || item.oldCode || `ITM-${item.id}`} - {item.descriptionSize || item.subgroup || "Item"}
+                              {item.item_code} - {item.description_size || item.item_name}
                             </option>
                           ))
                         )}
@@ -1622,10 +1622,10 @@ export function SupplierMasterPage({
                             }}>
                               <div>
                                 <div style={{ fontWeight: 600, color: "#0f172a" }}>
-                                  {item?.smsNewPartNo || item?.mainFgCode || item?.oldCode || `ITM-${itemId}`}
+                                  {item?.item_code}
                                 </div>
                                 <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
-                                  {item?.descriptionSize || item?.subgroup || "Item"}
+                                  {item?.description_size || item?.item_name}
                                 </div>
                               </div>
                               <button

@@ -1,6 +1,6 @@
 import { useResizableColumns, ResizableColGroup, ColumnResizeHandle } from "../../../shared/components/ResizableTable";
 import { useState, useRef, useEffect, useMemo } from "react";
-import { Eye, Pencil, Trash2, Search, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
+import { Eye, Pencil, Trash2, Search, X } from "lucide-react";
 
 // Master lists extracted directly from the reference sheet
 const GROUP_OPTIONS = [
@@ -252,8 +252,6 @@ export function ItemMasterFormPage({
   const [quickSearch, setQuickSearch] = useState("");
 
   // Pagination State (for fast, responsive browsing of all 1,582 records)
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(50);
 
   // Table selection & column filter state
   const [selectedIds, setSelectedIds] = useState(new Set());
@@ -693,11 +691,6 @@ export function ItemMasterFormPage({
     setTimeout(() => setToastMessage(null), 4000);
   };
 
-  // Reset page when search or filters change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, selectedCategoryFilter, colFilters]);
-
   // Comprehensive filtering matching top search, category pills, and per-column filters
   const filteredItems = useMemo(() => {
     const sTerm = searchTerm.trim().toLowerCase();
@@ -755,15 +748,7 @@ export function ItemMasterFormPage({
     });
   }, [savedItems, searchTerm, selectedCategoryFilter, colFilters]);
 
-  // Pagination calculation
   const totalRecords = filteredItems.length;
-  const isAllPages = pageSize === "ALL";
-  const numPageSize = isAllPages ? totalRecords : Number(pageSize);
-  const totalPages = isAllPages ? 1 : Math.ceil(totalRecords / numPageSize) || 1;
-  const clampedPage = Math.min(Math.max(currentPage, 1), totalPages);
-  const startIndex = isAllPages ? 0 : (clampedPage - 1) * numPageSize;
-  const endIndex = isAllPages ? totalRecords : Math.min(startIndex + numPageSize, totalRecords);
-  const paginatedItems = isAllPages ? filteredItems : filteredItems.slice(startIndex, endIndex);
 
   // Calculate live summary metrics
   const totalCount = savedItems.length;
@@ -1444,7 +1429,7 @@ export function ItemMasterFormPage({
                   </td>
                 </tr>
               ) : (
-                paginatedItems.map((item) => {
+                filteredItems.map((item) => {
                   const isSelected = selectedIds.has(item.id);
                   return (
                     <tr
@@ -1562,115 +1547,9 @@ export function ItemMasterFormPage({
         >
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
             <span>
-              Showing{" "}
-              <strong>
-                {totalRecords === 0 ? 0 : (startIndex + 1).toLocaleString()} &ndash;{" "}
-                {endIndex.toLocaleString()}
-              </strong>{" "}
-              of <strong>{totalRecords.toLocaleString()}</strong> items
+              <strong>{totalRecords.toLocaleString()}</strong> items
             </span>
-
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ fontSize: 11, color: "#64748b" }}>Rows per page:</span>
-              <select
-                value={pageSize}
-                onChange={(e) => {
-                  setPageSize(e.target.value === "ALL" ? "ALL" : Number(e.target.value));
-                  setCurrentPage(1);
-                }}
-                style={{
-                  padding: "3px 8px",
-                  borderRadius: 6,
-                  border: "1px solid #cbd5e1",
-                  fontSize: 11.5,
-                  fontWeight: 600,
-                  outline: "none",
-                  cursor: "pointer",
-                  background: "#ffffff"
-                }}
-              >
-                <option value={25}>25</option>
-                <option value={50}>50</option>
-                <option value={100}>100</option>
-                <option value={250}>250</option>
-                <option value="ALL">All (1,582)</option>
-              </select>
-            </div>
           </div>
-
-          {!isAllPages && totalPages > 1 && (
-            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              <button
-                type="button"
-                onClick={() => setCurrentPage(1)}
-                disabled={clampedPage <= 1}
-                title="First Page"
-                style={{
-                  padding: "4px 8px",
-                  borderRadius: 6,
-                  border: "1px solid #cbd5e1",
-                  background: clampedPage <= 1 ? "#f8fafc" : "#ffffff",
-                  color: clampedPage <= 1 ? "#94a3b8" : "#1e293b",
-                  cursor: clampedPage <= 1 ? "not-allowed" : "pointer"
-                }}
-              >
-                <ChevronsLeft size={14} />
-              </button>
-              <button
-                type="button"
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={clampedPage <= 1}
-                title="Previous Page"
-                style={{
-                  padding: "4px 8px",
-                  borderRadius: 6,
-                  border: "1px solid #cbd5e1",
-                  background: clampedPage <= 1 ? "#f8fafc" : "#ffffff",
-                  color: clampedPage <= 1 ? "#94a3b8" : "#1e293b",
-                  cursor: clampedPage <= 1 ? "not-allowed" : "pointer"
-                }}
-              >
-                <ChevronLeft size={14} />
-              </button>
-
-              <span style={{ margin: "0 8px", fontWeight: 700, fontSize: 12 }}>
-                Page {clampedPage} of {totalPages}
-              </span>
-
-              <button
-                type="button"
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                disabled={clampedPage >= totalPages}
-                title="Next Page"
-                style={{
-                  padding: "4px 8px",
-                  borderRadius: 6,
-                  border: "1px solid #cbd5e1",
-                  background: clampedPage >= totalPages ? "#f8fafc" : "#ffffff",
-                  color: clampedPage >= totalPages ? "#94a3b8" : "#1e293b",
-                  cursor: clampedPage >= totalPages ? "not-allowed" : "pointer"
-                }}
-              >
-                <ChevronRight size={14} />
-              </button>
-              <button
-                type="button"
-                onClick={() => setCurrentPage(totalPages)}
-                disabled={clampedPage >= totalPages}
-                title="Last Page"
-                style={{
-                  padding: "4px 8px",
-                  borderRadius: 6,
-                  border: "1px solid #cbd5e1",
-                  background: clampedPage >= totalPages ? "#f8fafc" : "#ffffff",
-                  color: clampedPage >= totalPages ? "#94a3b8" : "#1e293b",
-                  cursor: clampedPage >= totalPages ? "not-allowed" : "pointer"
-                }}
-              >
-                <ChevronsRight size={14} />
-              </button>
-            </div>
-          )}
         </div>
       </div>
 
@@ -1700,14 +1579,6 @@ export function ItemMasterFormPage({
           <span>{totalRecords.toLocaleString()} records</span>
           <span style={{ margin: "0 6px", color: "#64748b" }}>|</span>
           <span>{selectedIds.size} selected</span>
-          {!isAllPages && (
-            <>
-              <span style={{ margin: "0 6px", color: "#64748b" }}>|</span>
-              <span style={{ color: "#94a3b8", fontWeight: 500 }}>
-                Page {clampedPage} of {totalPages}
-              </span>
-            </>
-          )}
         </div>
         <div style={{ color: "#94a3b8", fontSize: 11, fontWeight: 500 }}>
           Compression Moulding Line &middot; Active in Production Catalog
