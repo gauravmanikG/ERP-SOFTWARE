@@ -117,6 +117,26 @@ export function SupplierMasterPage({
   const [supplierItems, setSupplierItems] = useState([]);
   const [itemsLoading, setItemsLoading] = useState(false);
   const [selectedItemId, setSelectedItemId] = useState(null);
+  const [itemQuery, setItemQuery] = useState("");
+  const [itemMenuOpen, setItemMenuOpen] = useState(false);
+
+  const ITEM_MATCH_LIMIT = 100;
+  const itemMatchCount = useMemo(() => {
+    const q = itemQuery.trim().toLowerCase();
+    if (!q) return allItems.length;
+    return allItems.filter((i) =>
+      `${i.item_code ?? ""} ${i.description_size ?? ""} ${i.item_name ?? ""}`.toLowerCase().includes(q)
+    ).length;
+  }, [allItems, itemQuery]);
+  const itemMatches = useMemo(() => {
+    const q = itemQuery.trim().toLowerCase();
+    const source = q
+      ? allItems.filter((i) =>
+          `${i.item_code ?? ""} ${i.description_size ?? ""} ${i.item_name ?? ""}`.toLowerCase().includes(q)
+        )
+      : allItems;
+    return source.slice(0, ITEM_MATCH_LIMIT);
+  }, [allItems, itemQuery]);
 
   // Determine API base URL
   const getApiUrl = () => {
@@ -283,6 +303,7 @@ export function SupplierMasterPage({
     }
     setSupplierItems([...supplierItems, Number(selectedItemId)]);
     setSelectedItemId(null);
+    setItemQuery("");
   };
 
   // Remove item from supplier items list
@@ -1547,34 +1568,73 @@ export function SupplierMasterPage({
                       <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 6 }}>
                         Select Item from Item Master
                       </label>
-                      <select
-                        value={selectedItemId || ""}
-                        onChange={(e) => setSelectedItemId(e.target.value ? Number(e.target.value) : null)}
-                        disabled={itemsLoading || allItems.length === 0}
-                        style={{
-                          width: "100%",
-                          padding: "10px 12px",
-                          borderRadius: 6,
-                          border: "1px solid #cbd5e1",
-                          fontSize: 13,
-                          boxSizing: "border-box",
-                          backgroundColor: "#ffffff",
-                          cursor: itemsLoading || allItems.length === 0 ? "not-allowed" : "pointer"
-                        }}
-                      >
-                        <option value="">-- Select an item --</option>
-                        {itemsLoading ? (
-                          <option disabled>Loading items...</option>
-                        ) : allItems.length === 0 ? (
-                          <option disabled>No items found</option>
-                        ) : (
-                          allItems.map((item) => (
-                            <option key={item.id} value={item.id}>
-                              {item.item_code} - {item.description_size || item.item_name}
-                            </option>
-                          ))
+                      <div style={{ position: "relative" }}>
+                        <input
+                          type="text"
+                          value={itemQuery}
+                          placeholder={itemsLoading ? "Loading items..." : "Type code or description to search"}
+                          disabled={itemsLoading || allItems.length === 0}
+                          onFocus={() => setItemMenuOpen(true)}
+                          onBlur={() => setItemMenuOpen(false)}
+                          onChange={(e) => {
+                            setItemQuery(e.target.value);
+                            setSelectedItemId(null);
+                            setItemMenuOpen(true);
+                          }}
+                          style={{
+                            width: "100%",
+                            padding: "10px 12px",
+                            borderRadius: 6,
+                            border: "1px solid #cbd5e1",
+                            fontSize: 13,
+                            boxSizing: "border-box",
+                            backgroundColor: "#ffffff"
+                          }}
+                        />
+                        {itemMenuOpen && itemMatches.length > 0 && (
+                          <div style={{
+                            position: "absolute",
+                            top: "100%",
+                            left: 0,
+                            right: 0,
+                            marginTop: 4,
+                            maxHeight: 260,
+                            overflowY: "auto",
+                            background: "#ffffff",
+                            border: "1px solid #cbd5e1",
+                            borderRadius: 6,
+                            boxShadow: "0 8px 24px rgba(15, 23, 42, 0.15)",
+                            zIndex: 10
+                          }}>
+                            {itemMatches.map((item) => (
+                              <div
+                                key={item.id}
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  setSelectedItemId(item.id);
+                                  setItemQuery(`${item.item_code} - ${item.description_size || item.item_name}`);
+                                  setItemMenuOpen(false);
+                                }}
+                                style={{
+                                  padding: "8px 12px",
+                                  fontSize: 13,
+                                  cursor: "pointer",
+                                  borderBottom: "1px solid #f1f5f9",
+                                  background: selectedItemId === item.id ? "#dbeafe" : "#ffffff"
+                                }}
+                              >
+                                <span style={{ fontWeight: 700, color: "#0f172a" }}>{item.item_code}</span>
+                                <span style={{ color: "#475569" }}> - {item.description_size || item.item_name}</span>
+                              </div>
+                            ))}
+                            {itemMatchCount > itemMatches.length && (
+                              <div style={{ padding: "8px 12px", fontSize: 12, color: "#64748b" }}>
+                                Showing {itemMatches.length} of {itemMatchCount} matches. Type more to narrow down.
+                              </div>
+                            )}
+                          </div>
                         )}
-                      </select>
+                      </div>
                     </div>
                     <button
                       type="button"

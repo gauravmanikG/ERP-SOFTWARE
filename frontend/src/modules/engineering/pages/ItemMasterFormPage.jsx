@@ -1,6 +1,6 @@
 import { useResizableColumns, ResizableColGroup, ColumnResizeHandle } from "../../../shared/components/ResizableTable";
 import { useState, useRef, useEffect, useMemo } from "react";
-import { Eye, Pencil, Trash2, Search, X } from "lucide-react";
+import { Eye, Pencil, Trash2, Search, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
 
 // Master lists extracted directly from the reference sheet
 const GROUP_OPTIONS = [
@@ -748,7 +748,17 @@ export function ItemMasterFormPage({
     });
   }, [savedItems, searchTerm, selectedCategoryFilter, colFilters]);
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(15);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedCategoryFilter, colFilters, rowsPerPage]);
+
   const totalRecords = filteredItems.length;
+  const totalPages = Math.max(1, Math.ceil(totalRecords / rowsPerPage));
+  const startIndex = (currentPage - 1) * rowsPerPage;
+  const paginatedItems = filteredItems.slice(startIndex, startIndex + rowsPerPage);
 
   // Calculate live summary metrics
   const totalCount = savedItems.length;
@@ -864,8 +874,8 @@ export function ItemMasterFormPage({
   return (
     <div
       style={{
-        height: "calc(100vh - 68px)",
-        maxHeight: "calc(100vh - 68px)",
+        height: "calc(100vh - 102px)",
+        maxHeight: "calc(100vh - 102px)",
         overflow: "hidden",
         background: bg,
         padding: 0,
@@ -1429,7 +1439,7 @@ export function ItemMasterFormPage({
                   </td>
                 </tr>
               ) : (
-                filteredItems.map((item) => {
+                paginatedItems.map((item) => {
                   const isSelected = selectedIds.has(item.id);
                   return (
                     <tr
@@ -1545,10 +1555,30 @@ export function ItemMasterFormPage({
             color: "#475569"
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-            <span>
-              <strong>{totalRecords.toLocaleString()}</strong> items
-            </span>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12, color: "#64748b" }}>
+            <span>Showing {totalRecords > 0 ? startIndex + 1 : 0} to {Math.min(startIndex + rowsPerPage, totalRecords)} of {totalRecords} entries</span>
+            <select value={rowsPerPage} onChange={(e) => setRowsPerPage(Number(e.target.value))} style={{ padding: "4px 8px", borderRadius: 4, border: "1px solid #cbd5e1", fontSize: 12 }}>
+              <option value={10}>10 per page</option>
+              <option value={15}>15 per page</option>
+              <option value={25}>25 per page</option>
+              <option value={50}>50 per page</option>
+            </select>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <button onClick={() => setCurrentPage(1)} disabled={currentPage === 1} style={{ background: "#ffffff", border: "1px solid #cbd5e1", borderRadius: 6, padding: "5px 8px", cursor: currentPage === 1 ? "not-allowed" : "pointer", opacity: currentPage === 1 ? 0.4 : 1, display: "flex", alignItems: "center" }}>
+              <ChevronsLeft size={14} />
+            </button>
+            <button onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1} style={{ background: "#ffffff", border: "1px solid #cbd5e1", borderRadius: 6, padding: "5px 8px", cursor: currentPage === 1 ? "not-allowed" : "pointer", opacity: currentPage === 1 ? 0.4 : 1, display: "flex", alignItems: "center" }}>
+              <ChevronLeft size={14} />
+            </button>
+            <span style={{ fontSize: 12, fontWeight: 700, color: "#0f172a", margin: "0 8px" }}>Page {currentPage} of {totalPages}</span>
+            <button onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} style={{ background: "#ffffff", border: "1px solid #cbd5e1", borderRadius: 6, padding: "5px 8px", cursor: currentPage === totalPages ? "not-allowed" : "pointer", opacity: currentPage === totalPages ? 0.4 : 1, display: "flex", alignItems: "center" }}>
+              <ChevronRight size={14} />
+            </button>
+            <button onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages} style={{ background: "#ffffff", border: "1px solid #cbd5e1", borderRadius: 6, padding: "5px 8px", cursor: currentPage === totalPages ? "not-allowed" : "pointer", opacity: currentPage === totalPages ? 0.4 : 1, display: "flex", alignItems: "center" }}>
+              <ChevronsRight size={14} />
+            </button>
           </div>
         </div>
       </div>
