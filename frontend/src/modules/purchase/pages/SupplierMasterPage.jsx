@@ -113,6 +113,9 @@ export function SupplierMasterPage({
   const [loading, setLoading] = useState(true);
   const [toastMessage, setToastMessage] = useState(null);
   const [detailItem, setDetailItem] = useState(null);
+  const [allItems, setAllItems] = useState([]);
+  const [supplierItems, setSupplierItems] = useState([]);
+  const [itemsLoading, setItemsLoading] = useState(false);
 
   // Determine API base URL
   const getApiUrl = () => {
@@ -141,8 +144,39 @@ export function SupplierMasterPage({
     }
   };
 
+  const fetchItems = async () => {
+    try {
+      const res = await fetch(`${getApiUrl()}/api/items`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setAllItems(data);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch items:", err);
+    }
+  };
+
+  const fetchSupplierItems = async (supplierId) => {
+    setItemsLoading(true);
+    try {
+      const res = await fetch(`${getApiUrl()}/api/suppliers/${supplierId}/items`);
+      if (res.ok) {
+        const data = await res.json();
+        setSupplierItems(Array.isArray(data) ? data : []);
+      }
+    } catch (err) {
+      console.error("Failed to fetch supplier items:", err);
+      setSupplierItems([]);
+    } finally {
+      setItemsLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchSuppliers();
+    fetchItems();
   }, []);
 
 
@@ -165,6 +199,7 @@ export function SupplierMasterPage({
       supplierId: generatedCode
     });
     setActiveTab("tab1");
+    setSupplierItems([]);
     setIsModalOpen(true);
   };
 
@@ -182,6 +217,7 @@ export function SupplierMasterPage({
     setActiveTab("tab1");
     if (detailItem) setDetailItem(null);
     setIsModalOpen(true);
+    fetchSupplierItems(supplier.id);
   };
 
   // Delete handlers
@@ -201,11 +237,11 @@ export function SupplierMasterPage({
         if (detailItem?.id === deleteTarget.id) setDetailItem(null);
         setToastMessage(`Supplier "${deletedName}" deleted successfully!`);
       } else {
-        setToastMessage(`Failed to delete supplier "${deletedName}"`);
+        const err = await res.json().catch(() => ({}));
+        setToastMessage(err.message || `Supplier "${deletedName}" could not be deleted (HTTP ${res.status}).`);
       }
     } catch (e) {
-      setSuppliers((prev) => prev.filter((item) => item.id !== deleteTarget.id));
-      setToastMessage(`Supplier "${deletedName}" deleted locally.`);
+      setToastMessage(`Supplier "${deletedName}" was not deleted: the server could not be reached.`);
     } finally {
       setDeleteTarget(null);
       setTimeout(() => setToastMessage(null), 4000);
@@ -234,6 +270,34 @@ export function SupplierMasterPage({
     });
   };
 
+  // Save Supplier Items
+  const handleSaveSupplierItems = async () => {
+    if (!editingId) {
+      setToastMessage("Please save the supplier first before adding items.");
+      setTimeout(() => setToastMessage(null), 3000);
+      return;
+    }
+
+    try {
+      const res = await fetch(`${getApiUrl()}/api/suppliers/${editingId}/items`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ supplierId: editingId, itemIds: supplierItems })
+      });
+
+      if (res.ok) {
+        setToastMessage("Items saved successfully!");
+        setTimeout(() => setToastMessage(null), 2500);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(err.message || `Failed to save items (HTTP ${res.status}).`);
+      }
+    } catch (err) {
+      console.error("Save supplier items failed:", err);
+      alert("Failed to save items: the server could not be reached.");
+    }
+  };
+
   // Save Supplier (POST / PUT)
   const handleSaveSupplier = async (e) => {
     e.preventDefault();
@@ -253,38 +317,26 @@ export function SupplierMasterPage({
         body: JSON.stringify(formData)
       });
 
-      if (res.ok) {
-        const savedData = await res.json();
-        if (isEdit) {
-          setSuppliers((prev) => prev.map((item) => (item.id === editingId ? savedData : item)));
-          setToastMessage(`Supplier "${savedData.supplierName}" updated successfully!`);
-        } else {
-          setSuppliers((prev) => [savedData, ...prev]);
-          setToastMessage(`Supplier "${savedData.supplierName}" created successfully!`);
-        }
-      } else {
-        // Fallback local update if backend offline
-        const localObj = { ...formData, id: editingId || Date.now() };
-        if (isEdit) {
-          setSuppliers((prev) => prev.map((item) => (item.id === editingId ? localObj : item)));
-        } else {
-          setSuppliers((prev) => [localObj, ...prev]);
-        }
-        setToastMessage(`Supplier saved locally.`);
+      // A refused save keeps the form open and shows the server's reason; nothing is added to the list.
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(err.message || err.error || `The supplier was not saved (HTTP ${res.status}).`);
+        return;
       }
-    } catch (err) {
-      console.error("Save supplier failed:", err);
-      const localObj = { ...formData, id: editingId || Date.now() };
-      if (editingId) {
-        setSuppliers((prev) => prev.map((item) => (item.id === editingId ? localObj : item)));
+      const savedData = await res.json();
+      if (isEdit) {
+        setSuppliers((prev) => prev.map((item) => (item.id === editingId ? savedData : item)));
+        setToastMessage(`Supplier "${savedData.supplierName}" updated successfully!`);
       } else {
-        setSuppliers((prev) => [localObj, ...prev]);
+        setSuppliers((prev) => [savedData, ...prev]);
+        setToastMessage(`Supplier "${savedData.supplierName}" created successfully!`);
       }
-      setToastMessage(`Saved to local state.`);
-    } finally {
       setIsModalOpen(false);
       setEditingId(null);
       setTimeout(() => setToastMessage(null), 4000);
+    } catch (err) {
+      console.error("Save supplier failed:", err);
+      alert("The supplier was not saved: the server could not be reached.");
     }
   };
 
@@ -1242,6 +1294,22 @@ export function SupplierMasterPage({
               >
                 2. Contact, Address & Terms
               </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("tab3")}
+                style={{
+                  padding: "12px 20px",
+                  fontSize: 13,
+                  fontWeight: activeTab === "tab3" ? 700 : 500,
+                  border: "none",
+                  borderBottom: activeTab === "tab3" ? "3px solid #1e293b" : "3px solid transparent",
+                  background: "transparent",
+                  color: activeTab === "tab3" ? "#1e293b" : "#64748b",
+                  cursor: "pointer"
+                }}
+              >
+                3. Supplied Items
+              </button>
             </div>
 
             {/* Modal Body Form */}
@@ -1436,6 +1504,91 @@ export function SupplierMasterPage({
                         </option>
                       ))}
                     </select>
+                  </div>
+                </div>
+              )}
+
+              {activeTab === "tab3" && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                  <div>
+                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 10 }}>
+                      Select Items Supplied by This Vendor
+                    </label>
+                    {!editingId && (
+                      <p style={{ fontSize: 12, color: "#64748b", marginBottom: 12 }}>
+                        ℹ️ Save the supplier first (Tab 1 & 2) before adding items.
+                      </p>
+                    )}
+                  </div>
+
+                  {itemsLoading ? (
+                    <div style={{ padding: 20, textAlign: "center", color: "#64748b" }}>
+                      Loading items...
+                    </div>
+                  ) : allItems.length === 0 ? (
+                    <div style={{ padding: 20, textAlign: "center", color: "#64748b" }}>
+                      No items found in the system.
+                    </div>
+                  ) : (
+                    <div style={{
+                      border: "1px solid #cbd5e1",
+                      borderRadius: 8,
+                      maxHeight: "400px",
+                      overflowY: "auto",
+                      padding: 12,
+                      background: "#f8fafc"
+                    }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                        {allItems.map((item) => {
+                          const isSelected = supplierItems.includes(item.id);
+                          return (
+                            <label key={item.id} style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 8,
+                              padding: 10,
+                              borderRadius: 6,
+                              background: isSelected ? "#dbeafe" : "#ffffff",
+                              border: isSelected ? "1px solid #0284c7" : "1px solid #cbd5e1",
+                              cursor: "pointer",
+                              transition: "all 0.15s ease"
+                            }}>
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSupplierItems([...supplierItems, item.id]);
+                                  } else {
+                                    setSupplierItems(supplierItems.filter(id => id !== item.id));
+                                  }
+                                }}
+                                style={{ cursor: "pointer" }}
+                              />
+                              <div style={{ flex: 1, fontSize: 12 }}>
+                                <div style={{ fontWeight: 600, color: "#0f172a" }}>
+                                  {item.smsNewPartNo || item.mainFgCode || item.oldCode || `ITM-${item.id}`}
+                                </div>
+                                <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>
+                                  {item.descriptionSize || item.subgroup || "Item"}
+                                </div>
+                              </div>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  <div style={{
+                    padding: 12,
+                    background: "#f0fdf4",
+                    borderRadius: 8,
+                    border: "1px solid #bbf7d0",
+                    fontSize: 12,
+                    color: "#166534"
+                  }}>
+                    <strong>{supplierItems.length}</strong> item(s) selected for this supplier
                   </div>
                 </div>
               )}
@@ -1692,22 +1845,62 @@ export function SupplierMasterPage({
                 >
                   Cancel
                 </button>
-                <button
-                  type="submit"
-                  style={{
-                    padding: "8px 22px",
-                    borderRadius: 6,
-                    border: "none",
-                    background: "#1e293b",
-                    color: "#ffffff",
-                    fontSize: 13,
-                    fontWeight: 700,
-                    cursor: "pointer",
-                    boxShadow: "0 2px 4px rgba(0,0,0,0.15)"
-                  }}
-                >
-                  {editingId ? "Update Supplier" : "Save Supplier Record"}
-                </button>
+                {activeTab === "tab3" ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab("tab2")}
+                      style={{
+                        padding: "8px 18px",
+                        borderRadius: 6,
+                        border: "1px solid #cbd5e1",
+                        background: "#ffffff",
+                        color: "#475569",
+                        fontSize: 13,
+                        fontWeight: 600,
+                        cursor: "pointer"
+                      }}
+                    >
+                      Back
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveSupplierItems}
+                      disabled={!editingId}
+                      style={{
+                        padding: "8px 22px",
+                        borderRadius: 6,
+                        border: "none",
+                        background: editingId ? "#10b981" : "#cbd5e1",
+                        color: "#ffffff",
+                        fontSize: 13,
+                        fontWeight: 700,
+                        cursor: editingId ? "pointer" : "not-allowed",
+                        opacity: editingId ? 1 : 0.6,
+                        boxShadow: editingId ? "0 2px 4px rgba(16, 185, 129, 0.2)" : "none"
+                      }}
+                    >
+                      Save Items
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="submit"
+                    style={{
+                      padding: "8px 22px",
+                      borderRadius: 6,
+                      border: "none",
+                      background: "#1e293b",
+                      color: "#ffffff",
+                      fontSize: 13,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      boxShadow: "0 2px 4px rgba(0,0,0,0.15)"
+                    }}
+                  >
+                    {editingId ? "Update Supplier" : "Save Supplier Record"}
+                  </button>
+                )}
               </div>
             </form>
           </div>

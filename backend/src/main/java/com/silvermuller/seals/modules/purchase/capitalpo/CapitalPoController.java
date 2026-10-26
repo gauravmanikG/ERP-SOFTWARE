@@ -13,7 +13,6 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@CrossOrigin(origins = "*")
 @RequestMapping("/api/capital-pos")
 public class CapitalPoController {
 

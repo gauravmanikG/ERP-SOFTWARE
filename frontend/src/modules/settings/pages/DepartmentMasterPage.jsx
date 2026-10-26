@@ -177,8 +177,7 @@ export function DepartmentMasterPage({
         setToastMessage(errJson.message || `Failed to delete department "${deletedName}"`);
       }
     } catch (e) {
-      setDepartments((prev) => prev.filter((item) => item.id !== deleteTarget.id));
-      setToastMessage(`Department "${deletedName}" deleted locally.`);
+      setToastMessage(`Department "${deletedName}" was not deleted: the server could not be reached.`);
     } finally {
       setDeleteTarget(null);
       setTimeout(() => setToastMessage(null), 4000);
@@ -223,38 +222,26 @@ export function DepartmentMasterPage({
         body: JSON.stringify(payload)
       });
 
-      if (res.ok) {
-        const savedData = await res.json();
-        if (isEdit) {
-          setDepartments((prev) => prev.map((item) => (item.id === editingId ? savedData : item)));
-          setToastMessage(`Department "${savedData.departmentName || savedData.name}" updated successfully!`);
-        } else {
-          setDepartments((prev) => [...prev, savedData]);
-          setToastMessage(`Department "${savedData.departmentName || savedData.name}" created successfully!`);
-        }
-      } else {
+      // A refused save keeps the form open and shows the server's reason; nothing is added to the list.
+      if (!res.ok) {
         const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.message || "Failed to save department on server.");
+        alert(errJson.message || errJson.error || `The department was not saved (HTTP ${res.status}).`);
+        return;
       }
-    } catch (err) {
-      console.error("Save department failed:", err);
-      // Fallback local update
-      const localObj = {
-        ...formData,
-        id: editingId || Date.now(),
-        deptNumber: formData.deptNumber ? Number(formData.deptNumber) : departments.length + 1,
-        processSequence: Number(formData.processSequence)
-      };
-      if (editingId) {
-        setDepartments((prev) => prev.map((item) => (item.id === editingId ? localObj : item)));
+      const savedData = await res.json();
+      if (isEdit) {
+        setDepartments((prev) => prev.map((item) => (item.id === editingId ? savedData : item)));
+        setToastMessage(`Department "${savedData.departmentName || savedData.name}" updated successfully!`);
       } else {
-        setDepartments((prev) => [...prev, localObj]);
+        setDepartments((prev) => [...prev, savedData]);
+        setToastMessage(`Department "${savedData.departmentName || savedData.name}" created successfully!`);
       }
-      setToastMessage(`Saved to local state: ${err.message}`);
-    } finally {
       setIsModalOpen(false);
       setEditingId(null);
       setTimeout(() => setToastMessage(null), 4000);
+    } catch (err) {
+      console.error("Save department failed:", err);
+      alert("The department was not saved: the server could not be reached.");
     }
   };
 

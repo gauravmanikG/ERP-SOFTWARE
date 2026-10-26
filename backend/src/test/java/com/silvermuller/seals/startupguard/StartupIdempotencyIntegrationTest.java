@@ -52,6 +52,9 @@ class StartupIdempotencyIntegrationTest {
     private static final String GARBLED_HEX = "426f756768742d4f757420506172747320c3b0c5b8e280bac2a0";
     private static final String CORRECT_HEX = "426f756768742d4f757420506172747320f09f9ba0";
     private static final String MIGRATION_3111 = "2026-10-24-04-remove-garbled-bought-out-parts-category";
+    private static final String MIGRATION_REPOINT = "2026-10-25-06-repoint-job-work-to-item-master";
+    private static final List<String> JOB_WORK_ITEM_TABLES = List.of("job_work_indent_lines", "job_work_order_lines",
+            "job_work_challan_lines", "job_work_receipt_lines", "job_work_stock_ledger", "job_work_adjustments");
 
     @DynamicPropertySource
     static void disposableDatabase(DynamicPropertyRegistry r) {
@@ -99,6 +102,13 @@ class StartupIdempotencyIntegrationTest {
         return n == null ? 0 : n;
     }
 
+    private int jobWorkForeignKeysToItemMaster() {
+        return count("SELECT COUNT(DISTINCT con.conrelid) FROM pg_constraint con "
+                + "JOIN pg_attribute a ON a.attrelid = con.conrelid AND a.attnum = ANY (con.conkey) "
+                + "WHERE con.contype = 'f' AND con.confrelid = 'public.item_master'::regclass AND a.attname = 'item_master_id' "
+                + "AND con.conrelid::regclass::text = ANY (?)", (Object) JOB_WORK_ITEM_TABLES.toArray(new String[0]));
+    }
+
     private int categoryRowsWithBytes(String hex) {
         return count("SELECT COUNT(*) FROM public.category_master WHERE convert_to(category_name, 'UTF8') = decode(?, 'hex')", hex);
     }
@@ -114,13 +124,16 @@ class StartupIdempotencyIntegrationTest {
         assertEquals(StartupDataMigrations.MIGRATIONS.size(), count("SELECT COUNT(*) FROM public.app_data_migration"));
         assertTrue(count("SELECT COUNT(*) FROM public.category_master") >= 24);
         assertEquals(1, categoryRowsWithBytes(CORRECT_HEX), "the correctly encoded Bought-Out Parts category is seeded");
-        assertTrue(count("SELECT COUNT(*) FROM public.transaction_type") >= 10);
         assertTrue(count("SELECT COUNT(*) FROM public.department_master WHERE department_name IN "
                 + "('Store', 'Rejection Store', 'External Job Work', 'Quality Hold', 'Scrap Yard')") == 5);
         assertTrue(count("SELECT COUNT(*) FROM public.machine_master") > 0, "bulk seed loaded");
         assertTrue(count("SELECT COUNT(*) FROM public.item_group") > 0, "default item groups seeded");
         assertTrue(seeds.isSeeded("category_master:FELT"));
         assertTrue(seeds.isSeeded("bulk:machine_master.sql"));
+        assertEquals(JOB_WORK_ITEM_TABLES.size(), jobWorkForeignKeysToItemMaster(), "every job-work item column references item_master");
+        assertEquals(0, count("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' "
+                + "AND table_name IN ('master', 'department', 'inventory_transaction', 'opening_balance', 'transaction_type', 'companies')"),
+                "removed tables are not re-created");
     }
 
     // 2. edits survive ----------------------------------------------------------------------------------------
@@ -136,7 +149,6 @@ class StartupIdempotencyIntegrationTest {
         jdbc.update("UPDATE public.category_master SET short_code = 'EDITED', category_code = 'E99' WHERE category_name = 'SPRING'");
         jdbc.update("UPDATE public.procurement_master SET procurement_name = 'Edited by user' WHERE procurement_type = 'IMPORTED'");
         jdbc.update("UPDATE public.process_master SET process_description = 'Edited by user' WHERE process_code = 'PR-1'");
-        jdbc.update("UPDATE public.master SET category = 'Edited by user', description = 'Edited demo item' WHERE code = 'MAT-001'");
         jdbc.update("UPDATE public.customer_master SET customer_name = 'Edited Customer' WHERE customer_code = 'CUST-00001'");
         String supplier = str("SELECT MIN(supplier_code) FROM public.supplier_master");
         jdbc.update("UPDATE public.supplier_master SET supplier_name = 'Edited Supplier' WHERE supplier_code = ?", supplier);
@@ -153,12 +165,11 @@ class StartupIdempotencyIntegrationTest {
         assertEquals("Edited by user", str("SELECT category FROM public.department_master WHERE department_name = 'Gate'"));
         assertEquals("EDIT-18", str("SELECT dept_code FROM public.department_master WHERE department_name = 'Gate'"));
         assertEquals("Edited system row", str("SELECT notes FROM public.department_master WHERE department_name = 'Store'"),
-                "system rows are restored when missing, never overwritten");
+                "a default row is never overwritten");
         assertEquals("EDITED", str("SELECT short_code FROM public.category_master WHERE category_name = 'SPRING'"));
         assertEquals("E99", str("SELECT category_code FROM public.category_master WHERE category_name = 'SPRING'"));
         assertEquals("Edited by user", str("SELECT procurement_name FROM public.procurement_master WHERE procurement_type = 'IMPORTED'"));
         assertEquals("Edited by user", str("SELECT process_description FROM public.process_master WHERE process_code = 'PR-1'"));
-        assertEquals("Edited demo item", str("SELECT description FROM public.master WHERE code = 'MAT-001'"));
         assertEquals("Edited Customer", str("SELECT customer_name FROM public.customer_master WHERE customer_code = 'CUST-00001'"));
         assertEquals("Edited Supplier", str("SELECT supplier_name FROM public.supplier_master WHERE supplier_code = ?", supplier));
         assertEquals("Edited by user", str("SELECT description FROM public.hsn_tax_master WHERE hsn_sac_code = ?", hsn));
@@ -172,7 +183,6 @@ class StartupIdempotencyIntegrationTest {
     @Test
     void deletedUserManagedDefaultsStayDeletedAcrossRestarts() throws Exception {
         jdbc.update("DELETE FROM public.category_master WHERE category_name = 'FELT'");
-        jdbc.update("DELETE FROM public.transaction_type WHERE type = 'Rework'");
         jdbc.update("DELETE FROM public.process_master WHERE process_code = 'PR-16'");
         jdbc.update("DELETE FROM public.procurement_master WHERE procurement_type = 'OUTSOURCE'");
         jdbc.update("DELETE FROM public.operation_master WHERE operation_name = 'Rework'");
@@ -183,7 +193,6 @@ class StartupIdempotencyIntegrationTest {
         restart();
 
         assertEquals(0, count("SELECT COUNT(*) FROM public.category_master WHERE category_name = 'FELT'"));
-        assertEquals(0, count("SELECT COUNT(*) FROM public.transaction_type WHERE type = 'Rework'"));
         assertEquals(0, count("SELECT COUNT(*) FROM public.process_master WHERE process_code = 'PR-16'"));
         assertEquals(0, count("SELECT COUNT(*) FROM public.procurement_master WHERE procurement_type = 'OUTSOURCE'"));
         assertEquals(0, count("SELECT COUNT(*) FROM public.operation_master WHERE operation_name = 'Rework'"));
@@ -206,67 +215,70 @@ class StartupIdempotencyIntegrationTest {
         assertEquals(0, count("SELECT COUNT(*) FROM public.machine_master"), "the user emptied it on purpose; it stays empty");
     }
 
-    // 4. system reference data follows its policy: restored if missing ---------------------------------------
+    // 4. the departments the job-work code looks up by name are also seeded only once ---------------------------
 
     @Test
-    void missingSystemReferenceRowsAreRestored() throws Exception {
-        jdbc.update("DELETE FROM public.transaction_type WHERE type = 'Material Send for Job work'");
+    void renamedOrDeletedJobWorkDepartmentsAreNotPutBack() throws Exception {
         jdbc.update("DELETE FROM public.department_master WHERE department_name = 'Quality Hold'");
+        jdbc.update("UPDATE public.department_master SET department_name = 'Renamed Scrap Yard' WHERE department_name = 'Scrap Yard'");
 
         restart();
+        restart();
 
-        assertEquals(1, count("SELECT COUNT(*) FROM public.transaction_type WHERE type = 'Material Send for Job work'"),
-                "job work looks this transaction type up by name");
-        assertEquals(1, count("SELECT COUNT(*) FROM public.department_master WHERE department_name = 'Quality Hold'"),
-                "job work moves stock through this department by name");
+        assertEquals(0, count("SELECT COUNT(*) FROM public.department_master WHERE department_name = 'Quality Hold'"),
+                "a deleted default must not come back on restart");
+        assertEquals(0, count("SELECT COUNT(*) FROM public.department_master WHERE department_name = 'Scrap Yard'"),
+                "a renamed default must not be re-created under its old name");
+        assertEquals(1, count("SELECT COUNT(*) FROM public.department_master WHERE department_name = 'Renamed Scrap Yard'"));
     }
 
-    // 5. the garbled category 3111 is removed and does not return -------------------------------------------
+    // 5. retired migrations are recorded on a new database but never executed -------------------------------
 
     @Test
-    void garbledCategoryIsRemovedOnlyWhenUnusedAndDoesNotReturn() throws Exception {
+    void retiredMigrationsAreRecordedAsSkippedAndNeverRun() throws Exception {
+        for (StartupDataMigrations.Migration m : StartupDataMigrations.MIGRATIONS) {
+            if (!m.retired()) continue;
+            assertEquals(1, count("SELECT COUNT(*) FROM public.app_data_migration WHERE migration_id = ? AND rows_affected = 0 "
+                    + "AND description LIKE '[skipped%'", m.id()), m.id());
+        }
+        // 3111 reads tables that no longer exist; running it would stop startup. Pending again, it is still only recorded.
         jdbc.update("INSERT INTO public.category_master (category_name) VALUES (convert_from(decode(?, 'hex'), 'UTF8'))", GARBLED_HEX);
-        assertEquals(1, categoryRowsWithBytes(GARBLED_HEX));
-
-        // a record still uses it: the migration must leave it alone
-        jdbc.update("INSERT INTO public.master (code, description, category, unit_of_measurement, opening_balance, store_name) "
-                + "VALUES ('IT-GARBLED', 'uses the garbled category', convert_from(decode(?, 'hex'), 'UTF8'), 'PCS', 0, 'Main Store')", GARBLED_HEX);
         jdbc.update("DELETE FROM public.app_data_migration WHERE migration_id = ?", MIGRATION_3111);
-        restart();
-        assertEquals(1, categoryRowsWithBytes(GARBLED_HEX), "never delete a category a record still uses");
-        assertEquals(0, count("SELECT rows_affected FROM public.app_data_migration WHERE migration_id = ?", MIGRATION_3111));
-
-        // unused: the migration removes exactly that row and nothing else
-        jdbc.update("DELETE FROM public.master WHERE code = 'IT-GARBLED'");
-        int categoriesBefore = count("SELECT COUNT(*) FROM public.category_master");
-        jdbc.update("DELETE FROM public.app_data_migration WHERE migration_id = ?", MIGRATION_3111);
-        restart();
-        assertEquals(0, categoryRowsWithBytes(GARBLED_HEX));
-        assertEquals(1, categoryRowsWithBytes(CORRECT_HEX), "the correct category is untouched");
-        assertEquals(categoriesBefore - 1, count("SELECT COUNT(*) FROM public.category_master"));
-        assertEquals(1, count("SELECT rows_affected FROM public.app_data_migration WHERE migration_id = ?", MIGRATION_3111));
-
-        restart();
-        restart();
-        assertEquals(0, categoryRowsWithBytes(GARBLED_HEX), "seeding (read as UTF-8) never re-creates it");
+        try {
+            restart();
+            assertEquals(1, categoryRowsWithBytes(GARBLED_HEX), "a retired migration never executes");
+            assertEquals(1, categoryRowsWithBytes(CORRECT_HEX));
+            assertEquals(1, count("SELECT COUNT(*) FROM public.app_data_migration WHERE migration_id = ?", MIGRATION_3111));
+        } finally {
+            jdbc.update("DELETE FROM public.category_master WHERE convert_to(category_name, 'UTF8') = decode(?, 'hex')", GARBLED_HEX);
+        }
     }
 
-    // 6. demo items -----------------------------------------------------------------------------------------
+    // 6. a database from before the master -> item_master consolidation is brought in line -------------------
 
     @Test
-    void demoItemsNeverDuplicateResetOrReappear() throws Exception {
-        assertEquals(5, count("SELECT COUNT(*) FROM public.master WHERE code LIKE 'MAT-00_'"));
-        jdbc.update("UPDATE public.master SET opening_balance = 42, store_name = 'Edited store' WHERE code = 'MAT-002'");
-        jdbc.update("DELETE FROM public.master WHERE code = 'MAT-004'");
+    void legacyJobWorkItemColumnIsRenamedAndRepointedToItemMaster() throws Exception {
+        jdbc.execute("CREATE TABLE IF NOT EXISTS public.master (id BIGSERIAL PRIMARY KEY, code VARCHAR(100))");
+        jdbc.execute("ALTER TABLE public.job_work_adjustments DROP CONSTRAINT job_work_adjustments_item_master_id_fkey");
+        jdbc.execute("ALTER TABLE public.job_work_adjustments RENAME COLUMN item_master_id TO master_id");
+        jdbc.execute("ALTER TABLE public.job_work_adjustments ADD CONSTRAINT job_work_adjustments_master_id_fkey "
+                + "FOREIGN KEY (master_id) REFERENCES public.master(id)");
+        jdbc.execute("ALTER TABLE public.item_master ADD COLUMN item_group_id BIGINT REFERENCES public.item_group(id)");
+        jdbc.update("DELETE FROM public.app_data_migration WHERE migration_id = ?", MIGRATION_REPOINT);
+        try {
+            restart();
+            restart();
 
-        restart();
-        restart();
-
-        assertEquals(4, count("SELECT COUNT(*) FROM public.master WHERE code LIKE 'MAT-00_'"), "no duplicates, deleted one stays deleted");
-        assertEquals(0, count("SELECT COUNT(*) FROM public.master WHERE code = 'MAT-004'"));
-        assertEquals(0, new BigDecimal("42").compareTo(
-                jdbc.queryForObject("SELECT opening_balance FROM public.master WHERE code = 'MAT-002'", BigDecimal.class)));
-        assertEquals("Edited store", str("SELECT store_name FROM public.master WHERE code = 'MAT-002'"));
+            assertEquals(0, count("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = 'public' "
+                    + "AND table_name = 'job_work_adjustments' AND column_name = 'master_id'"));
+            assertEquals(JOB_WORK_ITEM_TABLES.size(), jobWorkForeignKeysToItemMaster());
+            assertEquals(0, count("SELECT COUNT(*) FROM pg_constraint WHERE contype = 'f' AND confrelid = 'public.master'::regclass"));
+            assertEquals(0, count("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = 'public' "
+                    + "AND table_name = 'item_master' AND column_name = 'item_group_id'"));
+            assertEquals(1, count("SELECT COUNT(*) FROM public.app_data_migration WHERE migration_id = ?", MIGRATION_REPOINT));
+        } finally {
+            jdbc.execute("DROP TABLE IF EXISTS public.master CASCADE");
+        }
     }
 
     // 7. failures are reported, not ignored -----------------------------------------------------------------

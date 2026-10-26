@@ -253,7 +253,8 @@ public final class StartupSafetyGuard {
                     + "|\\bDROP\\s+COLUMN\\b|\\bALTER\\s+COLUMN\\s+\\S+\\s+(SET\\s+DATA\\s+)?TYPE\\b|\\bDO\\s+UPDATE\\b",
             Pattern.CASE_INSENSITIVE);
     private static final Pattern UNSAFE_JAVA_CALL = Pattern.compile("\\.(deleteAll\\w*|deleteBy\\w*|deleteById|delete|truncate)\\s*\\(");
-    private static final Pattern METHOD_DECL = Pattern.compile("\\b(\\w+)\\s*\\(([^()]|\\([^()]*\\))*\\)\\s*(throws\\s+[\\w.,\\s]+)?\\{");
+    // possessive runs: a per-character alternation recurses once per character and overflows on long argument lists
+    private static final Pattern METHOD_DECL = Pattern.compile("\\b(\\w+)\\s*\\((?:[^()]++|\\([^()]*+\\))*+\\)\\s*(throws\\s+[\\w.,\\s]+)?\\{");
     /** A same-class call "name(" or a method reference "::name". */
     private static final Pattern CALL = Pattern.compile("(?<![.\\w])(\\w+)\\s*\\(|::(\\w+)");
     private static final Set<String> NOT_METHODS = Set.of("if", "for", "while", "switch", "catch", "synchronized", "try",

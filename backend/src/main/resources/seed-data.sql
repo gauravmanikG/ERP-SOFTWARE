@@ -1,126 +1,34 @@
 -- =============================================================================
 -- seed-data.sql: default rows. Runs on every startup AFTER schema.sql. Never changes or deletes a row.
--- Every statement declares its policy (docs/startup-data-rules.md):
---   seed-policy: system  rows the application code depends on by name. Restored if missing,
---                        never overwritten (INSERT ... ON CONFLICT DO NOTHING / WHERE NOT EXISTS).
---   seed-policy: once    user-managed defaults. Inserted only if their key is not yet in
---                        public.app_seed_registry, then registered, so a deleted row stays deleted.
+-- Every default row is created ONCE per database (docs/startup-data-rules.md):
+--   seed-policy: once    Inserted only if its key is not yet in public.app_seed_registry, then registered.
+--                        A row the user renames or deletes is never put back by a restart.
+-- (seed-policy: system, which re-created missing rows on every start, is no longer used here.)
 -- To change existing data deliberately, add a migration to StartupDataMigrations.
 -- Enforced by StartupSafetyGuardTest.
 -- =============================================================================
--- Seed initial departments if empty
--- seed-policy: once user-managed defaults: seeded once per database, a row the user deletes stays deleted
-WITH seed (name) AS (VALUES
-  ('Production'),
-  ('Maintenance'),
-  ('Quality Control'),
-  ('Stores'),
-  ('Administration')
-),
-added AS (
-  INSERT INTO department (name)
-  SELECT s.name FROM seed s
-  WHERE NOT EXISTS (SELECT 1 FROM public.app_seed_registry r WHERE r.seed_key = 'department:' || s.name::text)
-  ON CONFLICT (name) DO NOTHING
+
+-- Databases created before these five locations were "seed once" already contain them (or deliberately no longer
+-- do). Register their keys so that this start does not put a renamed or deleted one back. A brand-new database has
+-- an empty registry at this point, so it is skipped here and gets the defaults from the statements below.
+-- seed-policy: once adopts the existing database: records the keys of rows that were seeded before the registry covered them
+WITH seed (seed_key) AS (VALUES
+  ('department_master:Store'),
+  ('department_master:Rejection Store'),
+  ('department_master:External Job Work'),
+  ('department_master:Quality Hold'),
+  ('department_master:Scrap Yard')
 )
 INSERT INTO public.app_seed_registry (seed_key, policy)
-SELECT 'department:' || s.name::text, 'once' FROM seed s
+SELECT s.seed_key, 'once' FROM seed s
+WHERE EXISTS (SELECT 1 FROM public.app_seed_registry)
+  AND NOT EXISTS (SELECT 1 FROM public.app_seed_registry r WHERE r.seed_key = s.seed_key)
 ON CONFLICT (seed_key) DO NOTHING;
 
-
--- Seed operation names as transaction types (same list as operation_master)
--- seed-policy: system inventory and job-work code look these transaction types up by name
-INSERT INTO transaction_type (type) VALUES
-  ('Material Transfer'),
-  ('Internal Material Return'),
-  ('Material Send for Job work')
-ON CONFLICT (type) DO NOTHING;
-
--- seed-policy: once user-managed defaults: seeded once per database, a row the user deletes stays deleted
-WITH seed (type) AS (VALUES
-  ('Rejection Tfd to Burning'),
-  ('Rejection tfd to Scrap Yard'),
-  ('Recycle Material Issue'),
-  ('Customer Rejection Receipt'),
-  ('Customer Rejection Dismentle & SFG Recover'),
-  ('FG Dismantling & SFG Recovery'),
-  ('Rework')
-),
-added AS (
-  INSERT INTO transaction_type (type)
-  SELECT s.type FROM seed s
-  WHERE NOT EXISTS (SELECT 1 FROM public.app_seed_registry r WHERE r.seed_key = 'transaction_type:' || s.type::text)
-  ON CONFLICT (type) DO NOTHING
-)
-INSERT INTO public.app_seed_registry (seed_key, policy)
-SELECT 'transaction_type:' || s.type::text, 'once' FROM seed s
-ON CONFLICT (seed_key) DO NOTHING;
-
-
--- Seed initial material master data if empty
--- seed-policy: once user-managed defaults: seeded once per database, a row the user deletes stays deleted
-WITH seed (code, description, category, unit_of_measurement, opening_balance, store_name) AS (VALUES
-  ('MAT-001', 'Steel Sheet',         'Raw Material', 'KG',  5000, 'Main Store'),
-  ('MAT-002', 'Stainless Steel Rod', 'Raw Material', 'KG',  2500, 'Main Store'),
-  ('MAT-003', 'Bearing 6205',        'Spare Parts',  'PCS', 150,  'Maintenance Store'),
-  ('MAT-004', 'Lubricating Oil',     'Consumables',  'LTR', 500,  'Maintenance Store'),
-  ('MAT-005', 'Welding Electrode',   'Consumables',  'KG',  300,  'Production Store')
-),
-added AS (
-  INSERT INTO master (code, description, category, unit_of_measurement, opening_balance, store_name)
-  SELECT s.code, s.description, s.category, s.unit_of_measurement, s.opening_balance, s.store_name FROM seed s
-  WHERE NOT EXISTS (SELECT 1 FROM public.app_seed_registry r WHERE r.seed_key = 'master:' || s.code::text)
-  ON CONFLICT (code) DO NOTHING
-)
-INSERT INTO public.app_seed_registry (seed_key, policy)
-SELECT 'master:' || s.code::text, 'once' FROM seed s
-ON CONFLICT (seed_key) DO NOTHING;
-
-
--- seed-policy: system inventory and job-work code use these departments by name
-INSERT INTO department (name) VALUES
-  ('Store'),
-  ('Rejection Store')
-ON CONFLICT (name) DO NOTHING;
-
--- seed-policy: once user-managed defaults: seeded once per database, a row the user deletes stays deleted
-WITH seed (name) AS (VALUES
-  ('Power Press Die Making'),
-  ('Power Press Rubber Die Making'),
-  ('Power Press Circle Cutting'),
-  ('LASER'),
-  ('CNC'),
-  ('Moulding'),
-  ('Finishing'),
-  ('Tambling'),
-  ('Sand'),
-  ('Burning'),
-  ('T/Room'),
-  ('Packing'),
-  ('FG STORE'),
-  ('Dispatch'),
-  ('Rework-Burning'),
-  ('Gate')
-),
-added AS (
-  INSERT INTO department (name)
-  SELECT s.name FROM seed s
-  WHERE NOT EXISTS (SELECT 1 FROM public.app_seed_registry r WHERE r.seed_key = 'department:' || s.name::text)
-  ON CONFLICT (name) DO NOTHING
-)
-INSERT INTO public.app_seed_registry (seed_key, policy)
-SELECT 'department:' || s.name::text, 'once' FROM seed s
-ON CONFLICT (seed_key) DO NOTHING;
-
-
--- seed-policy: system inventory and job-work code use these departments by name
-INSERT INTO public.department_master (dept_code, dept_number, department_name, process_sequence, category, status) VALUES
-  ('DPT-001', 1, 'Store', 1.0, 'Material Store', 'ACTIVE'),
-  ('DPT-016', 16, 'Rejection Store', 16.0, 'Rejection', 'ACTIVE')
-ON CONFLICT (department_name) DO NOTHING;
-
--- seed-policy: once user-managed defaults: seeded once per database, a row the user deletes stays deleted
+-- seed-policy: once user-managed defaults: seeded once per database, a row the user renames or deletes is not put back
 WITH seed (dept_code, dept_number, department_name, process_sequence, category, status) AS (VALUES
+  ('DPT-001', 1, 'Store', 1.0, 'Material Store', 'ACTIVE'),
+  ('DPT-016', 16, 'Rejection Store', 16.0, 'Rejection', 'ACTIVE'),
   ('DPT-002', 2, 'Power Press Die Making', 2.0, 'Process', 'ACTIVE'),
   ('DPT-003', 3, 'Power Press Rubber Die Making', 3.0, 'Process', 'ACTIVE'),
   ('DPT-004', 4, 'Power Press Circle Cutting', 4.0, 'Process', 'ACTIVE'),
@@ -362,15 +270,21 @@ ON CONFLICT (seed_key) DO NOTHING;
 -- departments receive inspected material. The job-worker-wise ledger below sits on top.
 -- =============================================================================
 
--- seed-policy: system job-work code moves stock through this department by name
-INSERT INTO public.department_master (dept_code, dept_number, department_name, process_sequence, category, status, notes)
-SELECT 'JW-EXT', NULL, 'External Job Work', 0, 'JOB WORK', 'ACTIVE', 'Virtual location: material held by external job workers'
-WHERE NOT EXISTS (SELECT 1 FROM public.department_master WHERE department_name = 'External Job Work');
+-- seed-policy: once user-managed defaults: seeded once per database, a row the user renames or deletes is not put back
+WITH seed (dept_code, department_name, category, notes) AS (VALUES
+  ('JW-EXT', 'External Job Work', 'JOB WORK', 'Virtual location: material held by external job workers'),
+  ('QH-HOLD', 'Quality Hold', 'QUALITY', 'Virtual location: received job work material awaiting inspection')
+),
+added AS (
+  INSERT INTO public.department_master (dept_code, dept_number, department_name, process_sequence, category, status, notes)
+  SELECT s.dept_code, NULL, s.department_name, 0, s.category, 'ACTIVE', s.notes FROM seed s
+  WHERE NOT EXISTS (SELECT 1 FROM public.app_seed_registry r WHERE r.seed_key = 'department_master:' || s.department_name::text)
+  ON CONFLICT DO NOTHING
+)
+INSERT INTO public.app_seed_registry (seed_key, policy)
+SELECT 'department_master:' || s.department_name::text, 'once' FROM seed s
+ON CONFLICT (seed_key) DO NOTHING;
 
--- seed-policy: system job-work code moves stock through this department by name
-INSERT INTO public.department_master (dept_code, dept_number, department_name, process_sequence, category, status, notes)
-SELECT 'QH-HOLD', NULL, 'Quality Hold', 0, 'QUALITY', 'ACTIVE', 'Virtual location: received job work material awaiting inspection'
-WHERE NOT EXISTS (SELECT 1 FROM public.department_master WHERE department_name = 'Quality Hold');
 -- seed-policy: once user-managed defaults: seeded once per database, a row the user deletes stays deleted
 WITH seed (operation_name) AS (VALUES
   ('CNC'),
@@ -399,7 +313,16 @@ ON CONFLICT (seed_key) DO NOTHING;
 -- JOB WORK — Phase 2: reconciliation, scrap disposal, write-offs, permissible loss
 -- =============================================================================
 
--- seed-policy: system job-work code moves stock through this department by name
-INSERT INTO public.department_master (dept_code, dept_number, department_name, process_sequence, category, status, notes)
-SELECT 'SCRAP-YD', NULL, 'Scrap Yard', 0, 'SCRAP', 'ACTIVE', 'Location for disposed scrap (after approval)'
-WHERE NOT EXISTS (SELECT 1 FROM public.department_master WHERE department_name = 'Scrap Yard');
+-- seed-policy: once user-managed defaults: seeded once per database, a row the user renames or deletes is not put back
+WITH seed (dept_code, department_name, category, notes) AS (VALUES
+  ('SCRAP-YD', 'Scrap Yard', 'SCRAP', 'Location for disposed scrap (after approval)')
+),
+added AS (
+  INSERT INTO public.department_master (dept_code, dept_number, department_name, process_sequence, category, status, notes)
+  SELECT s.dept_code, NULL, s.department_name, 0, s.category, 'ACTIVE', s.notes FROM seed s
+  WHERE NOT EXISTS (SELECT 1 FROM public.app_seed_registry r WHERE r.seed_key = 'department_master:' || s.department_name::text)
+  ON CONFLICT DO NOTHING
+)
+INSERT INTO public.app_seed_registry (seed_key, policy)
+SELECT 'department_master:' || s.department_name::text, 'once' FROM seed s
+ON CONFLICT (seed_key) DO NOTHING;

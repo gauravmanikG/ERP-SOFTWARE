@@ -147,7 +147,7 @@ public class JobWorkReconciliationService {
             out.put("itemName", l.get("item_name"));
             out.put("category", l.get("category"));
             out.put("operation", l.get("operation_name"));
-            out.put("masterId", l.get("master_id"));
+            out.put("itemMasterId", l.get("item_master_id"));
             out.put("inputQty", l.get("input_qty"));
             out.put("dispatched", dispatched);
             out.put("reworkRedispatched", rr);
@@ -185,7 +185,7 @@ public class JobWorkReconciliationService {
         res.put("totalWithWorker", withWorkerTotal);
         res.put("totalExcessLoss", excessTotal);
         res.put("adjustments", JobWorkService.camelList(jdbc.queryForList(
-                "SELECT a.*, m.code AS item_code FROM public.job_work_adjustments a JOIN public.master m ON m.id = a.master_id WHERE a.jwo_id = ? ORDER BY a.requested_at DESC, a.id DESC", jwoId)));
+                "SELECT a.*, m.code AS item_code FROM public.job_work_adjustments a JOIN public.item_master_lookup m ON m.id = a.item_master_id WHERE a.jwo_id = ? ORDER BY a.requested_at DESC, a.id DESC", jwoId)));
         res.put("allowedActions", List.of("REQUEST_ADJUSTMENT"));
         return res;
     }
@@ -232,9 +232,9 @@ public class JobWorkReconciliationService {
             }
         }
         String number = jw.nextNumber("ADJ");
-        jdbc.update("INSERT INTO public.job_work_adjustments (adjustment_number, jwo_id, jwo_line_id, job_worker_id, master_id, category, adjustment_type, qty, reason, "
+        jdbc.update("INSERT INTO public.job_work_adjustments (adjustment_number, jwo_id, jwo_line_id, job_worker_id, item_master_id, category, adjustment_type, qty, reason, "
                         + "status, requested_by, requested_role) VALUES (?,?,?,?,?,?,?,?,?,'PENDING',?,?)",
-                number, line.get("jwo_id"), lineId, line.get("job_worker_id"), line.get("master_id"), line.get("category"), type, qty, r.reason().trim(),
+                number, line.get("jwo_id"), lineId, line.get("job_worker_id"), line.get("item_master_id"), line.get("category"), type, qty, r.reason().trim(),
                 actor.name(), actor.role());
         jw.history("JWO", ((Number) line.get("jwo_id")).longValue(), "ADJUSTMENT_REQUESTED", null, null, actor, number + " " + type + " " + qty);
         Long newId = jdbc.queryForObject("SELECT id FROM public.job_work_adjustments WHERE adjustment_number = ?", Long.class, number);
@@ -274,7 +274,7 @@ public class JobWorkReconciliationService {
             if (qty.compareTo(withWorker) > 0) {
                 throw JobWorkService.conflict("Only " + withWorker + " is still with the worker; the adjustment can no longer be approved as requested.");
             }
-            jw.ledger(((Number) a.get("job_worker_id")).longValue(), jwoId, lineId, ((Number) a.get("master_id")).longValue(),
+            jw.ledger(((Number) a.get("job_worker_id")).longValue(), jwoId, lineId, ((Number) a.get("item_master_id")).longValue(),
                     JobWorkService.str(a, "category"), "WRITTEN_OFF", qty.negate(), number, null, null, null, actor);
             jdbc.update("UPDATE public.job_work_order_lines SET written_off_qty = written_off_qty + ? WHERE id = ?", qty, lineId);
         }
@@ -294,7 +294,7 @@ public class JobWorkReconciliationService {
         return JobWorkService.camelList(jdbc.queryForList(
                 "SELECT a.*, o.jwo_number, w.legal_name AS worker_name, m.code AS item_code, op.operation_name FROM public.job_work_adjustments a "
                         + "JOIN public.job_work_orders o ON o.id = a.jwo_id JOIN public.job_workers w ON w.id = a.job_worker_id "
-                        + "JOIN public.master m ON m.id = a.master_id JOIN public.job_work_order_lines l ON l.id = a.jwo_line_id "
+                        + "JOIN public.item_master_lookup m ON m.id = a.item_master_id JOIN public.job_work_order_lines l ON l.id = a.jwo_line_id "
                         + "JOIN public.job_work_operations op ON op.id = l.operation_id"
                         + (conds.isEmpty() ? "" : " WHERE " + String.join(" AND ", conds)) + " ORDER BY a.requested_at DESC, a.id DESC LIMIT 300", args.toArray()));
     }

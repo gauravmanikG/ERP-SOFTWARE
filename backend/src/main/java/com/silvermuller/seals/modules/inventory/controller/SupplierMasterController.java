@@ -1,7 +1,9 @@
 package com.silvermuller.seals.modules.inventory.controller;
 
+import com.silvermuller.seals.modules.inventory.dto.SupplierWithItemsDTO;
 import com.silvermuller.seals.modules.inventory.model.SupplierMaster;
 import com.silvermuller.seals.modules.inventory.repository.SupplierMasterRepository;
+import com.silvermuller.seals.modules.inventory.service.SupplierItemService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -11,14 +13,15 @@ import java.util.Map;
 import java.util.Optional;
 
 @RestController
-@CrossOrigin(origins = "*")
 @RequestMapping({"/api/inventory/suppliers", "/api/suppliers", "/api/vendors"})
 public class SupplierMasterController {
 
     private final SupplierMasterRepository supplierRepository;
+    private final SupplierItemService supplierItemService;
 
-    public SupplierMasterController(SupplierMasterRepository supplierRepository) {
+    public SupplierMasterController(SupplierMasterRepository supplierRepository, SupplierItemService supplierItemService) {
         this.supplierRepository = supplierRepository;
+        this.supplierItemService = supplierItemService;
     }
 
     @GetMapping
@@ -123,5 +126,41 @@ public class SupplierMasterController {
         }
         supplierRepository.deleteById(id);
         return ResponseEntity.ok(Map.of("message", "Supplier deleted successfully"));
+    }
+
+    @GetMapping("/{id}/items")
+    public ResponseEntity<List<Long>> getSupplierItems(@PathVariable Long id) {
+        if (!supplierRepository.existsById(id)) {
+            return ResponseEntity.notFound().build();
+        }
+        List<Long> itemIds = supplierItemService.getItemIdsBySupplierId(id);
+        return ResponseEntity.ok(itemIds);
+    }
+
+    @PostMapping("/{id}/items")
+    public ResponseEntity<?> setSupplierItems(@PathVariable Long id, @RequestBody SupplierWithItemsDTO request) {
+        if (!supplierRepository.existsById(id)) {
+            return ResponseEntity.notFound().build();
+        }
+        supplierItemService.setItemsForSupplier(id, request.getItemIds());
+        return ResponseEntity.ok(Map.of("message", "Items updated successfully"));
+    }
+
+    @PostMapping("/{id}/items/{itemId}")
+    public ResponseEntity<?> addItemToSupplier(@PathVariable Long id, @PathVariable Long itemId) {
+        if (!supplierRepository.existsById(id)) {
+            return ResponseEntity.notFound().build();
+        }
+        supplierItemService.addItemToSupplier(id, itemId);
+        return ResponseEntity.ok(Map.of("message", "Item added to supplier successfully"));
+    }
+
+    @DeleteMapping("/{id}/items/{itemId}")
+    public ResponseEntity<?> removeItemFromSupplier(@PathVariable Long id, @PathVariable Long itemId) {
+        if (!supplierRepository.existsById(id)) {
+            return ResponseEntity.notFound().build();
+        }
+        supplierItemService.removeItemFromSupplier(id, itemId);
+        return ResponseEntity.ok(Map.of("message", "Item removed from supplier successfully"));
     }
 }

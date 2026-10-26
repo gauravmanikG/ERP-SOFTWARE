@@ -12,36 +12,19 @@
 
 ```
 silver-muller-seals/
-├── index.html
-├── package.json              # frontend (Vite + React)
-├── vite.config.js            # includes a dev proxy: /api -> http://localhost:4000
-├── tailwind.config.js
-├── postcss.config.js
-├── src/
-│   ├── main.jsx
-│   ├── App.jsx
-│   ├── data/                 # colors, nav content, admin-form field definitions
-│   ├── lib/
-│   │   └── api.js            # frontend's REST client for the backend below
-│   ├── hooks/
-│   │   └── useCompanyMaster.js  # admin-screen state, calls api.js
-│   ├── components/
-│   └── pages/
-└── backend/                  # Spring Boot + PostgreSQL API
-    ├── pom.xml
-    ├── .env.example           # env vars to set before running
-    └── src/main/
-        ├── java/com/silvermuller/seals/
-        │   ├── SealsApplication.java        # entry point
-        │   ├── CompanyRepository.java        # JdbcTemplate data access
-        │   ├── config/CorsConfig.java
-        │   ├── controller/
-        │   │   ├── CompanyController.java    # GET / POST / PUT / DELETE /api/companies
-        │   │   └── HealthController.java     # GET /api/health
-        │   └── util/FieldMapper.java         # camelCase <-> snake_case field mapping
-        └── resources/
-            ├── application.properties
-            └── schema.sql     # the `companies` table (auto-run on startup)
+├── frontend/                 # Vite + React
+│   ├── vite.config.js        # dev proxy: /api -> http://localhost:4000
+│   └── src/modules/          # crm, engineering, home, inventory, maintenance, masters, purchase, settings
+├── backend/                  # Spring Boot + PostgreSQL API
+│   ├── run.ps1               # loads .env, starts the API on :4000
+│   └── src/main/
+│       ├── java/com/silvermuller/seals/
+│       │   ├── common/       # config (CORS, startup data, migrations), exceptions, health
+│       │   └── modules/      # crm, inventory, maintenance, masters, purchase
+│       └── resources/
+│           ├── schema.sql    # every table (DDL only, runs on each start)
+│           └── seed-data.sql # default rows, seeded once per database
+└── docs/                     # startup-data-rules.md and module notes
 ```
 
 ## 1. Set up PostgreSQL
@@ -71,9 +54,9 @@ cd backend
 mvn spring-boot:run
 ```
 
-The app runs on `http://localhost:4000` and creates the `companies` table
-automatically on startup (`schema.sql` is safe to re-run — everything is
-`IF NOT EXISTS`).
+The app runs on `http://localhost:4000` and creates or upgrades its tables
+on startup (`schema.sql` is safe to re-run; startup never resets data, see
+`docs/startup-data-rules.md`).
 
 Check it's talking to the database: open `http://localhost:4000/api/health`
 — you should see `{"ok":true,"db":"connected"}`.
@@ -88,38 +71,13 @@ java -jar target/seals-backend.jar
 
 In a second terminal:
 ```
+cd frontend
 npm install
 npm run dev
 ```
-Opens `http://localhost:5173`. In dev, Vite proxies any `/api/...` request
-to the backend on port 4000 (see `vite.config.js`), so the frontend just
-calls `fetch("/api/companies")` with no CORS setup needed (Spring Boot's
-`CorsConfig` also allows this directly, for when you don't use the proxy).
-
-## Where the data is now stored
-
-The "Company Master" admin screens (Screen 1: Entry Form, Screen 2: Records)
-read and write a real `companies` table in your PostgreSQL database — see
-`backend/src/main/resources/schema.sql` for every column. Concretely:
-
-- **Save** on Screen 1 → `POST /api/companies` (or `PUT .../{id}` when
-  editing) → an `INSERT`/`UPDATE` against the `companies` table.
-- **Screen 2's list** → `GET /api/companies` → a `SELECT * FROM companies`.
-- **Delete** → `DELETE /api/companies/{id}`.
-- The uploaded logo is stored as a base64 data URL in the `logo` text
-  column — fine for a prototype; for production you'd typically upload the
-  image to object storage (S3, Supabase Storage, etc.) and store just the
-  URL instead, to keep the database small and page loads fast.
-
-This is a genuine multi-user backend: anyone hitting the frontend (on any
-device) talks to the same API and the same database, so everyone sees the
-same records.
-
-The Contact page's "Send Enquiry" form still doesn't persist anywhere — it
-only flips a `sent` flag in memory. If you want those enquiries saved too,
-the same pattern applies: add an `enquiries` table + a new
-`EnquiryController`/`EnquiryRepository` pair in the backend, and call it
-from `ContactPage.jsx`.
+Opens `http://localhost:5173`. The pages call the backend on port 4000; the
+browser origins allowed to do so are set by `app.cors.allowed-origins` in
+`application.properties` (override with the `APP_CORS_ALLOWED_ORIGINS` env var).
 
 ## Production notes (brief)
 
@@ -129,5 +87,6 @@ from `ContactPage.jsx`.
   (Render, Railway, Fly.io, an EC2 box, etc.), point
   `SPRING_DATASOURCE_URL`/`SPRING_DATASOURCE_USERNAME`/`SPRING_DATASOURCE_PASSWORD`
   at your production Postgres instance, and set the frontend's
-  `VITE_API_URL` env var to that backend's public URL (see `src/lib/api.js`)
-  before building the frontend with `npm run build`.
+  `VITE_API_URL` env var to that backend's public URL before building the
+  frontend with `npm run build`, and set `APP_CORS_ALLOWED_ORIGINS` on the
+  backend to the frontend's public URL.

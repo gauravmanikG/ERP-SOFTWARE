@@ -3,9 +3,8 @@ package com.silvermuller.seals.modules.inventory.service;
 import com.silvermuller.seals.common.exception.ResourceNotFoundException;
 import com.silvermuller.seals.modules.inventory.dto.CreateCategoryRequest;
 import com.silvermuller.seals.modules.inventory.model.CategoryMaster;
-import com.silvermuller.seals.modules.inventory.model.Master;
 import com.silvermuller.seals.modules.inventory.repository.CategoryMasterRepository;
-import com.silvermuller.seals.modules.inventory.repository.MasterRepository;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,13 +17,13 @@ import java.util.Map;
 public class CategoryService {
 
     private final CategoryMasterRepository categoryMasterRepository;
-    private final MasterRepository masterRepository;
+    private final JdbcTemplate jdbc;
 
     public CategoryService(
             CategoryMasterRepository categoryMasterRepository,
-            MasterRepository masterRepository) {
+            JdbcTemplate jdbc) {
         this.categoryMasterRepository = categoryMasterRepository;
-        this.masterRepository = masterRepository;
+        this.jdbc = jdbc;
     }
 
     public List<CategoryMaster> getAll() {
@@ -53,26 +52,23 @@ public class CategoryService {
     public void delete(Long id) {
         CategoryMaster category = categoryMasterRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Category not found with ID: " + id));
-        String name = category.getCategoryName();
-
-        for (Master master : masterRepository.findByCategoryIgnoreCase(name)) {
-            masterRepository.delete(master);
-        }
-
         categoryMasterRepository.delete(category);
     }
 
     private Map<String, Object> usageFor(CategoryMaster category) {
         String name = category.getCategoryName();
-        long masters = masterRepository.countByCategoryIgnoreCase(name);
+        Integer itemCount = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM public.item_master WHERE category = ? OR group_name = ?",
+                Integer.class, name, name);
+        long count = itemCount != null ? itemCount : 0;
 
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("id", category.getId());
         body.put("categoryName", name);
-        body.put("masterCount", masters);
-        body.put("canDelete", true);
-        if (masters > 0) {
-            body.put("message", "'" + name + "' has " + masters + " item(s). Delete will remove all items in this category.");
+        body.put("itemCount", count);
+        body.put("canDelete", count == 0);
+        if (count > 0) {
+            body.put("message", "'" + name + "' has " + count + " item(s). Delete items first if you want to remove this category.");
         } else {
             body.put("message", "'" + name + "' is not used. It can be deleted.");
         }

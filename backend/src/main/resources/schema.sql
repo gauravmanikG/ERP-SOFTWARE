@@ -57,15 +57,40 @@ CREATE TABLE IF NOT EXISTS public.item_master (
   updated_at               TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Backward compatibility columns for item_master
+-- Upgrades databases whose item_master was created before these columns existed.
 ALTER TABLE public.item_master
   ADD COLUMN IF NOT EXISTS hsn_code VARCHAR(50),
+  ADD COLUMN IF NOT EXISTS segment VARCHAR(255),
+  ADD COLUMN IF NOT EXISTS region VARCHAR(255),
+  ADD COLUMN IF NOT EXISTS application VARCHAR(255),
+  ADD COLUMN IF NOT EXISTS ref_no VARCHAR(255),
+  ADD COLUMN IF NOT EXISTS oem VARCHAR(255),
+  ADD COLUMN IF NOT EXISTS corteco_no VARCHAR(255),
+  ADD COLUMN IF NOT EXISTS category VARCHAR(255),
+  ADD COLUMN IF NOT EXISTS image TEXT,
+  ADD COLUMN IF NOT EXISTS material VARCHAR(255),
+  ADD COLUMN IF NOT EXISTS color VARCHAR(255),
+  ADD COLUMN IF NOT EXISTS uom VARCHAR(100),
+  ADD COLUMN IF NOT EXISTS price NUMERIC(15,2),
+  ADD COLUMN IF NOT EXISTS type VARCHAR(255),
+  ADD COLUMN IF NOT EXISTS fitting_position VARCHAR(255),
+  ADD COLUMN IF NOT EXISTS swirl_type VARCHAR(255),
+  ADD COLUMN IF NOT EXISTS file_name VARCHAR(255),
+  ADD COLUMN IF NOT EXISTS domestic_exports VARCHAR(255),
+  ADD COLUMN IF NOT EXISTS cross_reference VARCHAR(255),
   ADD COLUMN IF NOT EXISTS drawing_image TEXT,
   ADD COLUMN IF NOT EXISTS safety_lead_time NUMERIC(10,2),
   ADD COLUMN IF NOT EXISTS procurement_lead_time NUMERIC(10,2),
-  ADD COLUMN IF NOT EXISTS total_lead_time NUMERIC(10,2),
-  ADD COLUMN IF NOT EXISTS item_group_id BIGINT REFERENCES public.item_group(id),
-  ADD COLUMN IF NOT EXISTS item_subgroup_id BIGINT REFERENCES public.item_subgroup(id);
+  ADD COLUMN IF NOT EXISTS total_lead_time NUMERIC(10,2);
+
+-- The one place that turns an item_master row into the code / name / uom other modules display and store.
+CREATE OR REPLACE VIEW public.item_master_lookup AS
+SELECT id,
+       COALESCE(NULLIF(sms_new_part_no, ''), NULLIF(main_fg_code, ''), NULLIF(old_code, ''), 'ITM-' || id) AS code,
+       COALESCE(NULLIF(description_size, ''), NULLIF(subgroup, ''), 'Item ' || id) AS description,
+       category,
+       COALESCE(NULLIF(purchased_uom, ''), NULLIF(uom, ''), 'PCS') AS unit_of_measurement
+FROM public.item_master;
 
 -- Table 2: department_master
 CREATE TABLE IF NOT EXISTS public.department_master (
@@ -81,6 +106,11 @@ CREATE TABLE IF NOT EXISTS public.department_master (
   updated_at       TIMESTAMPTZ DEFAULT NOW()
 );
 
+ALTER TABLE public.department_master ADD COLUMN IF NOT EXISTS dept_code VARCHAR(50);
+ALTER TABLE public.department_master ADD COLUMN IF NOT EXISTS dept_number INT;
+ALTER TABLE public.department_master ADD COLUMN IF NOT EXISTS category VARCHAR(100);
+ALTER TABLE public.department_master ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'ACTIVE';
+ALTER TABLE public.department_master ADD COLUMN IF NOT EXISTS notes TEXT;
 
 -- Table 3: operation_master
 CREATE TABLE IF NOT EXISTS public.operation_master (
@@ -138,6 +168,23 @@ CREATE INDEX IF NOT EXISTS idx_supplier_code ON public.supplier_master(supplier_
 CREATE INDEX IF NOT EXISTS idx_supplier_name ON public.supplier_master(supplier_name);
 CREATE INDEX IF NOT EXISTS idx_supplier_gstin ON public.supplier_master(gstin);
 CREATE INDEX IF NOT EXISTS idx_supplier_state ON public.supplier_master(state);
+
+-- =============================================================================
+-- Supplier Items Mapping Table
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS public.supplier_item (
+    id BIGSERIAL PRIMARY KEY,
+    supplier_id BIGINT NOT NULL,
+    item_id BIGINT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(50) NOT NULL DEFAULT 'SYSTEM',
+    FOREIGN KEY (supplier_id) REFERENCES public.supplier_master(id) ON DELETE CASCADE,
+    FOREIGN KEY (item_id) REFERENCES public.item_master(id) ON DELETE CASCADE,
+    CONSTRAINT unique_supplier_item UNIQUE(supplier_id, item_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_supplier_item_supplier ON public.supplier_item(supplier_id);
+CREATE INDEX IF NOT EXISTS idx_supplier_item_item ON public.supplier_item(item_id);
 
 -- =============================================================================
 -- Customer Master Schema (Book 3 & Book 5 matched attributes)
@@ -839,7 +886,7 @@ CREATE TABLE IF NOT EXISTS public.service_po_schedules (
   CONSTRAINT ck_spo_schedule_amt CHECK (planned_amount >= 0)
 );
 
--- Service Acceptance / Service Entry Sheet. Never touches stock or inventory_transaction.
+-- Service Acceptance / Service Entry Sheet. Never touches stock.
 CREATE TABLE IF NOT EXISTS public.service_po_acceptances (
   id                    BIGSERIAL PRIMARY KEY,
   acceptance_number     VARCHAR(30) NOT NULL UNIQUE,
@@ -1686,5 +1733,5 @@ CREATE TABLE IF NOT EXISTS public.app_seed_registry (
   first_seeded_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Note: master_id → item_master_id rename is already applied to the database via previous startup.
--- Do not re-apply; columns are already named item_master_id in all tables.
+-- Databases created before the master -> item_master consolidation are brought in line by data migrations
+-- 2026-10-25-06 and -07 (StartupDataMigrations): job-work columns re-pointed to item_master, old tables dropped.

@@ -14,7 +14,6 @@ import java.util.Map;
 
 /** HTTP layer for PO by PR. All rules and quantity checks live in {@link PoByPrService}. */
 @RestController
-@CrossOrigin(origins = "*")
 @RequestMapping("/api/new-po/pr")
 public class PoByPrController {
 

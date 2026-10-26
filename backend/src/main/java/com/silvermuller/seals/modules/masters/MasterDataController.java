@@ -16,7 +16,6 @@ import java.util.Map;
  * Any "meaning" or other extra field in a request body is ignored.
  */
 @RestController
-@CrossOrigin(origins = "*")
 @RequestMapping("/api/masters/{key}")
 public class MasterDataController {
 

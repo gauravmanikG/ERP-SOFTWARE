@@ -1,7 +1,6 @@
 import { useResizableColumns, ResizableColGroup, ColumnResizeHandle } from "../../../shared/components/ResizableTable";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { Eye, Pencil, Trash2, Search, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
-import { REAL_ITEM_MASTER_DATA } from "../data/realItemMasterData";
 
 // Master lists extracted directly from the reference sheet
 const GROUP_OPTIONS = [
@@ -40,41 +39,6 @@ const SUBSUBGROUP_OPTIONS = [
 const PRODUCT_OPTIONS = GROUP_OPTIONS;
 const SEGMENT_OPTIONS = SUBGROUP_OPTIONS;
 const REGION_OPTIONS = SUBSUBGROUP_OPTIONS;
-
-const DEFAULT_PROCUREMENT_OPTIONS = [
-  "IN HOUSE",
-  "OUTSOURCE",
-  "BUY/INHOUSE",
-  "IMPORTED"
-];
-
-const DEFAULT_PROCESS_OPTIONS = [
-  { code: "PR-1", label: "PR-1 : 1 : Metal Open Type : In-house" },
-  { code: "PR-2", label: "PR-2 : 2 : Metal Close Type : In-house" },
-  { code: "PR-3", label: "PR-3 : 5 : Half Rubber : Open" },
-  { code: "PR-4", label: "PR-4 : 6 : Half Rubber : Close" },
-  { code: "PR-5", label: "PR-5 : 7 : Full Rubber : Open" },
-  { code: "PR-7", label: "PR-7 : 8 : Full Rubber : Close" },
-  { code: "PR-8", label: "PR-8 : 9 : Cassette Seal" },
-  { code: "PR-9", label: "PR-9 : 10 : Combi Seal" },
-  { code: "PR-10", label: "PR-10 : 11 : PTFE Moulded (no inner shell)" },
-  { code: "PR-11", label: "PR-11 : 12 : PTFE Moulded (with inner shell)" },
-  { code: "PR-12", label: "PR-12 : 13 : PTFE Fitted" },
-  { code: "PR-13", label: "PR-13 : 14 : Hub Seal SKF" },
-  { code: "PR-14", label: "PR-14 : 15 : Hub Seal National" },
-  { code: "PR-15", label: "PR-15 : 3: ABS SEAL" },
-  { code: "PR-51", label: "PR-51 : 16 : PTFE Moulded (no inner shell ) Half Rubber" },
-  { code: "PR-16", label: "PR-16 : NA" }
-];
-
-const DEFAULT_HSN_OPTIONS = [
-  { code: "8484", desc: "Gaskets and joints of metal sheeting" },
-  { code: "8487", desc: "Machinery parts without electrical connectors" },
-  { code: "4016", desc: "Vulcanised rubber articles" },
-  { code: "3926", desc: "Plastics articles" },
-  { code: "7318", desc: "Screws, bolts, nuts, washers" },
-  { code: "8482", desc: "Ball or roller bearings" }
-];
 
 const INITIAL_ITEM_FORM = {
   // Core Classification (Row 1)
@@ -250,7 +214,6 @@ function getNextIncrementalSuffix(savedItems = [], baseOffset = 0) {
   return String(nextVal).padStart(5, "0");
 }
 
-const DEFAULT_SAVED_ITEMS = REAL_ITEM_MASTER_DATA;
 
 const STORAGE_KEY = "sms_engineering_item_master_v3";
 
@@ -308,7 +271,7 @@ export function ItemMasterFormPage({
   });
 
   // Master dataset stored in state directly from PostgreSQL database (no localStorage)
-  const [savedItems, setSavedItems] = useState(REAL_ITEM_MASTER_DATA);
+  const [savedItems, setSavedItems] = useState([]);
 
   // Uniqueness check for item description (case-insensitive)
   const isDuplicateDescription = useMemo(() => {
@@ -325,9 +288,9 @@ export function ItemMasterFormPage({
   // Fetch all FG items directly from backend PostgreSQL item_master table
   const fetchDbItems = () => {
     fetch("http://localhost:4000/api/inventory/items?type=FG")
-      .then((res) => (res.ok ? res.json() : []))
+      .then((res) => (res.ok ? res.json() : null))
       .then((dbItems) => {
-        if (Array.isArray(dbItems) && dbItems.length > 0) {
+        if (Array.isArray(dbItems)) {
           const mapped = dbItems.map((it) => {
             const code = it.sms_new_part_no || it.item_code || "";
             return {
@@ -342,7 +305,7 @@ export function ItemMasterFormPage({
               group: it.group_name || "FG",
               group_name: it.group_name || "FG",
               subgroup: it.subgroup || "",
-              product: it.group_name || it.subgroup || "FG",
+              product: it.subgroup || "",
               segment: it.segment || "",
               region: it.region || "",
               sub_subgroup: it.region || "",
@@ -404,46 +367,35 @@ export function ItemMasterFormPage({
     fontSize: 11
   };
 
-  // Master lists loaded dynamically from PostgreSQL / APIs
-  const [procurementList, setProcurementList] = useState(DEFAULT_PROCUREMENT_OPTIONS);
-  const [processList, setProcessList] = useState(DEFAULT_PROCESS_OPTIONS);
-  const [hsnList, setHsnList] = useState(DEFAULT_HSN_OPTIONS);
+  // Master lists come only from PostgreSQL, so an entry deleted in its master never shows here
+  const [procurementList, setProcurementList] = useState([]);
+  const [processList, setProcessList] = useState([]);
+  const [hsnList, setHsnList] = useState([]);
 
   useEffect(() => {
     fetch("http://localhost:4000/api/inventory/procurement-master")
-      .then((res) => (res.ok ? res.json() : []))
+      .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (Array.isArray(data) && data.length > 0) {
-          const list = data.map((d) => d.procurementType || d.procurementName).filter(Boolean);
-          if (list.length > 0) setProcurementList(Array.from(new Set(list)));
+        if (Array.isArray(data)) {
+          setProcurementList(Array.from(new Set(data.map((d) => d.procurementType || d.procurementName).filter(Boolean))));
         }
       })
       .catch((err) => console.warn("Could not fetch procurement master:", err));
 
     fetch("http://localhost:4000/api/inventory/process-master")
-      .then((res) => (res.ok ? res.json() : []))
+      .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (Array.isArray(data) && data.length > 0) {
-          const list = data.map((p) => ({
-            code: p.processCode,
-            label: `${p.processCode} : ${p.processDescription || ""}`
-          }));
-          if (list.length > 0) setProcessList(list);
+        if (Array.isArray(data)) {
+          setProcessList(data.map((p) => ({ code: p.processCode, label: `${p.processCode} : ${p.processDescription || ""}` })));
         }
       })
       .catch((err) => console.warn("Could not fetch process master:", err));
 
     fetch("http://localhost:4000/api/purchase/hsn-master")
-      .then((res) => (res.ok ? res.json() : []))
+      .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (Array.isArray(data) && data.length > 0) {
-          const list = data
-            .map((h) => ({
-              code: h.hsnSacCode || h.hsnCode,
-              desc: h.description || ""
-            }))
-            .filter((h) => Boolean(h.code));
-          if (list.length > 0) setHsnList(list);
+        if (Array.isArray(data)) {
+          setHsnList(data.map((h) => ({ code: h.hsnSacCode || h.hsnCode, desc: h.description || "" })).filter((h) => Boolean(h.code)));
         }
       })
       .catch((err) => console.warn("Could not fetch HSN master:", err));
@@ -495,26 +447,28 @@ export function ItemMasterFormPage({
   };
 
   // Execute Delete
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!deleteTarget) return;
-    const deletedPartNo = deleteTarget.sms_new_part_no || "Item";
-    if (deletedPartNo) {
-      fetch(`http://localhost:4000/api/inventory/items/by-code/${encodeURIComponent(deletedPartNo)}`, {
-        method: "DELETE"
-      })
-        .then(() => {
-          window.dispatchEvent(new CustomEvent("SMS_ITEM_MASTER_UPDATED"));
-          fetchDbItems();
-        })
-        .catch(console.warn);
-    }
-    setSavedItems((prev) => prev.filter((item) => item.id !== deleteTarget.id));
-    if (detailItem?.id === deleteTarget.id) {
-      setDetailItem(null);
-    }
+    const target = deleteTarget;
+    const deletedPartNo = target.sms_new_part_no || "Item";
     setDeleteTarget(null);
-    setToastMessage(`Item "${deletedPartNo}" deleted successfully from PostgreSQL database!`);
-    setTimeout(() => setToastMessage(null), 4000);
+    let message;
+    try {
+      const res = await fetch(`http://localhost:4000/api/inventory/items/${target.id}`, { method: "DELETE" });
+      if (res.ok) {
+        if (detailItem?.id === target.id) setDetailItem(null);
+        window.dispatchEvent(new CustomEvent("SMS_ITEM_MASTER_UPDATED"));
+        message = `Item "${deletedPartNo}" deleted.`;
+      } else {
+        const err = await res.json().catch(() => ({}));
+        message = err.message || `Item "${deletedPartNo}" could not be deleted (HTTP ${res.status}).`;
+      }
+    } catch (e) {
+      message = `Item "${deletedPartNo}" was not deleted: the server could not be reached.`;
+    }
+    fetchDbItems();
+    setToastMessage(message);
+    setTimeout(() => setToastMessage(null), 5000);
   };
 
   const handleInputChange = (field, value) => {
@@ -637,7 +591,7 @@ export function ItemMasterFormPage({
   };
 
   // Save Item (handles both Create and Update)
-  const handleSaveItem = (e) => {
+  const handleSaveItem = async (e) => {
     e.preventDefault();
     if (!formData.sms_new_part_no.trim()) {
       alert("Please enter the Item Code (SMS Part No.) - Required");
@@ -713,39 +667,30 @@ export function ItemMasterFormPage({
       id: editingId || null
     };
 
-    fetch("http://localhost:4000/api/inventory/items", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((saved) => {
-        window.dispatchEvent(new CustomEvent("SMS_ITEM_MASTER_UPDATED", { detail: saved || payload }));
-        fetchDbItems();
-      })
-      .catch((err) => console.warn("Could not sync FG item to backend:", err));
-
-    if (editingId) {
-      // Update existing item
-      setSavedItems((prev) =>
-        prev.map((item) => (item.id === editingId ? { ...formData, ...payload, id: editingId } : item))
-      );
-      setIsModalOpen(false);
-      setEditingId(null);
-      setToastMessage(`Item "${formData.sms_new_part_no}" updated successfully in PostgreSQL database!`);
-      setTimeout(() => setToastMessage(null), 4000);
-    } else {
-      // Create new item
-      const newItem = {
-        ...formData,
-        ...payload,
-        id: Date.now()
-      };
-      setSavedItems((prev) => [newItem, ...prev]);
-      setIsModalOpen(false);
-      setToastMessage(`Item "${newItem.sms_new_part_no}" created successfully in PostgreSQL database!`);
-      setTimeout(() => setToastMessage(null), 4000);
+    // The list only changes once the server has saved the item; a refused save keeps the form open with the reason.
+    let res;
+    try {
+      res = await fetch("http://localhost:4000/api/inventory/items", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+    } catch (err) {
+      alert("The item was not saved: the server could not be reached.");
+      return;
     }
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      alert(err.message || `The item was not saved (HTTP ${res.status}).`);
+      return;
+    }
+    const saved = await res.json().catch(() => null);
+    window.dispatchEvent(new CustomEvent("SMS_ITEM_MASTER_UPDATED", { detail: saved || payload }));
+    fetchDbItems();
+    setIsModalOpen(false);
+    setEditingId(null);
+    setToastMessage(`Item "${formData.sms_new_part_no}" ${editingId ? "updated" : "created"}.`);
+    setTimeout(() => setToastMessage(null), 4000);
   };
 
   // Reset page when search or filters change

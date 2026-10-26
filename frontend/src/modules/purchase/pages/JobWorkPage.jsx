@@ -478,7 +478,7 @@ function WorkerBalances({ user, workerId }) {
   if (rows.length === 0) return <Empty text="Nothing is with this worker right now." />;
   return (
     <Table headers={["Item", "Category", "Qty with worker"]} minWidth={420}>
-      {rows.map((r) => <tr key={`${r.masterId}-${r.category}`}><Td>{r.itemCode}</Td><Td>{r.category}</Td><Td right>{qty(r.balanceQty)}</Td></tr>)}
+      {rows.map((r) => <tr key={`${r.itemMasterId}-${r.category}`}><Td>{r.itemCode}</Td><Td>{r.category}</Td><Td right>{qty(r.balanceQty)}</Td></tr>)}
     </Table>
   );
 }
@@ -551,7 +551,7 @@ function IndentForm({ user, locations, operations, categories, items, editing, o
     requestingDepartmentId: String(editing.requestingDepartmentId), sourceDepartmentId: String(editing.sourceDepartmentId),
     reason: editing.reason || "", requiredDispatchDate: editing.requiredDispatchDate || "", requiredReturnDate: editing.requiredReturnDate || "",
     productionRef: editing.productionRef || "", estimatedCost: String(editing.estimatedCost || ""), remarks: editing.remarks || "",
-    lines: editing.lines.map((l) => ({ masterId: String(l.masterId), category: l.category, operationId: String(l.operationId), requiredQty: String(l.requiredQty), remarks: l.remarks || "" }))
+    lines: editing.lines.map((l) => ({ masterId: String(l.itemMasterId), category: l.category, operationId: String(l.operationId), requiredQty: String(l.requiredQty), remarks: l.remarks || "" }))
   } : { requestingDepartmentId: "", sourceDepartmentId: "", reason: "", requiredDispatchDate: TODAY(), requiredReturnDate: addDays(20), productionRef: "", estimatedCost: "", remarks: "",
     lines: [{ masterId: "", category: "", operationId: "", requiredQty: "", remarks: "" }] };
   const [f, setF] = useState(init);
@@ -845,7 +845,7 @@ function OrderForm({ user, workers, locations, operations, categories, items, fr
     if (!indentId) return;
     api("GET", `/indents/${indentId}`, user).then((d) => {
       setF((x) => ({ ...x, requestingDepartmentId: String(d.requestingDepartmentId), sourceDepartmentId: String(d.sourceDepartmentId) }));
-      setLines(d.lines.map((l) => ({ indentLineNo: l.lineNo, masterId: String(l.masterId), category: l.category, operationId: String(l.operationId), inputQty: String(l.requiredQty), remarks: "" })));
+      setLines(d.lines.map((l) => ({ indentLineNo: l.lineNo, masterId: String(l.itemMasterId), category: l.category, operationId: String(l.operationId), inputQty: String(l.requiredQty), remarks: "" })));
     }).catch((e) => setError(e.message));
   }, [indentId, user]);
   const setLine = (i, k, v) => setLines((ls) => ls.map((l, j) => (j === i ? { ...l, [k]: v } : l)));
@@ -1742,10 +1742,10 @@ export function JobWorkPage({ screen = "dashboard", onBackToHome, onOpenSidebar,
       api("GET", "/locations", user).catch(() => []),
       api("GET", "/operations", user).catch(() => []),
       api("GET", "/categories", user).catch(() => []),
-      plainGet("/inventory/master"),
+      plainGet("/inventory/items"),
       api("GET", "/indents?size=200", user).then((d) => d.content).catch(() => [])
     ]);
-    setRefs({ workers, locations, operations, categories, items: items.map((m) => ({ id: m.id, code: m.code, description: m.description, category: m.category, unitOfMeasurement: m.unitOfMeasurement })), indents });
+    setRefs({ workers, locations, operations, categories, items: items.map((m) => ({ id: m.id, code: m.item_code, description: m.item_name, category: m.category, unitOfMeasurement: m.uom_clean })), indents });
   }, [user]);
   useEffect(() => { loadRefs(); }, [loadRefs]);
 

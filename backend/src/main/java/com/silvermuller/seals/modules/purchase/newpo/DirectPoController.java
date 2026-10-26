@@ -14,7 +14,6 @@ import java.util.Map;
 
 /** Direct PO endpoints. Separate from PO by PR; no PR is read or changed here. */
 @RestController
-@CrossOrigin(origins = "*")
 @RequestMapping("/api/new-po/direct")
 public class DirectPoController {
 

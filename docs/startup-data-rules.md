@@ -1,5 +1,14 @@
 # Startup data rules (backend)
 
+## Schema management principle
+
+**Single source of truth:** `schema.sql` defines every table and column. Hibernate runs in `validate` mode — it only checks that JPA entities match the schema, never auto-generates or modifies it. This ensures:
+- No surprise schema changes at runtime
+- Every schema modification is deliberate, reviewed, and version-controlled
+- Schema validation fails fast if an entity field is added without updating `schema.sql`
+
+## Data safety principle
+
 **Rule: an ordinary application start must never delete, reset or overwrite existing business or master data.**
 Restarting the backend may only *create what is missing* (tables, columns, default rows). Anything that changes an
 existing row is a deliberate, one-time, reviewed migration.
@@ -24,8 +33,8 @@ Every default row belongs to exactly one policy, declared above its statement (`
 
 | Policy | Meaning | On restart | If the user deletes it |
 |---|---|---|---|
-| `system <reason>` | The code looks the row up by name and breaks without it. Today: transaction types `Material Transfer`, `Internal Material Return`, `Material Send for Job work`; departments `Store`, `Rejection Store`, `External Job Work`, `Quality Hold`, `Scrap Yard`. | inserted only if missing; existing values are never changed | it is **restored** on the next start (documented, intentional) |
-| `once` | A user-managed default (categories, operations, procurement/process types, HSN codes, PO categories, demo items `MAT-001`..`MAT-005`, remaining departments and transaction types, bulk seed files, item groups). | inserted only the first time its key is seen in this database, then recorded in `public.app_seed_registry` | it **stays deleted**: the registry key remains, so it is never seeded again |
+| `once` | Every default row: categories, operations, procurement/process types, HSN codes, PO categories, demo items `MAT-001`..`MAT-005`, all departments (including `Store`, `Rejection Store`, `External Job Work`, `Quality Hold`, `Scrap Yard`), bulk seed files, item groups. | inserted only the first time its key is seen in this database, then recorded in `public.app_seed_registry` | it **stays deleted or renamed**: the registry key remains, so it is never seeded again |
+| `system <reason>` | Still understood by the guard, but **not used** in `seed-data.sql` any more. It re-created a missing row on every start, so a renamed or deleted department came back under its old name. Job Work now reports a clear error if a location it needs is missing. | inserted only if missing | it is restored on the next start |
 
 The registry is the tombstone. To bring back a deleted user-managed default deliberately, re-create it in the
 application (or delete its `app_seed_registry` row on a test database and restart). On a database that already had
@@ -57,7 +66,11 @@ reads them as cp1252 and stores corrupted text such as `ðŸ› ` instead of `�
 
 ## I need to...
 
-- **Add a table or column:** add `CREATE TABLE IF NOT EXISTS` / `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` to `schema.sql`.
+- **Add a table or column:**
+  1. Add the JPA entity field with `@Column` annotation
+  2. Add the corresponding `CREATE TABLE IF NOT EXISTS` or `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` to `schema.sql`
+  3. The startup will validate that `schema.sql` matches the entities (Hibernate `ddl-auto=validate`)
+  4. **Never rely on Hibernate to auto-create schema** — schema.sql is the single source of truth, manually maintained
 - **Add a default row (department, category, type...):** add it to the matching `seed-policy: once` statement in
   `seed-data.sql` (or `system` only if the code cannot work without it, with the reason). It is created once on each
   database, never touches an existing row, and stays deleted if a user deletes it.
@@ -67,7 +80,10 @@ reads them as cp1252 and stores corrupted text such as `ðŸ› ` instead of `�
   `StartupDataMigrations.MIGRATIONS` with a new id (`YYYY-MM-DD-NN-short-name`), one SQL statement and a description of
   what it changes and why it is safe. It runs once per database and is recorded in `public.app_data_migration`. Never
   edit or delete a shipped migration: its checksum is stored and startup fails if it changes. Test it on a disposable
-  database first.
+  database first. A conditional schema fix may be a single `DO $$ ... $$` block (it must be safe on a new database too).
+- **A migration whose SQL refers to tables or columns that were removed**: pass `retired = true` and leave its SQL
+  unchanged. Databases that already ran it keep verifying its checksum; a new database records it as skipped and never
+  executes it (`2026-10-24-04` and `2026-10-25-05` are retired).
 - **Add a new startup hook** (`ApplicationRunner`, `CommandLineRunner`, `@PostConstruct`, `@EventListener`...): review
   it against this page, then add it to `REVIEWED_STARTUP_HOOKS` in `StartupSafetyGuardTest` with the reason it is safe.
   The build fails until you do.

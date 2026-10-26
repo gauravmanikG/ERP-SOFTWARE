@@ -47,9 +47,9 @@ Invariant enforced at posting: received = accepted + rejected + pending.
 
 ## 5. Stock and inventory (audit; decision needed)
 
-- The GRN module does **not** write to inventory tables. It has no reference to `inventory_transaction` or any
-  stock balance. Receipts therefore do not change stock.
-- The inventory module (`InventoryTransactionService`, `inventory_transaction`) and job work do post stock movements.
+- The GRN module does **not** write to any stock table or stock balance. Receipts therefore do not change stock.
+- The inventory transaction feature (stock movements) has been removed; there is currently no stock ledger apart
+  from the job-work worker ledger.
 - No purchase-receipt stock rule (which store, which movement type, at accepted or received quantity, and how
   rejected goods are handled) is defined in the code or the existing documentation.
 - **Decision needed** before any GRN-to-inventory posting: which quantity posts to stock (accepted only, as the

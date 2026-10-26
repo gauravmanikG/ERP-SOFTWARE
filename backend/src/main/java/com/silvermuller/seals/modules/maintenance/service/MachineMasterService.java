@@ -1,5 +1,6 @@
 package com.silvermuller.seals.modules.maintenance.service;
 
+import com.silvermuller.seals.common.exception.ResourceNotFoundException;
 import com.silvermuller.seals.modules.maintenance.dto.CreateMachineRequest;
 import com.silvermuller.seals.modules.maintenance.dto.MachineResponse;
 import com.silvermuller.seals.modules.maintenance.model.MachineMaster;
@@ -39,7 +40,7 @@ public class MachineMasterService {
 
     public MachineResponse getMachineById(Long id) {
         MachineMaster m = machineRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Machine not found with id: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Machine not found with id: " + id));
         return toResponse(m);
     }
 
@@ -75,7 +76,7 @@ public class MachineMasterService {
     @Transactional
     public MachineResponse updateMachine(Long id, CreateMachineRequest req) {
         MachineMaster m = machineRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Machine not found with id: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Machine not found with id: " + id));
 
         String machineNo = req.getMachineNo().trim();
         machineRepository.findByMachineNoIgnoreCase(machineNo).ifPresent(other -> {
@@ -105,7 +106,7 @@ public class MachineMasterService {
     @Transactional
     public void deleteMachine(Long id) {
         MachineMaster m = machineRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Machine not found with id: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Machine not found with id: " + id));
         machineRepository.delete(m);
     }
 

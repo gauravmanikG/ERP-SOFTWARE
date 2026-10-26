@@ -25,7 +25,6 @@ import {
   Globe,
   Share2
 } from "lucide-react";
-import fallbackCustomers from "../data/customersData.json";
 
 const INITIAL_CUSTOMER_FORM = {
   // Tab 1: All 22 Excel Sheet Attributes
@@ -209,54 +208,9 @@ export function CustomerMasterPage({
     customerAddress: ""
   });
 
-  // Map initial customer records from PostgreSQL dataset
-  const initialCustomers = useMemo(() => {
-    return (fallbackCustomers || []).map((c, idx) => ({
-      ...c,
-      id: c.id ?? (idx + 1),
-      checkByAccounts: c.check_by_accounts !== undefined ? Boolean(c.check_by_accounts) : Boolean(c.checkByAccounts),
-      customerCode: c.customer_code || c.customerCode || "",
-      checkBySales: c.check_by_sales !== undefined ? Boolean(c.check_by_sales) : Boolean(c.checkBySales),
-      customerName: c.customer_name || c.customerName || "",
-      billToAddress: c.bill_to_address || c.billToAddress || c.address || "",
-      customerAlias: c.customer_alias || c.customerAlias || "",
-      state: c.state || "",
-      country: c.country || "India",
-      shipToAddress: c.ship_to_address || c.shipToAddress || c.address || "",
-      billingSource: c.billing_source || c.billingSource || "Direct",
-      gstin: c.gstin || "",
-      city: c.city || "",
-      domesticExport: c.domestic_export || c.domesticExport || c.customer_type || c.customerType || "Domestic",
-      supplierCodeSms: c.supplier_code_sms || c.supplierCodeSms || "",
-      salesPerson: c.sales_person || c.salesPerson || c.contact_person || c.contactPerson || "",
-      salesContact: c.sales_contact || c.salesContact || c.phone || "",
-      salesEmail: c.sales_email || c.salesEmail || c.email || "",
-      modeOfPaymentReminder: c.mode_of_payment_reminder || c.modeOfPaymentReminder || "",
-      accountsContactDetails: c.accounts_contact_details || c.accountsContactDetails || "",
-      creditDays: c.credit_days !== undefined ? c.credit_days : (c.creditDays !== undefined ? c.creditDays : 30),
-      scm: c.scm || "",
-      customerAddress: c.customer_address || c.customerAddress || c.address || "",
-      // Tab 2 attributes
-      customerId: c.customer_id || c.customerId || c.customer_code || c.customerCode || "",
-      companyId: c.company_id || c.companyId || "COMP-001",
-      marketType: c.market_type || c.marketType || c.domestic_export || c.domesticExport || "Domestic",
-      customerCategory: c.customer_category || c.customerCategory || c.customer_type || c.customerType || "OEM",
-      customerGroup: c.customer_group || c.customerGroup || "Automotive",
-      customerType: c.customer_category || c.customerCategory || c.customer_type || c.customerType || "OEM",
-      pan: c.pan || "",
-      gstRegistrationType: c.gst_registration_type || c.gstRegistrationType || (c.gstin ? "REGISTERED" : "UNREGISTERED"),
-      udyamNo: c.udyam_no || c.udyamNo || "",
-      msmeCategory: c.msme_category || c.msmeCategory || "NOT_MSME",
-      paymentTermsId: c.payment_terms_id || c.paymentTermsId || "PT-30",
-      currency: c.currency || "INR",
-      creditLimit: c.credit_limit !== undefined ? c.credit_limit : (c.creditLimit !== undefined ? c.creditLimit : "500000.00"),
-      status: (c.status?.toUpperCase() === "INACTIVE" ? "Inactive" : c.status?.toUpperCase() === "BLOCKED" ? "Blocked" : "Active"),
-      stateCode: c.state_code || c.stateCode || "",
-      pincode: c.pincode || ""
-    }));
-  }, []);
 
-  const [customers, setCustomers] = useState(initialCustomers);
+  // Customers come only from PostgreSQL, so a deleted customer never reappears from a bundled copy
+  const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
   const [detailItem, setDetailItem] = useState(null);
@@ -276,7 +230,7 @@ export function CustomerMasterPage({
       const res = await fetch(`${getApiUrl()}/api/customers`);
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
+        if (Array.isArray(data)) {
           const mapped = data.map((c, idx) => ({
             ...c,
             id: c.id ?? (idx + 1),
@@ -402,14 +356,13 @@ export function CustomerMasterPage({
       if (res.ok) {
         setCustomers((prev) => prev.filter((item) => item.id !== deleteTarget.id));
         if (detailItem?.id === deleteTarget.id) setDetailItem(null);
-        setToastMessage(`Customer "${deletedName}" deleted from PostgreSQL database!`);
-      } else {
-        setCustomers((prev) => prev.filter((item) => item.id !== deleteTarget.id));
         setToastMessage(`Customer "${deletedName}" deleted.`);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setToastMessage(err.message || `Customer "${deletedName}" could not be deleted (HTTP ${res.status}).`);
       }
     } catch (e) {
-      setCustomers((prev) => prev.filter((item) => item.id !== deleteTarget.id));
-      setToastMessage(`Customer "${deletedName}" deleted.`);
+      setToastMessage(`Customer "${deletedName}" was not deleted: the server could not be reached.`);
     } finally {
       setDeleteTarget(null);
       setTimeout(() => setToastMessage(null), 4000);
@@ -513,36 +466,33 @@ export function CustomerMasterPage({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload)
         });
-        if (res.ok) {
-          const updated = await res.json();
-          setCustomers((prev) => prev.map((item) => (item.id === editingId ? { ...item, ...updated } : item)));
-          setToastMessage(`Customer "${payload.customerName}" updated in PostgreSQL!`);
-        } else {
-          setCustomers((prev) => prev.map((item) => (item.id === editingId ? { ...item, ...payload } : item)));
-          setToastMessage(`Customer "${payload.customerName}" updated.`);
-        }
+        if (!res.ok) return await showSaveError(res);
+        const updated = await res.json();
+        setCustomers((prev) => prev.map((item) => (item.id === editingId ? { ...item, ...updated } : item)));
+        setToastMessage(`Customer "${payload.customerName}" updated.`);
       } else {
         const res = await fetch(`${getApiUrl()}/api/customers`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload)
         });
-        if (res.ok) {
-          const created = await res.json();
-          setCustomers((prev) => [created, ...prev]);
-          setToastMessage(`Customer "${payload.customerName}" saved to PostgreSQL!`);
-        } else {
-          const newObj = { ...payload, id: Date.now() };
-          setCustomers((prev) => [newObj, ...prev]);
-          setToastMessage(`Customer "${payload.customerName}" created.`);
-        }
+        if (!res.ok) return await showSaveError(res);
+        const created = await res.json();
+        setCustomers((prev) => [created, ...prev]);
+        setToastMessage(`Customer "${payload.customerName}" saved.`);
       }
       setIsModalOpen(false);
       setTimeout(() => setToastMessage(null), 3000);
     } catch (err) {
       console.error("Save error:", err);
-      setIsModalOpen(false);
+      alert("The customer was not saved: the server could not be reached.");
     }
+  };
+
+  // A refused save keeps the form open and shows the server's reason; nothing is added to the list.
+  const showSaveError = async (res) => {
+    const err = await res.json().catch(() => ({}));
+    alert(err.message || err.error || `The customer was not saved (HTTP ${res.status}).`);
   };
 
   // Header Toolbar actions matching ItemMasterFormPage & MachineMasterPage

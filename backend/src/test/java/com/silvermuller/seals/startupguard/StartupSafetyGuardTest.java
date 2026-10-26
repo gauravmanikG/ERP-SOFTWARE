@@ -121,7 +121,10 @@ class StartupSafetyGuardTest {
             assertTrue(ids.add(m.id()), "duplicate migration id " + m.id());
             assertTrue(m.description().length() >= 40, m.id() + ": describe what it changes and why it is safe");
             assertFalse(m.sql().isBlank(), m.id() + ": empty SQL");
-            assertFalse(m.sql().contains(";"), m.id() + ": one statement per migration");
+            if (m.retired()) continue; // its SQL is frozen by the checksum and never executed on a new database
+            // one statement per migration; a single DO $$ ... $$ block counts as one statement
+            String outsideDoBlock = m.sql().strip().matches("(?s)DO \\$\\$.*\\$\\$") ? "" : m.sql();
+            assertFalse(outsideDoBlock.contains(";"), m.id() + ": one statement per migration");
         }
     }
 

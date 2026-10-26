@@ -11,7 +11,7 @@ async function call(method, path, body) {
   const text = await res.text();
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch (e) { data = text; }
-  if (!res.ok) throw new Error((data && data.error) || `Request failed (${res.status})`);
+  if (!res.ok) throw new Error((data && (data.message || data.error)) || `Request failed (${res.status})`);
   return data;
 }
 

@@ -7,7 +7,6 @@ import java.util.Map;
 
 /** Read-only purchase reports. See ProcurementReportService for the definitions behind every column. */
 @RestController
-@CrossOrigin(origins = "*")
 @RequestMapping("/api/new-po/reports")
 public class ProcurementReportController {
 

@@ -202,90 +202,6 @@ export const INITIAL_GROUPS_DATA = OTHER_ITEM_GROUPS_CONFIG.map((g, idx) => ({
 }));
 
 
-export const DEFAULT_PROCESS_OPTIONS = [
-  { code: "PR-1", label: "PR-1 : 1 : Metal Open Type : In-house" },
-  { code: "PR-2", label: "PR-2 : 2 : Metal Close Type : In-house" },
-  { code: "PR-3", label: "PR-3 : 5 : Half Rubber : Open" },
-  { code: "PR-4", label: "PR-4 : 6 : Half Rubber : Close" },
-  { code: "PR-5", label: "PR-5 : 7 : Full Rubber : Open" },
-  { code: "PR-7", label: "PR-7 : 8 : Full Rubber : Close" },
-  { code: "PR-8", label: "PR-8 : 9 : Cassette Seal" },
-  { code: "PR-9", label: "PR-9 : 10 : Combi Seal" },
-  { code: "PR-10", label: "PR-10 : 11 : PTFE Moulded (no inner shell)" },
-  { code: "PR-11", label: "PR-11 : 12 : PTFE Moulded (with inner shell)" },
-  { code: "PR-12", label: "PR-12 : 13 : PTFE Fitted" },
-  { code: "PR-13", label: "PR-13 : 14 : Hub Seal SKF" },
-  { code: "PR-14", label: "PR-14 : 15 : Hub Seal National" },
-  { code: "PR-15", label: "PR-15 : 3: ABS SEAL" },
-  { code: "PR-51", label: "PR-51 : 16 : PTFE Moulded (no inner shell ) Half Rubber" },
-  { code: "PR-16", label: "PR-16 : NA" }
-];
-
-export const DEFAULT_HSN_OPTIONS = [
-  // Rubber Products & Seals (Chapter 40)
-  { code: "40169320", desc: "Rubber seals, oil seals, gaskets, washers" },
-  { code: "40169330", desc: "Rubber O-rings & moulded rubber components" },
-  { code: "40169340", desc: "Gaskets, washers and other seals of vulcanised rubber" },
-  { code: "40169990", desc: "Other articles of vulcanised rubber (bellows, grommets, boots)" },
-  { code: "40021990", desc: "Synthetic rubber compound (NBR, SBR, EPDM, FKM Viton)" },
-  { code: "40051000", desc: "Compounded rubber with carbon black or silica, unvulcanised" },
-  { code: "40027000", desc: "Ethylene-propylene-non-conjugated diene rubber (EPDM)" },
-  { code: "40029990", desc: "Fluorocarbon elastomers (FKM Viton, FFKM)" },
-  { code: "40082110", desc: "Non-cellular rubber sheets for gasket cutting" },
-  { code: "4016", desc: "Vulcanised rubber articles" },
-
-  // Plastics & PTFE / Teflon (Chapter 39)
-  { code: "39269099", desc: "PTFE backup rings, guide rings, wear strips, plastic seals" },
-  { code: "39046100", desc: "Polytetrafluoroethylene (PTFE) raw resin powder" },
-  { code: "39232990", desc: "Packaging polythene bags & packing wraps for seals" },
-  { code: "3926", desc: "Plastics articles" },
-
-  // Iron, Steel, Springs & Fasteners (Chapters 72 & 73)
-  { code: "73202000", desc: "Helical & garter springs for rotary shaft oil seals" },
-  { code: "73209090", desc: "Flat springs, Belleville washers, wave springs" },
-  { code: "73182100", desc: "Spring washers and other lock washers" },
-  { code: "73181500", desc: "Screws, bolts, nuts, rivets, studs for tooling & assemblies" },
-  { code: "73269099", desc: "Deep draw outer metal shells & metal casing inserts" },
-  { code: "72283000", desc: "Alloy steel bars / rods (EN8, EN24, EN31) for tooling" },
-  { code: "72091600", desc: "Cold-rolled steel coils / sheets for stamping outer casings" },
-  { code: "72104900", desc: "Galvanized / zinc coated steel sheets for corrosion resistance" },
-  { code: "7318", desc: "Screws, bolts, nuts, washers" },
-
-  // Tooling, Moulds, Dies & Machinery Spares (Chapter 84)
-  { code: "84807100", desc: "Injection moulds for rubber or plastics" },
-  { code: "84807900", desc: "Compression moulding dies & transfer moulds for seals" },
-  { code: "84841000", desc: "Gaskets of metal sheeting combined with other material" },
-  { code: "84842000", desc: "Mechanical face seals for pumps and agitators" },
-  { code: "84821011", desc: "Ball bearings & roller bearings for CNC & hydraulic presses" },
-  { code: "84669390", desc: "Parts and accessories for machine tools / CNC chucks & collets" },
-  { code: "82073000", desc: "Press tools, punches, blanking dies for power presses" },
-  { code: "8484", desc: "Gaskets and joints of metal sheeting" },
-  { code: "8487", desc: "Machinery parts without electrical connectors" },
-  { code: "8482", desc: "Ball or roller bearings" },
-
-  // Industrial Chemicals, Lubricants & Consumables (Chapters 27, 34, 38)
-  { code: "34039900", desc: "Mould release agents, silicone sprays & anti-stick sprays" },
-  { code: "27101980", desc: "Hydraulic oils (VG 68, VG 46), spindle oils, turbine oils" },
-  { code: "27101990", desc: "Industrial lubricating greases (Lithium, synthetic high-temp)" },
-  { code: "38249990", desc: "Rubber bonding agents (Chemlok / Megum adhesive primers)" },
-  { code: "28030010", desc: "Carbon black for rubber compounding" },
-  { code: "28170010", desc: "Zinc oxide (rubber grade vulcanizing activator)" },
-  { code: "28020010", desc: "Sulphur powder (rubber vulcanization agent)" },
-
-  // Services & Subcontracting (SAC Chapter 99)
-  { code: "998821", desc: "Job work / Subcontracting (rubber moulding & trimming services)" },
-  { code: "998822", desc: "Job work (metal stamping, casing phosphating, zinc plating)" },
-  { code: "998719", desc: "Maintenance, calibration and repair of production machinery" },
-  { code: "998314", desc: "Testing, lab analysis & metallurgical inspection services" }
-];
-
-export const DEFAULT_PROCUREMENT_OPTIONS = [
-  "IN HOUSE",
-  "OUTSOURCE",
-  "BUY/INHOUSE",
-  "IMPORTED"
-];
-
 export const UOM_OPTIONS = ["PCS", "NOS", "SET", "MTR", "KGS", "KG", "LTR", "BOX", "ROLL", "DRUM"];
 export const STYLE_OPTIONS = ["1. Rubber", "2. Metal", "3. Other"];
 export const CLASS_OPTIONS = ["High", "Medium", "Low"];
@@ -432,7 +348,7 @@ export function OtherItemMasterPage({ onBackToHome, onOpenSidebar, sidebarOpen, 
       const res = await fetch("http://localhost:4000/api/inventory/items?type=OTHER");
       if (res.ok) {
         const apiItems = await res.json();
-        if (Array.isArray(apiItems)) {
+        if (Array.isArray(apiItems)) { // an empty list is applied too, so the last deleted item disappears
           const list = apiItems.map((apiIt, idx) => ({
             id: apiIt.id,
             sNo: idx + 1,
@@ -462,57 +378,37 @@ export function OtherItemMasterPage({ onBackToHome, onOpenSidebar, sidebarOpen, 
     fetchOtherFromApi();
   }, []);
 
-  // Master lists loaded dynamically from PostgreSQL / APIs with comprehensive fallback
-  const [procurementList, setProcurementList] = useState(DEFAULT_PROCUREMENT_OPTIONS);
-  const [processList, setProcessList] = useState(DEFAULT_PROCESS_OPTIONS);
-  const [hsnList, setHsnList] = useState(DEFAULT_HSN_OPTIONS);
+  // Master lists come only from PostgreSQL, so an entry deleted in its master never shows here
+  const [procurementList, setProcurementList] = useState([]);
+  const [processList, setProcessList] = useState([]);
+  const [hsnList, setHsnList] = useState([]);
 
   useEffect(() => {
     fetch("http://localhost:4000/api/inventory/procurement-master")
-      .then((res) => (res.ok ? res.json() : []))
+      .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (Array.isArray(data) && data.length > 0) {
-          const list = data.map((d) => d.procurementType || d.procurementName).filter(Boolean);
-          if (list.length > 0) setProcurementList(Array.from(new Set(list)));
+        if (Array.isArray(data)) {
+          setProcurementList(Array.from(new Set(data.map((d) => d.procurementType || d.procurementName).filter(Boolean))));
         }
       })
       .catch((err) => console.warn("Could not fetch procurement master:", err));
 
     fetch("http://localhost:4000/api/inventory/process-master")
-      .then((res) => (res.ok ? res.json() : []))
+      .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (Array.isArray(data) && data.length > 0) {
-          const list = data.map((p) => ({
-            code: p.processCode,
-            label: `${p.processCode} : ${p.processDescription || ""}`
-          }));
-          if (list.length > 0) setProcessList(list);
+        if (Array.isArray(data)) {
+          setProcessList(data.map((p) => ({ code: p.processCode, label: `${p.processCode} : ${p.processDescription || ""}` })));
         }
       })
       .catch((err) => console.warn("Could not fetch process master:", err));
 
     fetch("http://localhost:4000/api/purchase/hsn-master")
-      .then((res) => (res.ok ? res.json() : []))
+      .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (Array.isArray(data) && data.length > 0) {
-          const list = data
-            .map((h) => ({
-              code: String(h.hsnSacCode || h.hsnCode || h.code || "").trim(),
-              desc: String(h.description || h.desc || "").trim()
-            }))
-            .filter((h) => Boolean(h.code));
-          if (list.length > 0) {
-            // Merge with default list to guarantee nothing is missing
-            const seen = new Set();
-            const merged = [];
-            list.concat(DEFAULT_HSN_OPTIONS).forEach((item) => {
-              if (!seen.has(item.code)) {
-                seen.add(item.code);
-                merged.push(item);
-              }
-            });
-            setHsnList(merged);
-          }
+        if (Array.isArray(data)) {
+          setHsnList(data
+            .map((h) => ({ code: String(h.hsnSacCode || h.hsnCode || h.code || "").trim(), desc: String(h.description || h.desc || "").trim() }))
+            .filter((h) => Boolean(h.code)));
         }
       })
       .catch((err) => console.warn("Could not fetch HSN master:", err));
@@ -1095,25 +991,28 @@ export function OtherItemMasterPage({ onBackToHome, onOpenSidebar, sidebarOpen, 
   // Confirm delete (persists to PostgreSQL item_master)
   const handleConfirmDelete = async () => {
     if (!deleteTarget) return;
+    const target = deleteTarget;
+    setDeleteTarget(null);
+    let message;
     try {
-      const code = deleteTarget.item_code;
-      if (code) {
-        await fetch(`http://localhost:4000/api/inventory/items/by-code/${encodeURIComponent(code)}`, {
-          method: "DELETE"
+      const res = await fetch(`http://localhost:4000/api/inventory/items/${target.id}`, { method: "DELETE" });
+      if (res.ok) {
+        setSelectedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(target.id);
+          return next;
         });
+        if (detailItem?.id === target.id) setDetailItem(null);
+        message = `Item "${target.item_code}" deleted.`;
+      } else {
+        const err = await res.json().catch(() => ({}));
+        message = err.message || `Item "${target.item_code}" could not be deleted (HTTP ${res.status}).`;
       }
     } catch (e) {
-      console.warn("Delete item error:", e);
+      message = `Item "${target.item_code}" was not deleted: the server could not be reached.`;
     }
     fetchOtherFromApi();
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      next.delete(deleteTarget.id);
-      return next;
-    });
-    if (detailItem?.id === deleteTarget.id) setDetailItem(null);
-    showToast(`Item "${deleteTarget.item_code}" deleted successfully from PostgreSQL database.`);
-    setDeleteTarget(null);
+    showToast(message);
   };
 
   // Form submit (Create or Update persists directly to PostgreSQL item_master)
@@ -1176,35 +1075,27 @@ export function OtherItemMasterPage({ onBackToHome, onOpenSidebar, sidebarOpen, 
       status: formData.status || "Active"
     };
 
+    // The list only changes once the server has saved the item; a refused save keeps the form open with the reason.
+    let res;
     try {
-      const res = await fetch("http://localhost:4000/api/inventory/items", {
+      res = await fetch("http://localhost:4000/api/inventory/items", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       });
-
-      if (res.ok) {
-        const saved = await res.json();
-        window.dispatchEvent(new CustomEvent("SMS_ITEM_MASTER_UPDATED", { detail: saved || payload }));
-        fetchOtherFromApi();
-        showToast(`Item "${formData.item_code}" saved successfully to PostgreSQL database.`);
-      } else {
-        fetchOtherFromApi();
-        showToast(`Item "${formData.item_code}" saved.`);
-      }
     } catch (err) {
-      console.warn("Error calling item master api:", err);
-      // Optimistic update
-      setItems((prev) => {
-        if (editingId) {
-          return prev.map((it) => (it.id === editingId ? { ...it, ...payload } : it));
-        } else {
-          return [{ id: Date.now(), sNo: prev.length + 1, ...payload }, ...prev];
-        }
-      });
-      showToast(`Item "${formData.item_code}" saved.`);
+      setFormErrors({ item_code: "Not saved: the server could not be reached." });
+      return;
     }
-
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      setFormErrors({ item_code: err.message || `Not saved (HTTP ${res.status}).` });
+      return;
+    }
+    const saved = await res.json().catch(() => null);
+    window.dispatchEvent(new CustomEvent("SMS_ITEM_MASTER_UPDATED", { detail: saved || payload }));
+    fetchOtherFromApi();
+    showToast(`Item "${formData.item_code}" saved.`);
     setIsModalOpen(false);
   };
 

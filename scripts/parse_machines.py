@@ -1,12 +1,10 @@
-# Regenerates backend/src/main/resources/machine_master.sql and the frontend machinesData.json.
+# Regenerates backend/src/main/resources/machine_master.sql from machines_raw.csv.
 # The table is defined in schema.sql. The generated SQL refuses to run if machine_master already has rows.
 import csv
-import json
 import re
 
 csv_path = r"c:\Users\gaura\Downloads\silver-muller-seals\backend\src\main\resources\machines_raw.csv"
 sql_path = r"c:\Users\gaura\Downloads\silver-muller-seals\backend\src\main\resources\machine_master.sql"
-json_path = r"c:\Users\gaura\Downloads\silver-muller-seals\frontend\src\modules\maintenance\data\machinesData.json"
 
 machines = []
 
@@ -81,12 +79,6 @@ with open(csv_path, mode="r", encoding="utf-8") as f:
         machines.append(machine_obj)
         idx += 1
 
-# Write JSON
-import os
-os.makedirs(os.path.dirname(json_path), exist_ok=True)
-with open(json_path, "w", encoding="utf-8") as f:
-    json.dump(machines, f, indent=2, ensure_ascii=False)
-
 # Write SQL
 with open(sql_path, "w", encoding="utf-8") as f:
     f.write("""-- startup-guard: bulk-seed-when-empty public.machine_master
@@ -109,4 +101,4 @@ SELECT * FROM (VALUES
     f.write(",\n".join(values))
     f.write("\n) AS seed\nWHERE NOT EXISTS (SELECT 1 FROM public.machine_master);\n")
 
-print(f"Successfully generated {len(machines)} machines in SQL and JSON!")
+print(f"Successfully generated {len(machines)} machines in SQL!")

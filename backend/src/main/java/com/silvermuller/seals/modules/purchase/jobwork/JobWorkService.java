@@ -247,8 +247,8 @@ public class JobWorkService {
 
     public List<Map<String, Object>> workerBalances(long workerId) {
         return camelList(jdbc.queryForList(
-                "SELECT l.master_id, m.code AS item_code, l.category, SUM(l.qty) AS balance_qty FROM public.job_work_stock_ledger l "
-                        + "JOIN public.master m ON m.id = l.master_id WHERE l.job_worker_id = ? GROUP BY l.master_id, m.code, l.category "
+                "SELECT l.item_master_id, m.code AS item_code, l.category, SUM(l.qty) AS balance_qty FROM public.job_work_stock_ledger l "
+                        + "JOIN public.item_master_lookup m ON m.id = l.item_master_id WHERE l.job_worker_id = ? GROUP BY l.item_master_id, m.code, l.category "
                         + "HAVING SUM(l.qty) <> 0 ORDER BY m.code", workerId));
     }
 
@@ -388,7 +388,7 @@ public class JobWorkService {
             if (!seen.add(l.masterId() + "|" + l.operationId())) throw bad("Line " + no + ": the same item and operation appear twice.");
             Map<String, Object> ln = new LinkedHashMap<>();
             ln.put("line_no", no);
-            ln.put("master_id", l.masterId());
+            ln.put("item_master_id", l.masterId());
             ln.put("item_code", str(m, "code"));
             ln.put("item_name", str(m, "description"));
             ln.put("category", stockCategory(l.category(), m, no));
@@ -443,7 +443,7 @@ public class JobWorkService {
         List<Map<String, Object>> outLines = new ArrayList<>();
         for (Map<String, Object> l : lines) {
             Map<String, Object> c = camel(l);
-            BigDecimal avail = available(((Number) l.get("master_id")).longValue(), str(l, "category"), ((Number) row.get("source_department_id")).longValue());
+            BigDecimal avail = available(((Number) l.get("item_master_id")).longValue(), str(l, "category"), ((Number) row.get("source_department_id")).longValue());
             c.put("availableQty", avail);
             c.put("stockShortfall", ((BigDecimal) l.get("required_qty")).compareTo(avail) > 0);
             outLines.add(c);
@@ -653,13 +653,13 @@ public class JobWorkService {
             String category = stockCategory(l.category(), m, no);
             if (indent != null) {
                 // Input cannot exceed the approved indent quantity across all live orders for that item and operation.
-                List<Map<String, Object>> ir = jdbc.queryForList("SELECT required_qty FROM public.job_work_indent_lines WHERE indent_id = ? AND master_id = ? AND operation_id = ?",
+                List<Map<String, Object>> ir = jdbc.queryForList("SELECT required_qty FROM public.job_work_indent_lines WHERE indent_id = ? AND item_master_id = ? AND operation_id = ?",
                         indentId, l.masterId(), l.operationId());
                 if (ir.isEmpty()) throw bad("Line " + no + ": this item and operation are not on the selected indent.");
                 BigDecimal req = (BigDecimal) ir.get(0).get("required_qty");
                 BigDecimal already = jdbc.queryForObject(
                         "SELECT COALESCE(SUM(ol.input_qty), 0) FROM public.job_work_order_lines ol JOIN public.job_work_orders o ON o.id = ol.jwo_id "
-                                + "WHERE o.indent_id = ? AND ol.master_id = ? AND ol.operation_id = ? AND o.status NOT IN ('REJECTED','CANCELLED') AND o.id <> ?",
+                                + "WHERE o.indent_id = ? AND ol.item_master_id = ? AND ol.operation_id = ? AND o.status NOT IN ('REJECTED','CANCELLED') AND o.id <> ?",
                         BigDecimal.class, indentId, l.masterId(), l.operationId(), existingId == null ? -1L : existingId);
                 if (already.add(l.inputQty()).compareTo(req) > 0) {
                     throw bad("Line " + no + ": " + l.inputQty() + " exceeds the indent quantity remaining (" + req.subtract(already) + ").");
@@ -677,7 +677,7 @@ public class JobWorkService {
             total = total.add(est);
             Map<String, Object> ln = new LinkedHashMap<>();
             ln.put("line_no", no);
-            ln.put("master_id", l.masterId());
+            ln.put("item_master_id", l.masterId());
             ln.put("item_code", str(m, "code"));
             ln.put("item_name", str(m, "description"));
             ln.put("category", category);
@@ -745,7 +745,7 @@ public class JobWorkService {
         List<Map<String, Object>> outLines = new ArrayList<>();
         for (Map<String, Object> l : lines) {
             Map<String, Object> c = camel(l);
-            c.put("sourceAvailable", available(((Number) l.get("master_id")).longValue(), str(l, "category"),
+            c.put("sourceAvailable", available(((Number) l.get("item_master_id")).longValue(), str(l, "category"),
                     ((Number) row.get("source_department_id")).longValue()));
             outLines.add(c);
         }
@@ -869,14 +869,14 @@ public class JobWorkService {
             Map<String, Object> l = lines.get(i);
             Map<String, Object> ol = castMap(l.get("line"));
             BigDecimal qty = (BigDecimal) l.get("qty");
-            jdbc.update("INSERT INTO public.job_work_challan_lines (challan_id, jwo_line_id, master_id, category, batch_no, qty) VALUES (?,?,?,?,?,?)",
-                    challanId, ol.get("id"), ol.get("master_id"), str(ol, "category"), blank((String) l.get("batch")), qty);
+            jdbc.update("INSERT INTO public.job_work_challan_lines (challan_id, jwo_line_id, item_master_id, category, batch_no, qty) VALUES (?,?,?,?,?,?)",
+                    challanId, ol.get("id"), ol.get("item_master_id"), str(ol, "category"), blank((String) l.get("batch")), qty);
             if (r.reworkDispatch()) {
                 jdbc.update("UPDATE public.job_work_order_lines SET rework_redispatched_qty = rework_redispatched_qty + ? WHERE id = ?", qty, ol.get("id"));
             } else {
                 jdbc.update("UPDATE public.job_work_order_lines SET dispatched_qty = dispatched_qty + ? WHERE id = ?", qty, ol.get("id"));
             }
-            ledger(((Number) o.get("job_worker_id")).longValue(), r.jwoId(), ((Number) ol.get("id")).longValue(), ((Number) ol.get("master_id")).longValue(),
+            ledger(((Number) o.get("job_worker_id")).longValue(), r.jwoId(), ((Number) ol.get("id")).longValue(), ((Number) ol.get("item_master_id")).longValue(),
                     str(ol, "category"), "SENT", qty, number, challanId, null, null, actor);
         }
         refreshOrderStatus(r.jwoId());
@@ -910,7 +910,7 @@ public class JobWorkService {
             } else {
                 jdbc.update("UPDATE public.job_work_order_lines SET dispatched_qty = dispatched_qty - ? WHERE id = ?", qty, lineId);
             }
-            ledger(workerId, jwoId, lineId, ((Number) cl.get("master_id")).longValue(), str(cl, "category"), "REVERSED_SENT", qty.negate(),
+            ledger(workerId, jwoId, lineId, ((Number) cl.get("item_master_id")).longValue(), str(cl, "category"), "REVERSED_SENT", qty.negate(),
                     str(c, "challan_number"), id, null, null, actor);
         }
         jdbc.update("UPDATE public.job_work_challans SET status = 'CANCELLED', cancel_reason = ? WHERE id = ?", req.comments(), id);
@@ -1041,8 +1041,8 @@ public class JobWorkService {
             BigDecimal got = (BigDecimal) p.get("got");
             BigDecimal unused = (BigDecimal) p.get("unused");
             long lineId = ((Number) ol.get("id")).longValue();
-            long masterId = ((Number) ol.get("master_id")).longValue();
-            jdbc.update("INSERT INTO public.job_work_receipt_lines (receipt_id, jwo_line_id, master_id, category, qty_received, unused_returned_qty, inspection_status) "
+            long masterId = ((Number) ol.get("item_master_id")).longValue();
+            jdbc.update("INSERT INTO public.job_work_receipt_lines (receipt_id, jwo_line_id, item_master_id, category, qty_received, unused_returned_qty, inspection_status) "
                     + "VALUES (?,?,?,?,?,?,'PENDING')", receiptId, lineId, masterId, str(ol, "category"), got, unused);
             jdbc.update("UPDATE public.job_work_order_lines SET received_qty = received_qty + ?, unused_returned_qty = unused_returned_qty + ? WHERE id = ?", got, unused, lineId);
             long workerId = ((Number) o.get("job_worker_id")).longValue();
@@ -1071,7 +1071,7 @@ public class JobWorkService {
         if ((rej.signum() > 0 || scr.signum() > 0 || rew.signum() > 0) && blank(req.defectCode()) == null) {
             throw bad("Give a defect code for rejected, rework or scrap quantities.");
         }
-        long masterId = ((Number) rl.get("master_id")).longValue();
+        long masterId = ((Number) rl.get("item_master_id")).longValue();
         String category = str(rl, "category");
         // Inventory transaction posting removed - job work now tracks stock only in job_work_stock_ledger
 
@@ -1132,9 +1132,9 @@ public class JobWorkService {
         List<String> conds = new ArrayList<>();
         if (workerId != null) { conds.add("l.job_worker_id = ?"); args.add(workerId); }
         if (jwoId != null) { conds.add("l.jwo_id = ?"); args.add(jwoId); }
-        if (masterId != null) { conds.add("l.master_id = ?"); args.add(masterId); }
+        if (masterId != null) { conds.add("l.item_master_id = ?"); args.add(masterId); }
         if (notBlank(q)) { conds.add("(LOWER(l.reference_no) LIKE ? OR LOWER(m.code) LIKE ?)"); String like = "%" + q.trim().toLowerCase(Locale.ROOT) + "%"; args.add(like); args.add(like); }
-        return pageOf("FROM public.job_work_stock_ledger l JOIN public.master m ON m.id = l.master_id JOIN public.job_workers w ON w.id = l.job_worker_id"
+        return pageOf("FROM public.job_work_stock_ledger l JOIN public.item_master_lookup m ON m.id = l.item_master_id JOIN public.job_workers w ON w.id = l.job_worker_id"
                 + where(conds) + " ORDER BY l.created_at DESC, l.id DESC",
                 "l.id, l.created_at, w.legal_name AS worker_name, m.code AS item_code, l.category, l.movement_type, l.qty, l.balance_after, l.reference_no, l.jwo_id, "
                         + "(SELECT o.jwo_number FROM public.job_work_orders o WHERE o.id = l.jwo_id) AS jwo_number", args, page, size);
@@ -1152,7 +1152,7 @@ public class JobWorkService {
         d.put("pendingIndentApprovals", jdbc.queryForObject("SELECT COUNT(*) FROM public.job_work_indents WHERE status = 'SUBMITTED'", Integer.class));
         d.put("ordersPendingApproval", jdbc.queryForObject("SELECT COUNT(*) FROM public.job_work_orders WHERE status = 'PENDING_APPROVAL'", Integer.class));
         d.put("materialWithWorkersQty", jdbc.queryForObject(
-                "SELECT COALESCE(SUM(bal), 0) FROM (SELECT SUM(qty) AS bal FROM public.job_work_stock_ledger GROUP BY job_worker_id, master_id, category) t WHERE bal > 0", BigDecimal.class));
+                "SELECT COALESCE(SUM(bal), 0) FROM (SELECT SUM(qty) AS bal FROM public.job_work_stock_ledger GROUP BY job_worker_id, item_master_id, category) t WHERE bal > 0", BigDecimal.class));
         d.put("overdueOrders", jdbc.queryForObject("SELECT COUNT(*) FROM public.job_work_orders WHERE expected_return_date < CURRENT_DATE "
                 + "AND status IN ('APPROVED','IN_PROGRESS','PARTIALLY_RECEIVED')", Integer.class));
         d.put("pendingReturnOrders", jdbc.queryForObject("SELECT COUNT(DISTINCT jwo_id) FROM public.job_work_order_lines WHERE dispatched_qty + rework_redispatched_qty - received_qty - unused_returned_qty - written_off_qty > 0", Integer.class));
@@ -1230,11 +1230,11 @@ public class JobWorkService {
     void ledger(long workerId, long jwoId, long lineId, long masterId, String category, String movement, BigDecimal signedQty,
                         String ref, Long challanId, Long receiptId, Long invTxId, Actor actor) {
         jdbc.queryForObject("SELECT id FROM public.job_workers WHERE id = ? FOR UPDATE", Long.class, workerId);
-        BigDecimal prev = jdbc.queryForObject("SELECT COALESCE(SUM(qty), 0) FROM public.job_work_stock_ledger WHERE job_worker_id = ? AND master_id = ? AND category = ?",
+        BigDecimal prev = jdbc.queryForObject("SELECT COALESCE(SUM(qty), 0) FROM public.job_work_stock_ledger WHERE job_worker_id = ? AND item_master_id = ? AND category = ?",
                 BigDecimal.class, workerId, masterId, category);
         BigDecimal next = prev.add(signedQty);
         if (next.signum() < 0) throw conflict("Job worker balance would go negative for " + category + " (balance " + prev + ", movement " + signedQty + ").");
-        jdbc.update("INSERT INTO public.job_work_stock_ledger (job_worker_id, jwo_id, jwo_line_id, master_id, category, movement_type, qty, balance_after, reference_no, "
+        jdbc.update("INSERT INTO public.job_work_stock_ledger (job_worker_id, jwo_id, jwo_line_id, item_master_id, category, movement_type, qty, balance_after, reference_no, "
                 + "challan_id, receipt_id, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                 workerId, jwoId, lineId, masterId, category, movement, signedQty, next, ref, challanId, receiptId, actor.name());
     }
@@ -1308,7 +1308,7 @@ public class JobWorkService {
     }
 
     Map<String, Object> masterRow(long masterId, int lineNo) {
-        List<Map<String, Object>> rows = jdbc.queryForList("SELECT id, code, description, category, unit_of_measurement FROM public.master WHERE id = ?", masterId);
+        List<Map<String, Object>> rows = jdbc.queryForList("SELECT id, code, description, category, unit_of_measurement FROM public.item_master_lookup WHERE id = ?", masterId);
         if (rows.isEmpty()) throw bad("Line " + lineNo + ": item " + masterId + " does not exist.");
         Map<String, Object> m = rows.get(0);
         if (blank(str(m, "category")) == null) throw bad("Line " + lineNo + ": item " + str(m, "code") + " has no category.");

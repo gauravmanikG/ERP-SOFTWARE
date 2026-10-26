@@ -10,7 +10,6 @@ import java.math.RoundingMode;
 import java.util.*;
 
 @RestController
-@CrossOrigin(origins = "*")
 @RequestMapping({"/api/purchase/hsn-master", "/api/hsn-master", "/api/hsn", "/api/inventory/hsn-master"})
 public class HsnTaxMasterController {
 
@@ -95,31 +94,31 @@ public class HsnTaxMasterController {
         BigDecimal igstRate = rates[3];
         String chapter = code.length() >= 2 ? code.substring(0, 2) : "99";
 
-        try {
-            jdbc.update(
-                "INSERT INTO public.hsn_tax_master (hsn_sac_code, description, type, gst_rate, cgst_rate, sgst_rate, igst_rate, cess_rate, chapter, is_active) " +
-                "VALUES (?, ?, ?, ?, ?, ?, ?, 0.00, ?, TRUE) " +
-                "ON CONFLICT (hsn_sac_code) DO UPDATE SET " +
-                "description = EXCLUDED.description, gst_rate = EXCLUDED.gst_rate, cgst_rate = EXCLUDED.cgst_rate, " +
-                "sgst_rate = EXCLUDED.sgst_rate, igst_rate = EXCLUDED.igst_rate, type = EXCLUDED.type",
-                code, desc, type, gstRate, cgstRate, sgstRate, igstRate, chapter
-            );
-
-            Map<String, Object> result = new HashMap<>();
-            result.put("hsnSacCode", code);
-            result.put("description", desc);
-            result.put("type", type);
-            result.put("gstRate", gstRate);
-            result.put("cgstRate", cgstRate);
-            result.put("sgstRate", sgstRate);
-            result.put("igstRate", igstRate);
-            result.put("chapter", chapter);
-
-            return ResponseEntity.status(HttpStatus.CREATED).body(result);
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Map.of("error", "Failed to save HSN code: " + e.getMessage()));
+        // An active code is never overwritten from "Add"; adding a code that was deleted restores it with these values.
+        int added = jdbc.update(
+            "INSERT INTO public.hsn_tax_master (hsn_sac_code, description, type, gst_rate, cgst_rate, sgst_rate, igst_rate, cess_rate, chapter, is_active) " +
+            "VALUES (?, ?, ?, ?, ?, ?, ?, 0.00, ?, TRUE) " +
+            "ON CONFLICT (hsn_sac_code) DO UPDATE SET " +
+            "description = EXCLUDED.description, gst_rate = EXCLUDED.gst_rate, cgst_rate = EXCLUDED.cgst_rate, " +
+            "sgst_rate = EXCLUDED.sgst_rate, igst_rate = EXCLUDED.igst_rate, type = EXCLUDED.type, is_active = TRUE " +
+            "WHERE public.hsn_tax_master.is_active = FALSE",
+            code, desc, type, gstRate, cgstRate, sgstRate, igstRate, chapter
+        );
+        if (added == 0) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(Map.of("error", "HSN code " + code + " already exists. Edit it instead."));
         }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("hsnSacCode", code);
+        result.put("description", desc);
+        result.put("type", type);
+        result.put("gstRate", gstRate);
+        result.put("cgstRate", cgstRate);
+        result.put("sgstRate", sgstRate);
+        result.put("igstRate", igstRate);
+        result.put("chapter", chapter);
+        return ResponseEntity.status(HttpStatus.CREATED).body(result);
     }
 
     /**

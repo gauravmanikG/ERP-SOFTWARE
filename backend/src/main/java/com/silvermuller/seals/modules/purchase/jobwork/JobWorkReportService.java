@@ -101,7 +101,7 @@ public class JobWorkReportService {
                                 + "MAX(l.created_at)::date AS \"Last movement\", "
                                 + "(SELECT COUNT(DISTINCT o.id) FROM public.job_work_orders o WHERE o.job_worker_id = l.job_worker_id AND o.expected_return_date < CURRENT_DATE "
                                 + "AND o.status IN ('APPROVED','IN_PROGRESS','PARTIALLY_RECEIVED')) AS \"Overdue orders\" "
-                                + "FROM public.job_work_stock_ledger l JOIN public.job_workers w ON w.id = l.job_worker_id JOIN public.master m ON m.id = l.master_id "
+                                + "FROM public.job_work_stock_ledger l JOIN public.job_workers w ON w.id = l.job_worker_id JOIN public.item_master_lookup m ON m.id = l.item_master_id "
                                 + "WHERE (CAST(? AS BIGINT) IS NULL OR l.job_worker_id = ?) AND LOWER(m.code) LIKE ? "
                                 + "GROUP BY w.legal_name, m.code, l.category, l.job_worker_id HAVING SUM(l.qty) <> 0 ORDER BY w.legal_name, m.code",
                         wid, wid, like));
@@ -111,7 +111,7 @@ public class JobWorkReportService {
                 rows(out, jdbc.queryForList(
                         "SELECT l.created_at AS \"When\", w.legal_name AS \"Job worker\", m.code AS \"Item\", l.category AS \"Category\", l.movement_type AS \"Movement\", "
                                 + "l.qty AS \"Qty\", l.balance_after AS \"Balance with worker\", l.reference_no AS \"Reference\", o.jwo_number AS \"Order\" "
-                                + "FROM public.job_work_stock_ledger l JOIN public.job_workers w ON w.id = l.job_worker_id JOIN public.master m ON m.id = l.master_id "
+                                + "FROM public.job_work_stock_ledger l JOIN public.job_workers w ON w.id = l.job_worker_id JOIN public.item_master_lookup m ON m.id = l.item_master_id "
                                 + "JOIN public.job_work_orders o ON o.id = l.jwo_id "
                                 + "WHERE l.created_at::date BETWEEN ?::date AND ?::date AND (CAST(? AS BIGINT) IS NULL OR l.job_worker_id = ?) AND LOWER(l.reference_no) LIKE ? ORDER BY l.created_at DESC LIMIT 2000",
                         f, t, wid, wid, like));

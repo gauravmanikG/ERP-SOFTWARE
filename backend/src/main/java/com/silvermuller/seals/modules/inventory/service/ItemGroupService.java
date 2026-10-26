@@ -2,6 +2,7 @@ package com.silvermuller.seals.modules.inventory.service;
 
 import com.silvermuller.seals.common.config.SeedRegistry;
 import com.silvermuller.seals.common.exception.ConflictException;
+import com.silvermuller.seals.common.exception.ResourceNotFoundException;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.core.annotation.Order;
@@ -107,6 +108,8 @@ public class ItemGroupService implements ApplicationRunner {
             new DefaultSubgroup("Uniforms & Textiles", "UNI01")))
     );
 
+    private static final String LEGACY_IMPORT_KEY = "item_group:legacy-browser-import";
+
     private final JdbcTemplate jdbc;
     private final SeedRegistry seeds;
 
@@ -192,29 +195,38 @@ public class ItemGroupService implements ApplicationRunner {
         return jdbc.queryForMap("SELECT id, name, code, description FROM public.item_group WHERE name = ?", n);
     }
 
+    /** Renames are carried over to every item that uses the group, in the same transaction. */
     @Transactional
     public void updateGroup(Long id, String name, String code, String description) {
         String n = requireName(name);
+        String old = lockGroup(id);
         if (exists("SELECT COUNT(*) FROM public.item_group WHERE LOWER(name) = LOWER(?) AND id <> ?", n, id)) {
             throw new ConflictException("Group '" + n + "' already exists");
         }
-        int rows = jdbc.update(
+        jdbc.update(
             "UPDATE public.item_group SET name = ?, code = ?, description = ?, updated_at = now() WHERE id = ?",
             n, clean(code), clean(description), id);
-        if (rows == 0) throw new IllegalArgumentException("Group not found: " + id);
+        if (!old.equals(n)) {
+            jdbc.update("UPDATE public.item_master SET group_name = ?, updated_at = now() WHERE LOWER(group_name) = LOWER(?)", n, old);
+        }
     }
 
+    /** A group that items still use cannot be deleted. */
     @Transactional
     public void deleteGroup(Long id) {
-        int rows = jdbc.update("DELETE FROM public.item_group WHERE id = ?", id);
-        if (rows == 0) throw new IllegalArgumentException("Group not found: " + id);
+        String name = lockGroup(id);
+        long used = count("SELECT COUNT(*) FROM public.item_master WHERE LOWER(group_name) = LOWER(?)", name);
+        if (used > 0) {
+            throw new ConflictException("Group '" + name + "' is used by " + used + " item(s). Move or delete those items first.");
+        }
+        jdbc.update("DELETE FROM public.item_group WHERE id = ?", id);
     }
 
     @Transactional
     public Map<String, Object> createSubgroup(Long groupId, String name, String code, String description) {
         String n = requireName(name);
         if (!exists("SELECT COUNT(*) FROM public.item_group WHERE id = ?", groupId)) {
-            throw new IllegalArgumentException("Group not found: " + groupId);
+            throw new ResourceNotFoundException("Group not found: " + groupId);
         }
         if (exists("SELECT COUNT(*) FROM public.item_subgroup WHERE group_id = ? AND LOWER(name) = LOWER(?)", groupId, n)) {
             throw new ConflictException("Subgroup '" + n + "' already exists in this group");
@@ -227,33 +239,56 @@ public class ItemGroupService implements ApplicationRunner {
             "SELECT id, name, code, description FROM public.item_subgroup WHERE group_id = ? AND name = ?", groupId, n);
     }
 
-    /** Updates a subgroup. A non-null groupId moves it to that group. */
+    /** Updates a subgroup. A non-null groupId moves it to that group. Items using it follow the rename or move. */
     @Transactional
     public void updateSubgroup(Long id, Long groupId, String name, String code, String description) {
         String n = requireName(name);
-        Long current = jdbc.queryForList("SELECT group_id FROM public.item_subgroup WHERE id = ?", Long.class, id)
-                .stream().findFirst().orElseThrow(() -> new IllegalArgumentException("Subgroup not found: " + id));
-        Long target = groupId != null ? groupId : current;
-        if (!exists("SELECT COUNT(*) FROM public.item_group WHERE id = ?", target)) {
-            throw new IllegalArgumentException("Group not found: " + target);
-        }
+        Map<String, Object> current = lockSubgroup(id);
+        Long target = groupId != null ? groupId : ((Number) current.get("group_id")).longValue();
+        String targetName = lockGroup(target);
         if (exists("SELECT COUNT(*) FROM public.item_subgroup WHERE group_id = ? AND LOWER(name) = LOWER(?) AND id <> ?", target, n, id)) {
             throw new ConflictException("Subgroup '" + n + "' already exists in this group");
         }
         jdbc.update(
             "UPDATE public.item_subgroup SET group_id = ?, name = ?, code = ?, description = ?, updated_at = now() WHERE id = ?",
             target, n, clean(code), clean(description), id);
+        jdbc.update("UPDATE public.item_master SET group_name = ?, subgroup = ?, updated_at = now() "
+                + "WHERE LOWER(group_name) = LOWER(?) AND LOWER(subgroup) = LOWER(?)",
+                targetName, n, current.get("group_name"), current.get("name"));
     }
 
+    /** A subgroup that items still use cannot be deleted. */
     @Transactional
     public void deleteSubgroup(Long id) {
-        int rows = jdbc.update("DELETE FROM public.item_subgroup WHERE id = ?", id);
-        if (rows == 0) throw new IllegalArgumentException("Subgroup not found: " + id);
+        Map<String, Object> sub = lockSubgroup(id);
+        long used = count("SELECT COUNT(*) FROM public.item_master WHERE LOWER(group_name) = LOWER(?) AND LOWER(subgroup) = LOWER(?)",
+                sub.get("group_name"), sub.get("name"));
+        if (used > 0) {
+            throw new ConflictException("Subgroup '" + sub.get("name") + "' is used by " + used
+                    + " item(s). Move or delete those items first.");
+        }
+        jdbc.update("DELETE FROM public.item_subgroup WHERE id = ?", id);
     }
 
-    /** Adds groups and subgroups from a browser copy (name-based, existing rows are kept). Returns rows added. */
+    private String lockGroup(Long id) {
+        return jdbc.queryForList("SELECT name FROM public.item_group WHERE id = ? FOR UPDATE", String.class, id)
+                .stream().findFirst().orElseThrow(() -> new ResourceNotFoundException("Group " + id + " was not found. Refresh the list."));
+    }
+
+    private Map<String, Object> lockSubgroup(Long id) {
+        return jdbc.queryForList("SELECT s.name, s.group_id, g.name AS group_name FROM public.item_subgroup s "
+                        + "JOIN public.item_group g ON g.id = s.group_id WHERE s.id = ? FOR UPDATE OF s", id)
+                .stream().findFirst().orElseThrow(() -> new ResourceNotFoundException("Subgroup " + id + " was not found. Refresh the list."));
+    }
+
+    /**
+     * One-time move of a browser copy left by an old frontend version (name-based, existing rows are kept). Runs once
+     * per database: a later browser still holding an old copy must not bring back groups the user has deleted.
+     */
     @Transactional
     public int importGroups(List<Map<String, Object>> groups) {
+        if (seeds.isSeeded(LEGACY_IMPORT_KEY)) return 0;
+        seeds.markSeeded(LEGACY_IMPORT_KEY);
         int added = 0;
         for (Map<String, Object> g : groups) {
             String name = requireName(text(g.get("name")));
@@ -276,17 +311,27 @@ public class ItemGroupService implements ApplicationRunner {
         return added;
     }
 
-    /** Removes all groups and subgroups added or changed by the user, then restores the defaults. */
+    /**
+     * Removes every group and subgroup no item uses, then restores the missing defaults. Groups and subgroups that
+     * items still use are kept, so no item is left pointing at a group that no longer exists.
+     */
     @Transactional
     public List<Map<String, Object>> resetToDefaults() {
-        jdbc.update("DELETE FROM public.item_group");
+        jdbc.update("DELETE FROM public.item_subgroup s USING public.item_group g WHERE g.id = s.group_id AND NOT EXISTS "
+                + "(SELECT 1 FROM public.item_master i WHERE LOWER(i.group_name) = LOWER(g.name) AND LOWER(i.subgroup) = LOWER(s.name))");
+        jdbc.update("DELETE FROM public.item_group g WHERE NOT EXISTS "
+                + "(SELECT 1 FROM public.item_master i WHERE LOWER(i.group_name) = LOWER(g.name))");
         seedMissingDefaults();
         return getTree();
     }
 
     private boolean exists(String sql, Object... args) {
-        Long count = jdbc.queryForObject(sql, Long.class, args);
-        return count != null && count > 0;
+        return count(sql, args) > 0;
+    }
+
+    private long count(String sql, Object... args) {
+        Long n = jdbc.queryForObject(sql, Long.class, args);
+        return n == null ? 0 : n;
     }
 
     private static String requireName(String name) {
