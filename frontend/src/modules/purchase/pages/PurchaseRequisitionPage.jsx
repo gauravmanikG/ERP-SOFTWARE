@@ -1,6 +1,8 @@
 import { setHandoff, getHandoff, removeHandoff } from "../../../shared/utils/handoffStore";
+import { loadUser } from "../newpo/api";
 import { formatDisplayDate, formatDisplayDateTime } from "../../../shared/utils/dateFormat";
 import DateInput from "../../../shared/components/DateInput";
+import SearchableSelect from "../../../shared/components/SearchableSelect";
 import { useResizableColumns, ResizableColGroup, ColumnResizeHandle } from "../../../shared/components/ResizableTable";
 import { useState, useRef, useEffect, useMemo } from "react";
 import {
@@ -360,12 +362,22 @@ export function PurchaseRequisitionPage({
   // PR Dataset stored in state directly from PostgreSQL database (no localStorage)
   const [prList, setPrList] = useState([]);
 
+  // The server's reason for a refusal: the shared handler answers {message}, the New PO handler answers {error}.
+  const readServerError = async (res, fallback) => {
+    try {
+      const data = await res.json();
+      return data.message || data.error || fallback;
+    } catch (e) {
+      return fallback;
+    }
+  };
+
   const fetchRequisitions = async () => {
     try {
       const res = await fetch("http://localhost:4000/api/purchase/requisitions");
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
+        if (Array.isArray(data)) {
           const normalized = data.map((pr) => ({
             id: pr.id || pr.prNumber,
             pr_number: pr.prNumber || pr.pr_number,
@@ -408,6 +420,7 @@ export function PurchaseRequisitionPage({
                 req_qty: req,
                 ordered_qty: ord,
                 remaining_qty: rem,
+                drafted_qty: Number(it.draftedQty !== undefined ? it.draftedQty : it.drafted_qty) || 0,
                 uom: it.uom || "PCS",
                 est_rate: rate,
                 line_total: Number(it.estTotal !== undefined ? it.estTotal : it.line_total) || (req * rate),
@@ -481,6 +494,36 @@ export function PurchaseRequisitionPage({
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingPrId, setEditingPrId] = useState(null);
   const [detailPr, setDetailPr] = useState(null);
+
+  // Approval and edit history of the open PR, read from the server's audit log (it survives a refresh).
+  const [prTimeline, setPrTimeline] = useState([]);
+  useEffect(() => {
+    if (!detailPr) { setPrTimeline([]); return undefined; }
+    let cancelled = false;
+    const prNum = detailPr.pr_number || detailPr.prNumber;
+    const labels = {
+      CREATED: "Created", EDITED: "Edited", STATUS_APPROVED: "Approved", STATUS_REJECTED: "Rejected",
+      STATUS_PENDING_APPROVAL: "Submitted for approval", STATUS_CANCELLED: "Cancelled"
+    };
+    fetch(`http://localhost:4000/api/new-po/sourcing/audit?ref=${encodeURIComponent(prNum)}`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((events) => {
+        if (cancelled) return;
+        setPrTimeline(events.slice().reverse().map((e) => {
+          let d = {};
+          try { d = e.details_json ? JSON.parse(e.details_json) : {}; } catch (err) { d = {}; }
+          return {
+            timestamp: formatDisplayDateTime(e.created_at),
+            user: e.actor,
+            action: labels[e.action] || e.action,
+            status: d.to || d.status || "",
+            remarks: d.reason || (d.lineCount !== undefined ? `${d.lineCount} item line${d.lineCount === 1 ? "" : "s"}` : "")
+          };
+        }));
+      })
+      .catch(() => { if (!cancelled) setPrTimeline([]); });
+    return () => { cancelled = true; };
+  }, [detailPr && (detailPr.pr_number || detailPr.prNumber), detailPr && detailPr.status]); // eslint-disable-line react-hooks/exhaustive-deps
   const [deletePrTarget, setDeletePrTarget] = useState(null);
 
   // Rejection Modal state
@@ -493,6 +536,7 @@ export function PurchaseRequisitionPage({
   // Form State
   const [formData, setFormData] = useState(getBlankPrForm);
   const [formErrors, setFormErrors] = useState({});
+  const [prSaving, setPrSaving] = useState(false);
 
   // Related Quotations & Orders for Two-Way Navigation in Details Modal
   const [relatedQuotes, setRelatedQuotes] = useState([]);
@@ -733,10 +777,15 @@ export function PurchaseRequisitionPage({
       .catch(() => {});
   };
 
+  // A PR cannot be edited once any quantity is in a vendor draft or on a PO: the server refuses it too.
+  const isPrLocked = (pr) =>
+    pr.status === "Converted to PO" || pr.status === "Fully Ordered" || pr.status === "Partially Ordered" || pr.status === "Cancelled" ||
+    (pr.items || []).some((it) => Number(it.ordered_qty) > 0 || Number(it.drafted_qty) > 0);
+
   // Open Edit PR Modal
   const handleOpenEditModal = (pr) => {
-    if (pr.status === "Converted to PO" || pr.status === "Fully Ordered") {
-      alert(`PR "${pr.pr_number}" has already been converted to a Purchase Order (${pr.status}) and cannot be edited directly.`);
+    if (isPrLocked(pr)) {
+      alert(`PR "${pr.pr_number}" already has quantity in a vendor draft or on a purchase order (${pr.status}), so it cannot be edited. Release the draft quantity or cancel the PO first.`);
       return;
     }
     setEditingPrId(pr.id);
@@ -876,7 +925,8 @@ export function PurchaseRequisitionPage({
   };
 
   // Submit PR Form (Action: "DRAFT" or "SUBMIT")
-  const handleSavePrWithAction = (actionType = "SUBMIT") => {
+  const handleSavePrWithAction = async (actionType = "SUBMIT") => {
+    if (prSaving) return;
     const errors = {};
     // Dates for a new PR: PR Date is today, and required/need dates cannot be in the past.
     // Editing keeps the saved dates, so only new PRs are checked against today.
@@ -928,196 +978,107 @@ export function PurchaseRequisitionPage({
       return;
     }
 
-    const calculatedTotalAmount = formData.items.reduce((sum, i) => sum + (Number(i.line_total) || 0), 0);
-    const nowFormatted = formatDisplayDateTime(new Date());
-
+    // The server decides whether the PR was saved: nothing is shown as saved until it answers.
     const existingPr = editingPrId !== null ? prList.find((p) => p.id === editingPrId) : null;
     let targetStatus = "Pending Approval";
     if (actionType === "DRAFT") {
       targetStatus = "Draft";
     } else if (actionType === "SAVE") {
-      targetStatus = existingPr?.status || "Pending Approval";
-    } else {
-      // actionType === "SUBMIT"
-      targetStatus = "Pending Approval";
+      // An edited PR is kept only as Draft or Pending Approval; an approved or rejected PR goes back for approval.
+      targetStatus = existingPr?.status === "Draft" ? "Draft" : "Pending Approval";
     }
 
-    const actionLabel = actionType === "DRAFT"
-      ? "Saved as Draft"
-      : actionType === "SAVE"
-      ? `PR updated (Status: ${targetStatus})`
-      : (editingPrId ? "Resubmitted for HOD Approval" : "Submitted for HOD Approval");
+    const dbPayload = {
+      id: editingPrId !== null ? editingPrId : null,
+      prNumber: formData.pr_number,
+      prDate: formData.pr_date,
+      requiredDate: formData.required_date,
+      requisitioner: formData.requisitioner,
+      department: formData.department,
+      store: formData.store,
+      preferredVendor: formData.preferred_vendor,
+      priority: formData.priority,
+      requirementType: formData.requirement_type,
+      procurementMethod: formData.procurement_method,
+      prType: formData.pr_type || "Direct Material",
+      costCenter: formData.cost_center || "Moulding Press 01",
+      projectReference: formData.project_reference || "",
+      cancellationReason: formData.cancellation_reason || "",
+      purpose: formData.purpose,
+      remarks: formData.remarks,
+      status: targetStatus,
+      createdBy: formData.requisitioner,
+      items: (formData.items || []).map((it) => ({
+        itemCode: it.item_code,
+        itemName: it.item_name,
+        description: it.item_name || it.item_code,
+        category: it.category,
+        uom: it.uom,
+        reqQty: Number(it.req_qty) || 0,
+        estRate: Number(it.est_rate) || 0,
+        estTotal: (Number(it.req_qty) || 0) * (Number(it.est_rate) || 0),
+        hsnCode: it.hsn_code || null,
+        drawingNo: it.drawing_no || null,
+        manufacturerBrand: it.manufacturer_brand || null,
+        requiredByDate: it.required_by_date || it.required_date || formData.required_date || null,
+        remarks: it.remarks || ""
+      }))
+    };
 
-    if (editingPrId !== null) {
-      // Edit / Resubmit
-      setPrList((prev) =>
-        prev.map((pr) => {
-          if (pr.id !== editingPrId) return pr;
-
-          const history = pr.approval_history || [];
-          const newHistory = [
-            ...history,
-            {
-              timestamp: nowFormatted,
-              user: formData.requisitioner,
-              action: actionLabel,
-              status: targetStatus,
-              remarks: formData.remarks || "PR updated"
-            }
-          ];
-
-          return {
-            ...pr,
-            ...formData,
-            status: targetStatus,
-            estimated_amount: calculatedTotalAmount,
-            updated_at: nowFormatted,
-            updated_by: formData.requisitioner,
-            rejection_reason: targetStatus === "Pending Approval" ? "" : pr.rejection_reason,
-            approval_history: newHistory,
-            items: (formData.items || []).map((it) => {
-              const reqQty = Number(it.req_qty) || 0;
-              const ordQty = Number(it.ordered_qty) || 0;
-              return {
-                ...it,
-                req_qty: reqQty,
-                ordered_qty: ordQty,
-                remaining_qty: Math.max(0, reqQty - ordQty)
-              };
-            })
-          };
-        })
-      );
-      showToast(`Purchase Requisition "${formData.pr_number}" updated successfully.`);
-    } else {
-      // New PR Creation
-      const newId = Date.now();
-      const newHistory = [
-        {
-          timestamp: nowFormatted,
-          user: formData.requisitioner,
-          action: actionLabel,
-          status: targetStatus,
-          remarks: formData.remarks || "Initial creation"
-        }
-      ];
-
-      const newPr = {
-        ...formData,
-        id: newId,
-        status: targetStatus,
-        po_number: "",
-        generated_pos: [],
-        estimated_amount: calculatedTotalAmount,
-        created_at: nowFormatted,
-        created_by: formData.requisitioner,
-        updated_at: nowFormatted,
-        updated_by: formData.requisitioner,
-        approval_history: newHistory,
-        items: (formData.items || []).map((it) => ({
-          ...it,
-          ordered_qty: 0,
-          remaining_qty: Number(it.req_qty) || 0
-        }))
-      };
-      setPrList((prev) => [newPr, ...prev]);
-      showToast(`Purchase Requisition "${newPr.pr_number}" ${actionType === "DRAFT" ? "saved as Draft" : "submitted for HOD Approval"}.`);
-    }
-
-    // Persist directly to PostgreSQL database table purchase_requisitions & purchase_requisition_items
+    setPrSaving(true);
     try {
-      const dbPayload = {
-        id: editingPrId !== null ? editingPrId : null,
-        prNumber: formData.pr_number,
-        prDate: formData.pr_date,
-        requiredDate: formData.required_date,
-        requisitioner: formData.requisitioner,
-        department: formData.department,
-        store: formData.store,
-        preferredVendor: formData.preferred_vendor,
-        priority: formData.priority,
-        requirementType: formData.requirement_type,
-        procurementMethod: formData.procurement_method,
-        prType: formData.pr_type || "Direct Material",
-        costCenter: formData.cost_center || "Moulding Press 01",
-        projectReference: formData.project_reference || "",
-        cancellationReason: formData.cancellation_reason || "",
-        purpose: formData.purpose,
-        remarks: formData.remarks,
-        status: targetStatus,
-        createdBy: formData.requisitioner,
-        items: (formData.items || []).map((it) => ({
-          itemCode: it.item_code,
-          itemName: it.item_name,
-          description: it.item_name || it.item_code,
-          category: it.category,
-          uom: it.uom,
-          reqQty: Number(it.req_qty) || 0,
-          orderedQty: Number(it.ordered_qty) || 0,
-          remainingQty: Math.max(0, (Number(it.req_qty) || 0) - (Number(it.ordered_qty) || 0)),
-          estRate: Number(it.est_rate) || 0,
-          estTotal: (Number(it.req_qty) || 0) * (Number(it.est_rate) || 0),
-          hsnCode: it.hsn_code || null,
-          drawingNo: it.drawing_no || null,
-          manufacturerBrand: it.manufacturer_brand || null,
-          requiredByDate: it.required_by_date || it.required_date || formData.required_date || null,
-          remarks: it.remarks || ""
-        }))
-      };
-
-      fetch("http://localhost:4000/api/purchase/requisitions", {
+      const res = await fetch("http://localhost:4000/api/purchase/requisitions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(dbPayload)
-      })
-        .then(() => fetchRequisitions())
-        .catch((e) => console.warn("Backend PR sync warning:", e));
+      });
+      if (!res.ok) {
+        // Keep the form open with the server's reason; nothing was saved.
+        setFormErrors({ server: await readServerError(res, `The PR was not saved (HTTP ${res.status}).`) });
+        return;
+      }
+      const saved = await res.json();
+      await fetchRequisitions();
+      setIsCreateModalOpen(false);
+      const wasApproved = existingPr && existingPr.status !== "Draft" && existingPr.status !== "Pending Approval";
+      showToast(
+        editingPrId !== null
+          ? `Purchase Requisition "${saved.prNumber}" updated${wasApproved ? " and sent back for approval" : ""}.`
+          : `Purchase Requisition "${saved.prNumber}" ${saved.status === "Draft" ? "saved as Draft" : "submitted for approval"}.`
+      );
     } catch (err) {
-      console.warn("Could not sync PR to backend database:", err);
+      setFormErrors({ server: "The server could not be reached. The PR was not saved." });
+    } finally {
+      setPrSaving(false);
     }
+  };
 
-    setIsCreateModalOpen(false);
+  // Approve / reject. The server records the decision (who, when, why) and the list is read back from it, so the
+  // screen never shows a status the database does not have.
+  const decidePr = async (pr, status, reason) => {
+    const prNum = pr.pr_number || pr.prNumber;
+    try {
+      const res = await fetch(`http://localhost:4000/api/purchase/requisitions/${encodeURIComponent(prNum)}/status`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status, reason, user: loadUser().name })
+      });
+      if (!res.ok) {
+        alert(await readServerError(res, `PR "${prNum}" was not updated (HTTP ${res.status}).`));
+        return false;
+      }
+    } catch (e) {
+      alert(`PR "${prNum}" was not updated: the server could not be reached.`);
+      return false;
+    }
+    await fetchRequisitions();
+    return true;
   };
 
   // Approve PR Action
   const handleApprovePr = async (pr) => {
     const prNum = pr.pr_number || pr.prNumber;
-    try {
-      await fetch(`http://localhost:4000/api/purchase/requisitions/${prNum}/status`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "Approved", user: "VP Operations" })
-      });
-    } catch (e) {
-      console.warn("Backend approval sync error:", e);
-    }
-
-    const nowFormatted = formatDisplayDateTime(new Date());
-
-    setPrList((prev) =>
-      prev.map((p) => {
-        if ((p.pr_number || p.prNumber) !== prNum && p.id !== pr.id) return p;
-
-        const history = p.approval_history || [];
-        return {
-          ...p,
-          status: "Approved",
-          updated_at: nowFormatted,
-          updated_by: "HOD Approver",
-          approval_history: [
-            ...history,
-            {
-              timestamp: nowFormatted,
-              user: "HOD Approver",
-              action: "Approved PR",
-              status: "Approved",
-              remarks: "Approved for procurement processing"
-            }
-          ]
-        };
-      })
-    );
-
+    if (!(await decidePr(pr, "Approved"))) return;
     showToast(`PR "${prNum}" approved successfully.`);
     if (detailPr && ((detailPr.pr_number || detailPr.prNumber) === prNum || detailPr.id === pr.id)) {
       setDetailPr((prev) => ({ ...prev, status: "Approved" }));
@@ -1134,42 +1095,7 @@ export function PurchaseRequisitionPage({
 
     const pr = rejectingPrTarget;
     const prNum = pr.pr_number || pr.prNumber;
-    try {
-      await fetch(`http://localhost:4000/api/purchase/requisitions/${prNum}/status`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "Rejected", reason: rejectionReasonText.trim(), user: "HOD Approver" })
-      });
-    } catch (e) {
-      console.warn("Backend rejection sync error:", e);
-    }
-
-    const nowFormatted = formatDisplayDateTime(new Date());
-
-    setPrList((prev) =>
-      prev.map((p) => {
-        if ((p.pr_number || p.prNumber) !== prNum && p.id !== pr.id) return p;
-
-        const history = p.approval_history || [];
-        return {
-          ...p,
-          status: "Rejected",
-          rejection_reason: rejectionReasonText.trim(),
-          updated_at: nowFormatted,
-          updated_by: "Approver",
-          approval_history: [
-            ...history,
-            {
-              timestamp: nowFormatted,
-              user: "Approver",
-              action: "Rejected PR",
-              status: "Rejected",
-              remarks: `Reason: ${rejectionReasonText.trim()}`
-            }
-          ]
-        };
-      })
-    );
+    if (!(await decidePr(pr, "Rejected", rejectionReasonText.trim()))) return;
 
     showToast(`PR "${prNum}" marked as Rejected.`);
     setRejectingPrTarget(null);
@@ -1194,16 +1120,16 @@ export function PurchaseRequisitionPage({
   const handleProcessPoFromPr = (pr) => {
     try {
       setHandoff("SMS_SELECTED_PR_FOR_PO", JSON.stringify(pr));
-      showToast(`Selected PR "${pr.pr_number}". Opening PO Processing screen...`);
+      showToast(`Selected PR "${pr.pr_number}". Opening Clubbed Demand...`);
       if (detailPr) setDetailPr(null);
-      if (onNavigate) onNavigate("new-po-po-by-pr");
+      if (onNavigate) onNavigate("new-po-clubbed-demand");
     } catch (e) {
       console.error(e);
     }
   };
 
   // Delete PR Action
-  const handleConfirmDeletePr = () => {
+  const handleConfirmDeletePr = async () => {
     if (!deletePrTarget) return;
 
     if (deletePrTarget.status !== "Draft" && deletePrTarget.status !== "Rejected") {
@@ -1212,24 +1138,30 @@ export function PurchaseRequisitionPage({
       return;
     }
 
-    const prNum = deletePrTarget.pr_number || deletePrTarget.prNumber;
+    const target = deletePrTarget;
+    const prNum = target.pr_number || target.prNumber;
     try {
-      fetch(`http://localhost:4000/api/purchase/requisitions/${prNum}`, {
-        method: "DELETE"
-      })
-        .then(() => fetchRequisitions())
-        .catch(console.warn);
-    } catch (e) {}
+      const res = await fetch(`http://localhost:4000/api/purchase/requisitions/${encodeURIComponent(prNum)}`, { method: "DELETE" });
+      if (!res.ok) {
+        alert(await readServerError(res, `PR "${prNum}" was not deleted (HTTP ${res.status}).`));
+        setDeletePrTarget(null);
+        return;
+      }
+    } catch (e) {
+      alert(`PR "${prNum}" was not deleted: the server could not be reached.`);
+      setDeletePrTarget(null);
+      return;
+    }
 
-    setPrList((prev) => prev.filter((p) => p.id !== deletePrTarget.id));
+    await fetchRequisitions();
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      next.delete(deletePrTarget.id);
+      next.delete(target.id);
       return next;
     });
-    showToast(`Purchase Requisition "${deletePrTarget.pr_number}" deleted.`);
+    showToast(`Purchase Requisition "${prNum}" deleted.`);
     setDeletePrTarget(null);
-    if (detailPr && detailPr.id === deletePrTarget.id) {
+    if (detailPr && detailPr.id === target.id) {
       setDetailPr(null);
     }
   };
@@ -2143,7 +2075,7 @@ export function PurchaseRequisitionPage({
                           </button>
 
                           {/* Edit Action (Editable if not fully converted to PO) */}
-                          {pr.status !== "Converted to PO" && pr.status !== "Fully Ordered" && (
+                          {!isPrLocked(pr) && (
                             <button
                               onClick={() => handleOpenEditModal(pr)}
                               title="Edit Requisition"
@@ -2598,27 +2530,12 @@ export function PurchaseRequisitionPage({
                     <label style={{ display: "block", fontSize: 11.5, fontWeight: 700, color: "#334155", marginBottom: 4 }}>
                       Department (Department Master) *
                     </label>
-                    <select
+                    <SearchableSelect
                       value={formData.department}
                       onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                      style={{
-                        width: "100%",
-                        padding: "7px 10px",
-                        borderRadius: 6,
-                        border: "1px solid #cbd5e1",
-                        fontSize: 12,
-                        fontWeight: 600,
-                        boxSizing: "border-box",
-                        outline: "none"
-                      }}
-                    >
-                      <option value="">Select department</option>
-                      {masterDepartments.map((d) => (
-                        <option key={d} value={d}>
-                          {d}
-                        </option>
-                      ))}
-                    </select>
+                      placeholder="Select department"
+                      options={masterDepartments.map((d) => ({ value: d, label: d }))}
+                    />
                   </div>
 
                   <div>
@@ -2929,49 +2846,30 @@ export function PurchaseRequisitionPage({
 
                           {/* Item Master Select */}
                           <td style={{ padding: "6px" }}>
-                            <select
+                            <SearchableSelect
                               value={item.item_code}
                               onChange={(e) => handleSelectMasterItemInRow(item.id, e.target.value)}
-                              style={{
-                                width: "100%",
-                                padding: "5px 6px",
-                                borderRadius: 4,
-                                border: "1px solid #cbd5e1",
-                                fontSize: 11,
-                                fontWeight: 700,
-                                color: "#0f172a",
-                                outline: "none"
-                              }}
-                            >
-                              <option value="">Select item</option>
-                              {item.item_code &&
+                              placeholder="Select item"
+                              options={[
+                                ...(item.item_code &&
                                 !(filteredMasterItemsForDropdown.otherItems || []).some((m) => m.item_code === item.item_code) &&
-                                !(filteredMasterItemsForDropdown.fgItems || []).some((m) => m.item_code === item.item_code) && (
-                                  <option value={item.item_code}>
-                                    {item.item_code} &bull; {item.item_name || item.item_code}
-                                  </option>
-                                )}
-
-                              {(filteredMasterItemsForDropdown.otherItems || []).length > 0 && (
-                                <optgroup label="📦 Non-FG / Raw Materials, Bought-Out & Other Items">
-                                  {(filteredMasterItemsForDropdown.otherItems || []).map((m) => (
-                                    <option key={m.item_code} value={m.item_code}>
-                                      {m.item_code} &bull; {m.item_name} [{m.category}]
-                                    </option>
-                                  ))}
-                                </optgroup>
-                              )}
-
-                              {(filteredMasterItemsForDropdown.fgItems || []).length > 0 && (
-                                <optgroup label="⚙️ Finished Goods (FG - Oil Seals)">
-                                  {(filteredMasterItemsForDropdown.fgItems || []).map((m) => (
-                                    <option key={m.item_code} value={m.item_code}>
-                                      {m.item_code} &bull; {m.item_name}
-                                    </option>
-                                  ))}
-                                </optgroup>
-                              )}
-                            </select>
+                                !(filteredMasterItemsForDropdown.fgItems || []).some((m) => m.item_code === item.item_code)
+                                  ? [{ value: item.item_code, label: item.item_code, sub: item.item_name || item.item_code }]
+                                  : []),
+                                ...(filteredMasterItemsForDropdown.otherItems || []).map((m) => ({
+                                  value: m.item_code,
+                                  label: m.item_code,
+                                  sub: [m.item_name, m.category && `[${m.category}]`].filter(Boolean).join(" "),
+                                  group: "Non-FG / Raw Materials, Bought-Out & Other Items"
+                                })),
+                                ...(filteredMasterItemsForDropdown.fgItems || []).map((m) => ({
+                                  value: m.item_code,
+                                  label: m.item_code,
+                                  sub: m.item_name,
+                                  group: "Finished Goods (FG - Oil Seals)"
+                                }))
+                              ]}
+                            />
                             <div style={{ fontSize: 10, color: "#64748b", marginTop: 2, fontWeight: 600 }}>
                               {item.item_name}
                             </div>
@@ -3032,7 +2930,8 @@ export function PurchaseRequisitionPage({
                           <td style={{ padding: "6px", textAlign: "right" }}>
                             <input
                               type="number"
-                              min="1"
+                              min="0"
+                              step="any"
                               value={item.req_qty}
                               onChange={(e) => handleItemLineChange(item.id, "req_qty", e.target.value)}
                               style={{
@@ -3147,6 +3046,12 @@ export function PurchaseRequisitionPage({
                     &bull; {formErrors.items}
                   </div>
                 )}
+                {formErrors.server && (
+                  <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 6, padding: "10px 12px", color: "#b91c1c", fontSize: 12.5, fontWeight: 700, marginBottom: 12 }}>
+                    The PR was not saved: {formErrors.server}
+                  </div>
+                )}
+                {prSaving && <div style={{ fontSize: 12, color: "#64748b", marginBottom: 12 }}>Saving…</div>}
               </div>
 
               {/* Modal Footer (matching ItemMasterFormPage action buttons) */}
@@ -3182,6 +3087,7 @@ export function PurchaseRequisitionPage({
                     <button
                       type="button"
                       onClick={() => handleSavePrWithAction("DRAFT")}
+                      disabled={prSaving}
                       style={{
                         background: "#f1f5f9",
                         border: "1px solid #cbd5e1",
@@ -3202,6 +3108,7 @@ export function PurchaseRequisitionPage({
                       <button
                         type="button"
                         onClick={() => handleSavePrWithAction("SAVE")}
+                        disabled={prSaving}
                         style={{
                           background: "#0284c7",
                           color: "#ffffff",
@@ -3220,6 +3127,7 @@ export function PurchaseRequisitionPage({
                         <button
                           type="button"
                           onClick={() => handleSavePrWithAction("SUBMIT")}
+                          disabled={prSaving}
                           style={{
                             background: "#1e293b",
                             color: "#ffffff",
@@ -3714,7 +3622,7 @@ export function PurchaseRequisitionPage({
               </div>
 
               {/* Approval History Timeline */}
-              {detailPr.approval_history && detailPr.approval_history.length > 0 && (
+              {prTimeline.length > 0 && (
                 <>
                   <div style={{ fontSize: 11, fontWeight: 800, color: textSecondary, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
                     Audit &amp; Approval Timeline History
@@ -3731,7 +3639,7 @@ export function PurchaseRequisitionPage({
                       </tr>
                     </thead>
                     <tbody>
-                      {detailPr.approval_history.map((hist, hIdx) => (
+                      {prTimeline.map((hist, hIdx) => (
                         <tr key={hIdx} style={{ borderBottom: "1px solid #e2e8f0" }}>
                           <td style={{ padding: "6px 8px", color: "#64748b" }}>{hist.timestamp}</td>
                           <td style={{ padding: "6px 8px", fontWeight: 700, color: "#0f172a" }}>{hist.user}</td>
@@ -3778,7 +3686,7 @@ export function PurchaseRequisitionPage({
               </button>
 
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                {detailPr.status !== "Converted to PO" && detailPr.status !== "Fully Ordered" && (
+                {!isPrLocked(detailPr) && (
                   <button
                     onClick={() => handleOpenEditModal(detailPr)}
                     style={{

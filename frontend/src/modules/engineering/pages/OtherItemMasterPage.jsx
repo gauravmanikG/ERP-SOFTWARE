@@ -2,6 +2,7 @@
 
 import { useResizableColumns, ResizableColGroup, ColumnResizeHandle } from "../../../shared/components/ResizableTable";
 import { useState, useRef, useEffect, useMemo } from "react";
+import SearchableSelect from "../../../shared/components/SearchableSelect";
 import {
   Eye,
   Pencil,
@@ -317,8 +318,6 @@ const OTHER_ITEM_MASTER_PAGE_1_COLUMNS = [
   { key: "uom", width: 80 },
   { key: "handlesort_current_stock", width: 200 },
   { key: "rate", width: 96 },
-  { key: "supplier", width: 96 },
-  { key: "location", width: 96 },
   { key: "status", width: 82 },
   { key: "actions", width: 100 },
 ];
@@ -349,22 +348,27 @@ export function OtherItemMasterPage({ onBackToHome, onOpenSidebar, sidebarOpen, 
       if (res.ok) {
         const apiItems = await res.json();
         if (Array.isArray(apiItems)) { // an empty list is applied too, so the last deleted item disappears
+          // Every stored field is kept, so opening an item for edit starts from what is saved, not from blanks.
           const list = apiItems.map((apiIt, idx) => ({
+            ...Object.fromEntries(Object.entries(apiIt).filter(([, v]) => v !== null && v !== undefined)),
             id: apiIt.id,
             sNo: idx + 1,
             item_code: apiIt.item_code || apiIt.sms_new_part_no || `ITM-${apiIt.id}`,
             item_name: apiIt.item_name || apiIt.description_size || "",
             description: apiIt.description_size || apiIt.item_name || "",
+            group: apiIt.group_name || "",
             category: apiIt.category || "Raw Material",
             sub_category: apiIt.subgroup || "",
             material_grade: apiIt.material || "",
+            height: apiIt.width || "",
             uom: apiIt.purchased_uom || apiIt.uom || "PCS",
-            current_stock: 0,
-            min_stock: 10,
-            reorder_qty: 20,
+            current_stock: Number(apiIt.opening_balance || 0),
+            min_stock: Number(apiIt.min_stock_lvl || 0),
+            reorder_qty: Number(apiIt.reorder_stock_lvl || 0),
             unit_price: Number(apiIt.price || apiIt.est_rate || 0),
+            rate: apiIt.price ?? "",
             hsn_code: apiIt.hsn_code || "",
-            status: "Active"
+            status: apiIt.status || "Active"
           }));
           setItems(list);
         }
@@ -809,7 +813,8 @@ export function OtherItemMasterPage({ onBackToHome, onOpenSidebar, sidebarOpen, 
   const rawMaterialsCount = items.filter((i) => i.category === "Raw Material").length;
   const consumablesCount = items.filter((i) => i.category === "Consumables" || i.category === "Consumables 🧪").length;
   const packagingCount = items.filter((i) => i.category === "Packaging Material" || i.category === "Packing Materials 📦").length;
-  const minStockAlertsCount = items.filter((i) => Number(i.current_stock) <= Number(i.min_stock)).length;
+  // Only items with a stored min stock level can be below it.
+  const minStockAlertsCount = items.filter((i) => Number(i.min_stock) > 0 && Number(i.current_stock) <= Number(i.min_stock)).length;
 
   // Toggle selection
   const toggleSelectRow = (id) => {
@@ -1045,7 +1050,7 @@ export function OtherItemMasterPage({ onBackToHome, onOpenSidebar, sidebarOpen, 
       unit_price: Number(formData.rate || formData.unit_price) || 0,
       price: Number(formData.rate || formData.unit_price) || 0,
       rate: Number(formData.rate || formData.unit_price) || 0,
-      mrp: Number(formData.mrp) || 0,
+      mrp: formData.mrp,
       material: formData.material,
       material_grade: formData.material,
       color: formData.color,
@@ -1111,11 +1116,9 @@ export function OtherItemMasterPage({ onBackToHome, onOpenSidebar, sidebarOpen, 
       "Material Grade",
       "HSN Code",
       "UOM",
-      "Current Stock",
+      "Opening Stock",
       "Min Stock",
       "Unit Price",
-      "Default Supplier",
-      "Storage Location",
       "Status"
     ];
 
@@ -1132,8 +1135,6 @@ export function OtherItemMasterPage({ onBackToHome, onOpenSidebar, sidebarOpen, 
       item.current_stock ?? 0,
       item.min_stock ?? 0,
       item.unit_price ?? 0,
-      `"${(item.default_supplier || "").replace(/"/g, '""')}"`,
-      `"${(item.storage_location || "").replace(/"/g, '""')}"`,
       `"${item.status || "Active"}"`
     ]);
 
@@ -1664,12 +1665,10 @@ export function OtherItemMasterPage({ onBackToHome, onOpenSidebar, sidebarOpen, 
                     <th style={{ padding: "10px 12px", textAlign: "left", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.05em", fontSize: 11 }}>HSN<ColumnResizeHandle colKey="hsn" resize={otherItemMasterPage1Resize} /></th>
                     <th style={{ padding: "10px 12px", textAlign: "left", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.05em", fontSize: 11 }}>UOM<ColumnResizeHandle colKey="uom" resize={otherItemMasterPage1Resize} /></th>
                     <th style={{ padding: "10px 12px", textAlign: "left", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.05em", fontSize: 11, cursor: "pointer" }} onClick={() => handleSort("current_stock")}>
-                      Stock {sortField === "current_stock" && (sortDirection === "asc" ? "↑" : "↓")}
+                      Opening Stock {sortField === "current_stock" && (sortDirection === "asc" ? "↑" : "↓")}
                       <ColumnResizeHandle colKey="handlesort_current_stock" resize={otherItemMasterPage1Resize} />
                     </th>
                     <th style={{ padding: "10px 12px", textAlign: "left", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.05em", fontSize: 11 }}>Rate (₹)<ColumnResizeHandle colKey="rate" resize={otherItemMasterPage1Resize} /></th>
-                    <th style={{ padding: "10px 12px", textAlign: "left", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.05em", fontSize: 11 }}>Supplier<ColumnResizeHandle colKey="supplier" resize={otherItemMasterPage1Resize} /></th>
-                    <th style={{ padding: "10px 12px", textAlign: "left", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.05em", fontSize: 11 }}>Location<ColumnResizeHandle colKey="location" resize={otherItemMasterPage1Resize} /></th>
                     <th style={{ padding: "10px 12px", textAlign: "left", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.05em", fontSize: 11 }}>Status<ColumnResizeHandle colKey="status" resize={otherItemMasterPage1Resize} /></th>
                     <th style={{ padding: "10px 12px", textAlign: "center", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.05em", fontSize: 11, width: 100 }}>Actions<ColumnResizeHandle colKey="actions" resize={otherItemMasterPage1Resize} /></th>
                   </tr>
@@ -1677,14 +1676,14 @@ export function OtherItemMasterPage({ onBackToHome, onOpenSidebar, sidebarOpen, 
                 <tbody>
                   {paginatedItems.length === 0 ? (
                     <tr>
-                      <td colSpan={15} style={{ textAlign: "center", padding: "40px 0", color: "#64748b", fontSize: 13 }}>
+                      <td colSpan={13} style={{ textAlign: "center", padding: "40px 0", color: "#64748b", fontSize: 13 }}>
                         No items found matching your filter criteria.
                       </td>
                     </tr>
                   ) : (
                     paginatedItems.map((item, idx) => {
                       const isSelected = selectedIds.has(item.id);
-                      const isStockLow = Number(item.current_stock) <= Number(item.min_stock);
+                      const isStockLow = Number(item.min_stock) > 0 && Number(item.current_stock) <= Number(item.min_stock);
 
                       return (
                         <tr
@@ -1724,10 +1723,6 @@ export function OtherItemMasterPage({ onBackToHome, onOpenSidebar, sidebarOpen, 
                           <td style={{ padding: "10px 12px", fontWeight: 700, color: "#0f172a" }}>
                             ₹{Number(item.unit_price || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                           </td>
-                          <td style={{ padding: "10px 12px", color: "#334155", maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis" }} title={item.default_supplier}>
-                            {item.default_supplier || "-"}
-                          </td>
-                          <td style={{ padding: "10px 12px", color: "#64748b", fontSize: 11.5 }}>{item.storage_location || "-"}</td>
                           <td style={{ padding: "10px 12px" }}>
                             <span style={{ padding: "2px 7px", borderRadius: 4, fontSize: 10.5, fontWeight: 700, background: item.status === "Active" ? "rgba(16,185,129,0.12)" : "rgba(239,68,68,0.12)", color: item.status === "Active" ? "#059669" : "#dc2626" }}>
                               {item.status || "Active"}
@@ -3079,21 +3074,15 @@ export function OtherItemMasterPage({ onBackToHome, onOpenSidebar, sidebarOpen, 
                   </div>
                   <div>
                     <label style={fieldLabelStyle}>HSN / SAC Code{!editingId && " *"}</label>
-                    <select
+                    <SearchableSelect
                       value={formData.hsn_code}
                       onChange={(e) => handleInputChange("hsn_code", e.target.value)}
-                      style={{ ...fieldInputStyle, ...(formErrors.hsn_code ? { border: "1px solid #ef4444" } : {}) }}
-                    >
-                      <option value="">-- Select HSN / SAC Code --</option>
-                      {formData.hsn_code && !hsnList.some((h) => h.code === formData.hsn_code) && (
-                        <option value={formData.hsn_code}>{formData.hsn_code}</option>
-                      )}
-                      {hsnList.map((h) => (
-                        <option key={h.code} value={h.code}>
-                          {h.code} {h.desc ? `- ${h.desc}` : ""}
-                        </option>
-                      ))}
-                    </select>
+                      placeholder="Search HSN / SAC code or description"
+                      options={[
+                        ...(formData.hsn_code && !hsnList.some((h) => h.code === formData.hsn_code) ? [{ value: formData.hsn_code, label: formData.hsn_code }] : []),
+                        ...hsnList.map((h) => ({ value: h.code, label: h.code, sub: h.desc }))
+                      ]}
+                    />
                     {formErrors.hsn_code && (
                       <span style={{ fontSize: 10, color: "#ef4444", marginTop: 2, display: "block" }}>
                         {formErrors.hsn_code}
@@ -3283,11 +3272,9 @@ export function OtherItemMasterPage({ onBackToHome, onOpenSidebar, sidebarOpen, 
               <div><strong style={{ color: "#64748b" }}>Material Grade:</strong> <div style={{ color: "#0f172a", fontWeight: 700 }}>{detailItem.material_grade || "-"}</div></div>
               <div><strong style={{ color: "#64748b" }}>HSN Code:</strong> <div style={{ color: "#0f172a", fontWeight: 700 }}>{detailItem.hsn_code || "-"}</div></div>
               <div><strong style={{ color: "#64748b" }}>UOM:</strong> <div style={{ color: "#0f172a", fontWeight: 700 }}>{detailItem.uom}</div></div>
-              <div><strong style={{ color: "#64748b" }}>Current Stock:</strong> <div style={{ color: "#059669", fontWeight: 800 }}>{detailItem.current_stock} {detailItem.uom}</div></div>
+              <div><strong style={{ color: "#64748b" }}>Opening Stock:</strong> <div style={{ color: "#059669", fontWeight: 800 }}>{detailItem.current_stock} {detailItem.uom}</div></div>
               <div><strong style={{ color: "#64748b" }}>Min Stock Level:</strong> <div style={{ color: "#dc2626", fontWeight: 800 }}>{detailItem.min_stock} {detailItem.uom}</div></div>
               <div><strong style={{ color: "#64748b" }}>Unit Rate:</strong> <div style={{ color: "#0f172a", fontWeight: 800 }}>₹{Number(detailItem.unit_price || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</div></div>
-              <div><strong style={{ color: "#64748b" }}>Default Supplier:</strong> <div style={{ color: "#0f172a", fontWeight: 600 }}>{detailItem.default_supplier || "-"}</div></div>
-              <div><strong style={{ color: "#64748b" }}>Storage Location:</strong> <div style={{ color: "#0f172a", fontWeight: 600 }}>{detailItem.storage_location || "-"}</div></div>
               <div style={{ gridColumn: "span 2" }}><strong style={{ color: "#64748b" }}>Notes / Specifications:</strong> <div style={{ color: "#334155", background: "#f8fafc", padding: 10, borderRadius: 6, marginTop: 4, border: "1px solid #e2e8f0" }}>{detailItem.notes || "No extra technical notes specified."}</div></div>
             </div>
             <div style={{ padding: "12px 22px", background: "#f8fafc", borderTop: "1px solid #e2e8f0", display: "flex", justifyContent: "flex-end", gap: 10 }}>

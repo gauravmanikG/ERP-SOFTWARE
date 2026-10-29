@@ -17,7 +17,7 @@ import java.util.Map;
  * which would otherwise turn them into 500s.
  */
 @Order(Ordered.HIGHEST_PRECEDENCE)
-@RestControllerAdvice(assignableTypes = {NewPoController.class, PoByPrController.class, DirectPoController.class, ProcurementReportController.class})
+@RestControllerAdvice(assignableTypes = {NewPoController.class, PoByPrController.class, DirectPoController.class, ProcurementReportController.class, SourcingController.class})
 public class NewPoExceptionHandler {
 
     @ExceptionHandler(NewPoException.class)

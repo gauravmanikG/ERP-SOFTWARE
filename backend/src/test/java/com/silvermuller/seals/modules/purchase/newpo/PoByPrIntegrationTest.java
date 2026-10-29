@@ -592,19 +592,19 @@ class PoByPrIntegrationTest {
     }
 
     @Test
-    void poNumbersComeFromTheDatabaseSequenceAndStayAheadOfExistingNumbers() throws Exception {
+    void poNumbersCarryTheCurrentYearAndStayAheadOfExistingNumbers() throws Exception {
         // A stored PO with a high number, as if written by an earlier run or another instance.
-        String highest = "PO-2026-" + (90000 + COUNTER.next());
+        String head = "PO-" + LocalDate.now().getYear() + "-";
+        String highest = head + (90000 + COUNTER.next());
         jdbc.update("INSERT INTO public.purchase_orders (id, po_number, po_date, vendor_code, vendor_name, status) VALUES (?, ?, '2026-10-19', ?, 'fixture', 'APPROVED')",
                 "IT-" + TAG + "-" + highest, highest, VENDOR);
         PO_NUMBERS.add(highest);
 
-        // Simulated restart: the sequence is re-aligned from the stored numbers, not from memory.
-        migrations.ensurePoNumberSequence();
+        // The next number is always above the highest stored number of the year, even one written outside the counter.
         String next = purchaseProcessing.reservePoNumber();
-        long nextSeq = Long.parseLong(next.substring(8));
-        assertTrue(nextSeq > Long.parseLong(highest.substring(8)), next + " must be above " + highest);
-        assertTrue(next.matches("PO-2026-\\d{5,}"));
+        long nextSeq = Long.parseLong(next.substring(head.length()));
+        assertTrue(nextSeq > Long.parseLong(highest.substring(head.length())), next + " must be above " + highest);
+        assertTrue(next.matches("PO-" + LocalDate.now().getYear() + "-\\d{5,}"));
 
         // Concurrent reservations are all distinct.
         ExecutorService pool = Executors.newFixedThreadPool(8);

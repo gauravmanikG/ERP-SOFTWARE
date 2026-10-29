@@ -305,6 +305,317 @@ public class ProcurementReportService {
         return out;
     }
 
+    // ------------------------------------------------------------------ PR -> draft -> PO -> GRN traceability
+
+    /**
+     * One row per PR line with its line-level balances, and under it every draft, PO and GRN it went through.
+     * Line totals are computed once per line, so a line on several POs or GRNs is never counted twice.
+     *
+     *   readyForSourcing  = requested - ordered - drafted (approved PRs only)
+     *   inDraft           = drafted_qty (reserved in open drafts, not yet on a PO)
+     *   remainingToOrder  = requested - ordered (includes what is still in drafts)
+     *   awaitingReceipt   = ordered through PO by PR - accepted receipts
+     *
+     * Filters are optional: department (exact), vendorCode (any draft or PO of the line), item (code or name),
+     * docNumber (PR, draft, PO or GRN number, partial match), status (approvalStage, orderingStatus,
+     * receivingStatus or stage value).
+     */
+    public List<Map<String, Object>> traceability(String department, String vendorCode, String item, String docNumber, String status) {
+        String itemLike = item == null ? null : "%" + item + "%";
+        String docLike = docNumber == null ? null : "%" + docNumber + "%";
+        List<Map<String, Object>> lines = jdbc.queryForList(
+                "SELECT pri.id, pri.pr_number, pr.pr_date, pr.status AS pr_status, pr.department, pr.requisitioner, " +
+                "pri.item_code, pri.item_name, pri.uom, pri.req_qty, pri.ordered_qty, pri.drafted_qty, pri.required_by_date " +
+                "FROM public.purchase_requisition_items pri JOIN public.purchase_requisitions pr ON pr.id = pri.pr_id " +
+                "WHERE (CAST(? AS VARCHAR) IS NULL OR pr.department = ?) " +
+                "AND (CAST(? AS VARCHAR) IS NULL OR pri.item_code ILIKE ? OR pri.item_name ILIKE ?) " +
+                "AND (CAST(? AS VARCHAR) IS NULL " +
+                "     OR EXISTS (SELECT 1 FROM public.po_draft_allocations da JOIN public.po_drafts d ON d.id = da.draft_id WHERE da.pr_item_id = pri.id AND d.vendor_code = ?) " +
+                "     OR EXISTS (SELECT 1 FROM public.po_pr_allocations a JOIN public.purchase_orders p ON p.po_number = a.po_number WHERE a.pr_item_id = pri.id AND p.vendor_code = ?)) " +
+                "AND (CAST(? AS VARCHAR) IS NULL OR pri.pr_number ILIKE ? " +
+                "     OR EXISTS (SELECT 1 FROM public.po_draft_allocations da JOIN public.po_drafts d ON d.id = da.draft_id WHERE da.pr_item_id = pri.id AND d.draft_number ILIKE ?) " +
+                "     OR EXISTS (SELECT 1 FROM public.po_pr_allocations a WHERE a.pr_item_id = pri.id AND a.po_number ILIKE ?) " +
+                "     OR EXISTS (SELECT 1 FROM public.po_pr_allocations a JOIN public.grn_item_allocations g ON g.allocation_id = a.id " +
+                "                JOIN public.goods_receipt_note_items gi ON gi.id = g.grn_item_id JOIN public.goods_receipt_notes n ON n.id = gi.grn_id " +
+                "                WHERE a.pr_item_id = pri.id AND n.grn_number ILIKE ?)) " +
+                "ORDER BY pr.pr_date DESC, pri.pr_number DESC, pri.id LIMIT 2000",
+                department, department, itemLike, itemLike, itemLike, vendorCode, vendorCode, vendorCode,
+                docLike, docLike, docLike, docLike, docLike);
+        if (lines.isEmpty()) return List.of();
+
+        List<Long> ids = lines.stream().map(l -> ((Number) l.get("id")).longValue()).toList();
+        String in = String.join(",", Collections.nCopies(ids.size(), "?"));
+
+        Map<Long, List<Map<String, Object>>> draftsByLine = new HashMap<>();
+        for (Map<String, Object> d : jdbc.queryForList(
+                "SELECT da.pr_item_id, d.draft_number, d.status AS draft_status, d.vendor_code, s.supplier_name, " +
+                "da.reserved_qty, da.converted_qty, da.released_qty, da.reserved_qty - da.converted_qty - da.released_qty AS open_qty " +
+                "FROM public.po_draft_allocations da JOIN public.po_drafts d ON d.id = da.draft_id " +
+                "JOIN public.supplier_master s ON s.supplier_code = d.vendor_code WHERE da.pr_item_id IN (" + in + ") ORDER BY da.id",
+                ids.toArray())) {
+            Map<String, Object> o = new LinkedHashMap<>();
+            o.put("draftNumber", d.get("draft_number"));
+            o.put("draftStatus", d.get("draft_status"));
+            o.put("vendorCode", d.get("vendor_code"));
+            o.put("vendorName", d.get("supplier_name"));
+            o.put("reservedQty", num(d.get("reserved_qty")));
+            o.put("convertedQty", num(d.get("converted_qty")));
+            o.put("releasedQty", num(d.get("released_qty")));
+            o.put("openQty", num(d.get("open_qty")));
+            draftsByLine.computeIfAbsent(((Number) d.get("pr_item_id")).longValue(), k -> new ArrayList<>()).add(o);
+        }
+
+        List<Map<String, Object>> allocs = jdbc.queryForList(
+                "SELECT a.id, a.pr_item_id, a.po_number, p.po_date, p.status AS po_status, p.vendor_code, p.vendor_name, a.unit_price, " +
+                "a.allocated_qty - a.released_qty AS net_qty, d.draft_number " +
+                "FROM public.po_pr_allocations a JOIN public.purchase_orders p ON p.po_number = a.po_number " +
+                "LEFT JOIN public.po_draft_allocations da ON da.id = a.draft_allocation_id LEFT JOIN public.po_drafts d ON d.id = da.draft_id " +
+                "WHERE a.pr_item_id IN (" + in + ") ORDER BY a.id", ids.toArray());
+        Map<Long, List<Map<String, Object>>> grnsByAlloc = new HashMap<>();
+        if (!allocs.isEmpty()) {
+            List<Long> allocIds = allocs.stream().map(a -> ((Number) a.get("id")).longValue()).toList();
+            for (Map<String, Object> g : jdbc.queryForList(
+                    "SELECT g.allocation_id, n.grn_number, n.grn_date, SUM(g.accepted_qty) AS accepted_qty " +
+                    "FROM public.grn_item_allocations g JOIN public.goods_receipt_note_items gi ON gi.id = g.grn_item_id " +
+                    "JOIN public.goods_receipt_notes n ON n.id = gi.grn_id " +
+                    "WHERE n.status = 'POSTED' AND g.allocation_id IN (" + String.join(",", Collections.nCopies(allocIds.size(), "?")) + ") " +
+                    "GROUP BY g.allocation_id, n.grn_number, n.grn_date ORDER BY n.grn_date, n.grn_number", allocIds.toArray())) {
+                Map<String, Object> o = new LinkedHashMap<>();
+                o.put("grnNumber", g.get("grn_number"));
+                o.put("grnDate", g.get("grn_date"));
+                o.put("receivedQty", num(g.get("accepted_qty")));
+                grnsByAlloc.computeIfAbsent(((Number) g.get("allocation_id")).longValue(), k -> new ArrayList<>()).add(o);
+            }
+        }
+        Map<Long, List<Map<String, Object>>> posByLine = new HashMap<>();
+        for (Map<String, Object> a : allocs) {
+            List<Map<String, Object>> grns = grnsByAlloc.getOrDefault(((Number) a.get("id")).longValue(), List.of());
+            BigDecimal net = num(a.get("net_qty"));
+            BigDecimal received = grns.stream().map(g -> num(g.get("receivedQty"))).reduce(BigDecimal.ZERO, BigDecimal::add);
+            Map<String, Object> o = new LinkedHashMap<>();
+            o.put("poNumber", a.get("po_number"));
+            o.put("poDate", a.get("po_date"));
+            o.put("poStatus", a.get("po_status"));
+            o.put("vendorCode", a.get("vendor_code"));
+            o.put("vendorName", a.get("vendor_name"));
+            o.put("draftNumber", a.get("draft_number"));
+            o.put("unitPrice", a.get("unit_price"));
+            o.put("orderedQty", net);
+            o.put("receivedQty", received);
+            o.put("awaitingReceiptQty", net.subtract(received).max(BigDecimal.ZERO));
+            o.put("grns", grns);
+            posByLine.computeIfAbsent(((Number) a.get("pr_item_id")).longValue(), k -> new ArrayList<>()).add(o);
+        }
+
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (Map<String, Object> l : lines) {
+            long id = ((Number) l.get("id")).longValue();
+            String prStatus = String.valueOf(l.get("pr_status"));
+            BigDecimal req = num(l.get("req_qty")), ordered = num(l.get("ordered_qty")), drafted = num(l.get("drafted_qty"));
+            List<Map<String, Object>> pos = posByLine.getOrDefault(id, List.of());
+            BigDecimal orderedOnPos = pos.stream().map(p -> num(p.get("orderedQty"))).reduce(BigDecimal.ZERO, BigDecimal::add);
+            BigDecimal received = pos.stream().map(p -> num(p.get("receivedQty"))).reduce(BigDecimal.ZERO, BigDecimal::add);
+
+            String approval = switch (prStatus) {
+                case "Draft", "Pending Approval", "Submitted" -> "AWAITING_APPROVAL";
+                case "Rejected" -> "REJECTED";
+                case "Cancelled" -> "CANCELLED";
+                default -> "APPROVED";
+            };
+            boolean approved = "APPROVED".equals(approval);
+            BigDecimal ready = approved ? req.subtract(ordered).subtract(drafted).max(BigDecimal.ZERO) : BigDecimal.ZERO;
+            String ordering = ordered.signum() == 0 ? "YET_TO_ORDER" : ordered.compareTo(req) < 0 ? "PARTIALLY_ORDERED" : "FULLY_ORDERED";
+            String receiving = received.signum() == 0 ? "NOT_RECEIVED"
+                    : received.compareTo(orderedOnPos) < 0 ? "PARTIALLY_RECEIVED" : "FULLY_RECEIVED";
+            BigDecimal awaiting = orderedOnPos.subtract(received).max(BigDecimal.ZERO);
+
+            String stage, nextAction;
+            if (!approved) {
+                stage = approval;
+                nextAction = "AWAITING_APPROVAL".equals(approval) ? "Approve the PR." : "No action: the PR is " + prStatus + ".";
+            } else if (ready.signum() > 0) {
+                stage = "READY_FOR_SOURCING";
+                nextAction = "Choose a vendor in Clubbed Demand.";
+            } else if (drafted.signum() > 0) {
+                stage = "IN_DRAFT";
+                nextAction = "Convert the vendor draft to a PO.";
+            } else if (awaiting.signum() > 0) {
+                stage = "AWAITING_RECEIPT";
+                nextAction = "Receive goods (GRN) against the PO.";
+            } else if (ordered.subtract(orderedOnPos).signum() > 0) {
+                // Ordered through an older flow with no PR allocation: its receipts cannot be linked to this line,
+                // so it is never reported as completed.
+                stage = "ORDERED_UNTRACKED";
+                nextAction = "Ordered through an older PO flow; receipts are not linked to this PR line. Check the PO directly.";
+            } else {
+                stage = "COMPLETED";
+                nextAction = "Nothing pending.";
+            }
+
+            Map<String, Object> o = new LinkedHashMap<>();
+            o.put("prItemId", id);
+            o.put("department", l.get("department"));
+            o.put("prNumber", l.get("pr_number"));
+            o.put("prDate", l.get("pr_date"));
+            o.put("prStatus", prStatus);
+            o.put("requisitioner", l.get("requisitioner"));
+            o.put("itemCode", l.get("item_code"));
+            o.put("itemName", l.get("item_name"));
+            o.put("uom", l.get("uom"));
+            o.put("requiredByDate", l.get("required_by_date"));
+            o.put("requestedQty", req);
+            o.put("readyForSourcingQty", ready);
+            o.put("inDraftQty", drafted);
+            o.put("orderedQty", ordered);
+            o.put("orderedOutsidePoByPrQty", ordered.subtract(orderedOnPos).max(BigDecimal.ZERO));
+            o.put("remainingToOrderQty", req.subtract(ordered).max(BigDecimal.ZERO));
+            o.put("receivedQty", received);
+            o.put("awaitingReceiptQty", awaiting);
+            o.put("approvalStage", approval);
+            o.put("orderingStatus", ordering);
+            o.put("receivingStatus", receiving);
+            o.put("stage", stage);
+            o.put("nextAction", nextAction);
+            o.put("drafts", draftsByLine.getOrDefault(id, List.of()));
+            o.put("purchaseOrders", pos);
+            if (status == null || status.equalsIgnoreCase(approval) || status.equalsIgnoreCase(ordering)
+                    || status.equalsIgnoreCase(receiving) || status.equalsIgnoreCase(stage)) {
+                out.add(o);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * The same report flattened for export, with the report's columns. A PR line produces one row per open draft,
+     * one row per GRN of each PO (or one row for a PO with no GRN yet), and one row if it has neither. Line-level
+     * quantities (requested, remaining to order) are filled on the line's first row only, so column totals are exact.
+     */
+    public List<Map<String, Object>> traceabilityFlat(String department, String vendorCode, String item, String docNumber, String status) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (Map<String, Object> line : traceability(department, vendorCode, item, docNumber, status)) {
+            List<Map<String, Object>> rows = new ArrayList<>();
+            @SuppressWarnings("unchecked") List<Map<String, Object>> drafts = (List<Map<String, Object>>) line.get("drafts");
+            for (Map<String, Object> d : drafts) {
+                if (num(d.get("openQty")).signum() <= 0) continue;
+                Map<String, Object> r = flatRow(line);
+                r.put("draftReference", d.get("draftNumber"));
+                r.put("vendorName", d.get("vendorName"));
+                r.put("qtyReservedInDraft", d.get("openQty"));
+                rows.add(r);
+            }
+            @SuppressWarnings("unchecked") List<Map<String, Object>> pos = (List<Map<String, Object>>) line.get("purchaseOrders");
+            for (Map<String, Object> p : pos) {
+                @SuppressWarnings("unchecked") List<Map<String, Object>> grns = (List<Map<String, Object>>) p.get("grns");
+                boolean firstOfPo = true;
+                for (Map<String, Object> g : grns.isEmpty() ? Collections.<Map<String, Object>>singletonList(null) : grns) {
+                    Map<String, Object> r = flatRow(line);
+                    r.put("draftReference", p.get("draftNumber"));
+                    r.put("vendorName", p.get("vendorName"));
+                    r.put("poNumber", p.get("poNumber"));
+                    r.put("orderedQty", firstOfPo ? p.get("orderedQty") : null);
+                    r.put("qtyAwaitingReceipt", firstOfPo ? p.get("awaitingReceiptQty") : null);
+                    if (g != null) {
+                        r.put("grnNumber", g.get("grnNumber"));
+                        r.put("receivedQty", g.get("receivedQty"));
+                    }
+                    rows.add(r);
+                    firstOfPo = false;
+                }
+            }
+            if (rows.isEmpty()) rows.add(flatRow(line));
+            rows.get(0).put("requestedQty", line.get("requestedQty"));
+            rows.get(0).put("remainingQtyToOrder", line.get("remainingToOrderQty"));
+            out.addAll(rows);
+        }
+        return out;
+    }
+
+    private static Map<String, Object> flatRow(Map<String, Object> line) {
+        Map<String, Object> r = new LinkedHashMap<>();
+        r.put("department", line.get("department"));
+        r.put("prNumber", line.get("prNumber"));
+        r.put("itemCode", line.get("itemCode"));
+        r.put("itemName", line.get("itemName"));
+        r.put("uom", line.get("uom"));
+        r.put("requestedQty", null);
+        r.put("draftReference", null);
+        r.put("qtyReservedInDraft", null);
+        r.put("vendorName", null);
+        r.put("poNumber", null);
+        r.put("orderedQty", null);
+        r.put("remainingQtyToOrder", null);
+        r.put("grnNumber", null);
+        r.put("receivedQty", null);
+        r.put("qtyAwaitingReceipt", null);
+        r.put("status", line.get("stage"));
+        r.put("orderingStatus", line.get("orderingStatus"));
+        r.put("receivingStatus", line.get("receivingStatus"));
+        return r;
+    }
+
+    /** Item-level and overall status of one PR. Ordering and receiving are reported separately. */
+    public Map<String, Object> prStatus(String prNumber) {
+        List<Map<String, Object>> header = jdbc.queryForList(
+                "SELECT pr_number, pr_date, status, department, requisitioner, approved_by, approved_at, rejection_reason " +
+                "FROM public.purchase_requisitions WHERE pr_number = ?", prNumber);
+        if (header.isEmpty()) {
+            throw new VendorRateService.NewPoException(org.springframework.http.HttpStatus.NOT_FOUND, "PR " + prNumber + " was not found.");
+        }
+        List<Map<String, Object>> lines = traceability(null, null, null, prNumber, null).stream()
+                .filter(l -> prNumber.equals(l.get("prNumber"))).toList();
+        BigDecimal req = BigDecimal.ZERO, ordered = BigDecimal.ZERO, onPos = BigDecimal.ZERO, received = BigDecimal.ZERO;
+        for (Map<String, Object> l : lines) {
+            req = req.add(num(l.get("requestedQty")));
+            ordered = ordered.add(num(l.get("orderedQty")));
+            onPos = onPos.add(num(l.get("orderedQty")).subtract(num(l.get("orderedOutsidePoByPrQty"))));
+            received = received.add(num(l.get("receivedQty")));
+        }
+        Map<String, Object> h = header.get(0);
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("prNumber", h.get("pr_number"));
+        out.put("prDate", h.get("pr_date"));
+        out.put("prStatus", h.get("status"));
+        out.put("department", h.get("department"));
+        out.put("requisitioner", h.get("requisitioner"));
+        out.put("approvedBy", h.get("approved_by"));
+        out.put("approvedAt", h.get("approved_at"));
+        out.put("rejectionReason", h.get("rejection_reason"));
+        out.put("overallOrderingStatus", ordered.signum() == 0 ? "YET_TO_ORDER" : ordered.compareTo(req) < 0 ? "PARTIALLY_ORDERED" : "FULLY_ORDERED");
+        out.put("overallReceivingStatus", received.signum() == 0 ? "NOT_RECEIVED" : received.compareTo(onPos) < 0 ? "PARTIALLY_RECEIVED" : "FULLY_RECEIVED");
+        out.put("lines", lines);
+        return out;
+    }
+
+    /**
+     * Every standard purchase order, whatever created it (PO by PR, Direct PO or an older PO), newest first.
+     * origin is PO_BY_PR, DIRECT or LEGACY; prNumbers lists the PRs its lines came from (empty for direct and legacy POs).
+     */
+    public List<Map<String, Object>> allPurchaseOrders() {
+        List<Map<String, Object>> rows = jdbc.queryForList(
+                "SELECT p.po_number, p.po_date, p.vendor_code, p.vendor_name, p.status, p.grand_total, p.po_origin, " +
+                "p.reference_no, p.voucher_no, p.created_at, " +
+                "(SELECT COUNT(*) FROM public.po_pr_allocations a WHERE a.po_number = p.po_number) AS allocation_count, " +
+                "(SELECT string_agg(DISTINCT a.pr_number, ', ' ORDER BY a.pr_number) FROM public.po_pr_allocations a WHERE a.po_number = p.po_number) AS pr_numbers " +
+                "FROM public.purchase_orders p ORDER BY p.created_at DESC, p.po_number DESC LIMIT 2000");
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (Map<String, Object> r : rows) {
+            Map<String, Object> o = new LinkedHashMap<>();
+            o.put("po_number", r.get("po_number"));
+            o.put("po_date", r.get("po_date"));
+            o.put("vendor_code", r.get("vendor_code"));
+            o.put("vendor_name", r.get("vendor_name"));
+            o.put("status", r.get("status"));
+            o.put("grand_total", r.get("grand_total"));
+            o.put("origin", PoByPrService.originOf(r.get("po_origin"), ((Number) r.get("allocation_count")).longValue() == 0));
+            o.put("pr_numbers", r.get("pr_numbers") == null ? "" : r.get("pr_numbers"));
+            o.put("reference_no", r.get("reference_no"));
+            o.put("voucher_no", r.get("voucher_no"));
+            out.add(o);
+        }
+        return out;
+    }
+
     /** PO date minus PR date in whole days. Both are java.sql.Date from the query; null when either is missing. */
     private static Integer daysGap(Object prDate, Object poDate) {
         if (!(prDate instanceof java.sql.Date pr) || !(poDate instanceof java.sql.Date po)) return null;

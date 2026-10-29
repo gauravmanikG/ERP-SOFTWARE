@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import * as XLSX from "xlsx";
 import DateInput from "../../../shared/components/DateInput";
+import SearchableSelect from "../../../shared/components/SearchableSelect";
 import { formatDisplayDate } from "../../../shared/utils/dateFormat";
 import { isNumericHeader } from "../newpo/ui";
 
 // ============================================================================
-// Job Work (subcontracting). Company stock moves through the inventory engine.
+// Job Work (subcontracting). Store stock is not checked here (there is no inventory engine).
 // Job-worker balances come from the job work ledger. Every screen calls the real API.
 // ============================================================================
 
@@ -24,7 +25,8 @@ const SCREENS = [
   { key: "receipts", label: "Receipts & Inspection" },
   { key: "ledger", label: "Worker Stock Ledger" },
   { key: "recon", label: "Reconciliation & Scrap" },
-  { key: "reports", label: "Reports" }
+  { key: "reports", label: "Reports" },
+  { key: "operations", label: "Operations Master" }
 ];
 const RATE_BASIS = ["PER_PIECE", "PER_KG", "PER_BATCH", "PER_HOUR"];
 const DEFECTS_NOTE = "Give a defect code for rejected, rework or scrap quantities.";
@@ -168,33 +170,6 @@ function Modal({ title, onClose, children, footer, width = 760, zIndex = 1000 })
   );
 }
 
-function SearchableSelect({ options, value, onChange, placeholder, disabled }) {
-  const [q, setQ] = useState("");
-  const [open, setOpen] = useState(false);
-  const selected = options.find((o) => String(o.value) === String(value));
-  const shown = open ? q : selected ? selected.label : "";
-  const filtered = options.filter((o) => o.label.toLowerCase().includes(q.toLowerCase())).slice(0, 80);
-  return (
-    <div style={{ position: "relative" }}>
-      <input style={inp} value={shown} placeholder={placeholder} disabled={disabled}
-        onFocus={() => { setOpen(true); setQ(""); }} onChange={(e) => { setQ(e.target.value); setOpen(true); }}
-        onBlur={() => setTimeout(() => setOpen(false), 150)} />
-      {open && (
-        <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 60, maxHeight: 240, overflowY: "auto", background: "#fff", border: "1px solid #cbd5e1", borderRadius: 6, boxShadow: "0 10px 24px rgba(15,23,42,0.15)" }}>
-          {filtered.length === 0 && <div style={{ padding: 8, fontSize: 12, color: "#64748b" }}>No matches</div>}
-          {filtered.map((o) => (
-            <div key={String(o.value)} onMouseDown={() => { onChange(o.value); setOpen(false); }}
-              style={{ padding: "7px 10px", fontSize: 12, cursor: "pointer", background: String(o.value) === String(value) ? "#eff6ff" : "#fff", borderBottom: "1px solid #f1f5f9" }}>
-              <div style={{ fontWeight: 600 }}>{o.label}</div>
-              {o.sub && <div style={{ fontSize: 11, color: "#64748b" }}>{o.sub}</div>}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 function KV({ label, value }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
@@ -309,10 +284,72 @@ function DashboardScreen({ user, goTo, flash }) {
 // Job workers
 // ============================================================================
 
-function WorkerForm({ user, onSaved, onClose, flash }) {
+// Same rules as the server: phone exactly 10 digits, a valid e-mail, GSTIN / PAN formats and a PAN that matches the GSTIN.
+const GSTIN_RE = /^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
+const PAN_RE = /^[A-Z]{5}\d{4}[A-Z]$/;
+const digitsOnly = (v, max) => String(v || "").replace(/\D/g, "").slice(0, max);
+const vendorPhone = (v) => { const d = String(v || "").replace(/\D/g, ""); return d.length === 10 ? d : ""; };
+
+function workerDetailsError(f) {
+  if (f.phone && !/^\d{10}$/.test(f.phone)) return "Phone must be exactly 10 digits.";
+  if (f.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email.trim())) return "Enter a valid e-mail address, for example name@company.com.";
+  const gstin = (f.gstin || "").trim().toUpperCase();
+  const pan = (f.pan || "").trim().toUpperCase();
+  if (gstin && !GSTIN_RE.test(gstin)) return "GSTIN is not valid. It has 15 characters, for example 27AABCU9603R1ZX.";
+  if (pan && !PAN_RE.test(pan)) return "PAN is not valid. It has 10 characters, for example AABCU9603R.";
+  if (gstin && pan && gstin.slice(2, 12) !== pan) return "PAN does not match the PAN inside the GSTIN.";
+  const credit = Number(f.creditDays);
+  if (f.creditDays === "" || Number.isNaN(credit) || credit < 0 || credit > 365) return "Credit days must be between 0 and 365.";
+  return "";
+}
+
+/** Payment terms from Masters > Payment Terms. */
+function usePaymentTerms() {
+  const [terms, setTerms] = useState([]);
+  useEffect(() => { plainGet("/masters/payment-terms").then((rows) => setTerms(rows.filter((t) => t.isActive !== false))).catch(() => setTerms([])); }, []);
+  return terms;
+}
+
+function PaymentTermsSelect({ value, onChange, terms, emptyLabel = "-- Select payment terms --" }) {
+  const known = terms.some((t) => t.name === value);
+  return (
+    <select style={inp} value={value || ""} onChange={onChange}>
+      <option value="">{emptyLabel}</option>
+      {value && !known && <option value={value}>{value}</option>}
+      {terms.map((t) => <option key={t.id} value={t.name}>{t.name}</option>)}
+    </select>
+  );
+}
+
+function WorkerDetailFields({ f, set, terms }) {
+  return (
+    <>
+      <Field label="GSTIN" hint="From the Vendor Master; check it"><input style={inp} maxLength={15} value={f.gstin} onChange={(e) => set("gstin")({ target: { value: e.target.value.toUpperCase() } })} /></Field>
+      <Field label="PAN" hint="Characters 3–12 of the GSTIN"><input style={inp} maxLength={10} value={f.pan} onChange={(e) => set("pan")({ target: { value: e.target.value.toUpperCase() } })} /></Field>
+      <Field label="Registered address" span={2}><input style={inp} value={f.registeredAddress} onChange={set("registeredAddress")} /></Field>
+      <Field label="Contact person"><input style={inp} maxLength={255} value={f.contactPerson} onChange={set("contactPerson")} /></Field>
+      <Field label="Phone" hint="10 digits"><input style={inp} inputMode="numeric" maxLength={10} placeholder="9876543210" value={f.phone} onChange={(e) => set("phone")({ target: { value: digitsOnly(e.target.value, 10) } })} /></Field>
+      <Field label="Email"><input style={inp} type="email" maxLength={255} value={f.email} onChange={set("email")} /></Field>
+      <Field label="Work location"><input style={inp} value={f.workLocation} onChange={set("workLocation")} /></Field>
+      <Field label="Payment terms" hint="From Masters > Payment Terms"><PaymentTermsSelect value={f.paymentTerms} onChange={set("paymentTerms")} terms={terms} /></Field>
+      <Field label="Credit days"><input type="number" min="0" max="365" style={inp} value={f.creditDays} onChange={set("creditDays")} /></Field>
+    </>
+  );
+}
+
+const workerBody = (f) => ({
+  contactPerson: f.contactPerson.trim() || null, phone: f.phone || null, email: f.email.trim() || null,
+  workLocation: f.workLocation.trim() || null, paymentTerms: f.paymentTerms || null, creditDays: Number(f.creditDays),
+  gstin: f.gstin.trim().toUpperCase() || null, pan: f.pan.trim().toUpperCase() || null, registeredAddress: f.registeredAddress.trim() || null
+});
+
+const EMPTY_WORKER = { supplierCode: "", operationIds: [], gstin: "", pan: "", registeredAddress: "", contactPerson: "", phone: "", email: "", workLocation: "", paymentTerms: "", creditDays: "30" };
+
+function WorkerForm({ user, onSaved, onClose }) {
   const [candidates, setCandidates] = useState([]);
   const [ops, setOps] = useState([]);
-  const [f, setF] = useState({ supplierCode: "", operationIds: [], contactPerson: "", phone: "", email: "", workLocation: "", paymentTerms: "", creditDays: "30" });
+  const terms = usePaymentTerms();
+  const [f, setF] = useState(EMPTY_WORKER);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   useEffect(() => {
@@ -320,31 +357,36 @@ function WorkerForm({ user, onSaved, onClose, flash }) {
     api("GET", "/operations", user).then(setOps).catch((e) => setError(e.message));
   }, [user]);
   const set = (k) => (e) => setF((x) => ({ ...x, [k]: e && e.target ? e.target.value : e }));
+  // Picking a vendor fills the form from the Vendor Master; nothing is saved that is not shown here.
+  const pickVendor = (e) => {
+    const code = e && e.target ? e.target.value : e;
+    const v = candidates.find((c) => c.supplierCode === code);
+    setF((x) => ({ ...x, supplierCode: code, gstin: v?.gstin || "", pan: v?.pan || "", registeredAddress: v?.registeredAddress || "",
+      contactPerson: v?.contactPerson || "", phone: vendorPhone(v?.phone), email: v?.email || "" }));
+  };
   const toggleOp = (id) => setF((x) => ({ ...x, operationIds: x.operationIds.includes(id) ? x.operationIds.filter((o) => o !== id) : [...x.operationIds, id] }));
   const save = async () => {
     setError("");
     if (!f.supplierCode) { setError("Select a vendor from the Vendor Master."); return; }
     if (f.operationIds.length === 0) { setError("Select at least one approved job work operation."); return; }
+    const bad = workerDetailsError(f);
+    if (bad) { setError(bad); return; }
     setBusy(true);
     try {
-      const w = await api("POST", "/workers", user, {
-        supplierCode: f.supplierCode, operationIds: f.operationIds, contactPerson: f.contactPerson || null, phone: f.phone || null,
-        email: f.email || null, workLocation: f.workLocation || null, paymentTerms: f.paymentTerms || null, creditDays: Number(f.creditDays || 0)
-      });
+      const w = await api("POST", "/workers", user, { supplierCode: f.supplierCode, operationIds: f.operationIds, ...workerBody(f) });
       onSaved(w, `${w.workerCode} onboarded as job worker.`);
     } catch (e) { setError(e.message); } finally { setBusy(false); }
   };
   return (
-    <Modal title="Onboard job worker" onClose={onClose} width={760}
+    <Modal title="Onboard job worker" onClose={onClose} width={860}
       footer={<><button style={btn()} onClick={onClose}>Cancel</button><button style={btn("primary")} disabled={busy} onClick={save}>{busy ? "Saving…" : "Save job worker"}</button></>}>
       {error && <Banner kind="error">{error}</Banner>}
-      <Section title="Vendor" subtitle="Company details, GSTIN and PAN are copied from the Vendor Master. A vendor can be onboarded only once.">
+      <Section title="Vendor" subtitle="Pick a vendor from the Vendor Master. Its details fill in below for you to check or correct. A vendor can be onboarded only once.">
         <Field label="Vendor" required span={2}>
           <SearchableSelect options={candidates.map((c) => ({ value: c.supplierCode, label: `${c.supplierName} (${c.supplierCode})`, sub: [c.gstin, c.state].filter(Boolean).join(" · ") }))}
-            value={f.supplierCode} placeholder="Search vendor" onChange={set("supplierCode")} />
+            value={f.supplierCode} placeholder="Search vendor" onChange={pickVendor} />
         </Field>
-        <Field label="Credit days"><input type="number" min="0" style={inp} value={f.creditDays} onChange={set("creditDays")} /></Field>
-        <Field label="Approved operations" required span={3} hint="Rates can only be added for these operations">
+        <Field label="Approved operations" required span={3} hint="From the Job Work Operations master. Rates can only be added for these operations">
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             {ops.map((o) => (
               <label key={o.id} style={{ fontSize: 13, display: "flex", gap: 6, alignItems: "center", border: "1px solid #e2e8f0", borderRadius: 6, padding: "4px 8px" }}>
@@ -353,13 +395,54 @@ function WorkerForm({ user, onSaved, onClose, flash }) {
             ))}
           </div>
         </Field>
-        <Field label="Contact person"><input style={inp} value={f.contactPerson} onChange={set("contactPerson")} /></Field>
-        <Field label="Phone"><input style={inp} value={f.phone} onChange={set("phone")} /></Field>
-        <Field label="Email"><input style={inp} value={f.email} onChange={set("email")} /></Field>
-        <Field label="Work location"><input style={inp} value={f.workLocation} onChange={set("workLocation")} /></Field>
-        <Field label="Payment terms" hint="Blank = vendor's terms"><input style={inp} value={f.paymentTerms} onChange={set("paymentTerms")} /></Field>
       </Section>
+      {f.supplierCode && (
+        <Section title="Job worker details" subtitle="Filled from the Vendor Master. A phone that is not 10 digits there is left blank.">
+          <WorkerDetailFields f={f} set={set} terms={terms} />
+        </Section>
+      )}
     </Modal>
+  );
+}
+
+function WorkerEditForm({ user, w, onSaved, onClose }) {
+  const terms = usePaymentTerms();
+  const [ops, setOps] = useState([]);
+  const [f, setF] = useState({ ...EMPTY_WORKER, gstin: w.gstin || "", pan: w.pan || "", registeredAddress: w.registeredAddress || "",
+    contactPerson: w.contactPerson || "", phone: w.phone || "", email: w.email || "", workLocation: w.workLocation || "",
+    paymentTerms: w.paymentTerms || "", creditDays: String(w.creditDays ?? 30), operationIds: (w.operations || []).map((o) => o.id) });
+  const [error, setError] = useState("");
+  useEffect(() => { api("GET", "/operations", user).then(setOps).catch((e) => setError(e.message)); }, [user]);
+  const set = (k) => (e) => setF((x) => ({ ...x, [k]: e && e.target ? e.target.value : e }));
+  const toggleOp = (id) => setF((x) => ({ ...x, operationIds: x.operationIds.includes(id) ? x.operationIds.filter((o) => o !== id) : [...x.operationIds, id] }));
+  const save = async () => {
+    setError("");
+    if (f.operationIds.length === 0) return setError("Keep at least one approved operation.");
+    const bad = workerDetailsError(f);
+    if (bad) return setError(bad);
+    try {
+      await api("PUT", `/workers/${w.id}`, user, { ...workerBody(f), operationIds: f.operationIds, status: w.status, blockedReason: w.blockedReason || null });
+      onSaved();
+    } catch (e) { setError(e.message); }
+  };
+  return (
+    <Section title="Edit job worker details">
+      {error && <div style={{ gridColumn: "1 / -1" }}><Banner kind="error">{error}</Banner></div>}
+      <WorkerDetailFields f={f} set={set} terms={terms} />
+      <Field label="Approved operations" required span={3}>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          {ops.map((o) => (
+            <label key={o.id} style={{ fontSize: 13, display: "flex", gap: 6, alignItems: "center", border: "1px solid #e2e8f0", borderRadius: 6, padding: "4px 8px" }}>
+              <input type="checkbox" checked={f.operationIds.includes(o.id)} onChange={() => toggleOp(o.id)} /> {o.operationName}
+            </label>
+          ))}
+        </div>
+      </Field>
+      <div style={{ gridColumn: "1 / -1", display: "flex", justifyContent: "flex-end", gap: 8 }}>
+        <button style={btn()} onClick={onClose}>Close</button>
+        <button style={btn("primary")} onClick={save}>Save details</button>
+      </div>
+    </Section>
   );
 }
 
@@ -382,8 +465,8 @@ function RateForm({ user, workerId, ops, onSaved, onClose }) {
   return (
     <Section title="Add rate contract" subtitle="A new rate for the same operation and category must follow revocation of the old one.">
       {error && <div style={{ gridColumn: "1 / -1" }}><Banner kind="error">{error}</Banner></div>}
-      <Field label="Operation" required><select style={inp} value={f.operationId} onChange={set("operationId")}><option value="">Select</option>{ops.map((o) => <option key={o.id} value={o.id}>{o.operationName}</option>)}</select></Field>
-      <Field label="Item category" hint="Blank = all categories"><select style={inp} value={f.itemCategory} onChange={set("itemCategory")}><option value="">All categories</option>{cats.map((c) => <option key={c.categoryName} value={c.categoryName}>{c.categoryName}</option>)}</select></Field>
+      <Field label="Operation" required><SearchableSelect value={f.operationId} onChange={set("operationId")} placeholder="Select operation" options={ops.map((o) => ({ value: o.id, label: o.operationName }))} /></Field>
+      <Field label="Item category" hint="Blank = all categories"><SearchableSelect value={f.itemCategory} onChange={set("itemCategory")} emptyLabel="All categories" options={cats.map((c) => ({ value: c.categoryName, label: c.categoryName }))} /></Field>
       <Field label="Rate basis" required><select style={inp} value={f.rateBasis} onChange={set("rateBasis")}>{RATE_BASIS.map((b) => <option key={b} value={b}>{b.replace("_", " ").toLowerCase()}</option>)}</select></Field>
       <Field label="Rate" required><input type="number" min="0" step="0.01" style={inp} value={f.rate} onChange={set("rate")} /></Field>
       <Field label="Minimum qty per order"><input type="number" min="0" style={inp} value={f.minQty} onChange={set("minQty")} /></Field>
@@ -401,6 +484,7 @@ function WorkerDetail({ id, user, onClose, flash, onChanged }) {
   const [w, setW] = useState(null);
   const [error, setError] = useState("");
   const [addRate, setAddRate] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [blockReason, setBlockReason] = useState("");
   const [ops, setOps] = useState([]);
   const load = useCallback(() => api("GET", `/workers/${id}`, user).then(setW).catch((e) => setError(e.message)), [id, user]);
@@ -434,6 +518,11 @@ function WorkerDetail({ id, user, onClose, flash, onChanged }) {
         <KV label="Contact" value={[w.contactPerson, w.phone, w.email].filter(Boolean).join(" · ")} />
         <KV label="Payment terms / credit days" value={`${w.paymentTerms || "—"} / ${w.creditDays}`} />
         <KV label="Approved operations" value={(w.operations || []).map((o) => o.operationName).join(", ")} />
+      </div>
+      <div style={{ marginTop: 10 }}>
+        {!editing ? <button style={btn()} onClick={() => setEditing(true)}>Edit details</button>
+          : <WorkerEditForm user={user} w={w} onClose={() => setEditing(false)}
+              onSaved={() => { setEditing(false); flash("Job worker details saved."); load(); onChanged(); }} />}
       </div>
       <h4 style={h4}>Rate contracts</h4>
       {(w.rateContracts || []).length === 0 ? <Empty text="No rate contracts. Orders cannot be raised until one is added." /> : (
@@ -529,6 +618,62 @@ function WorkersScreen({ user, flash }) {
   );
 }
 
+// Job Work Operations master: the operations offered on job workers, rate contracts, indents and orders.
+function OperationsScreen({ user, flash, onChanged }) {
+  const [rows, setRows] = useState([]);
+  const [error, setError] = useState("");
+  const [name, setName] = useState("");
+  const [renaming, setRenaming] = useState(null);
+  const load = useCallback(() => api("GET", "/operations?includeInactive=true", user).then((d) => { setRows(d); setError(""); }).catch((e) => setError(e.message)), [user]);
+  useEffect(() => { load(); }, [load]);
+  const done = (msg) => { flash(msg); load(); onChanged(); };
+  const add = async () => {
+    if (!name.trim()) return setError("Enter the operation name.");
+    try { await api("POST", "/operations", user, { operationName: name.trim() }); setName(""); done("Operation added."); } catch (e) { setError(e.message); }
+  };
+  const update = async (o, body, msg) => {
+    try { await api("PUT", `/operations/${o.id}`, user, body); setRenaming(null); done(msg); } catch (e) { setError(e.message); }
+  };
+  return (
+    <div>
+      {error && <Banner kind="error">{error}</Banner>}
+      <div style={{ fontSize: 12, color: "#64748b", marginBottom: 10 }}>
+        These are the operations offered when onboarding a job worker, adding a rate contract, and on indents and orders. Only an approver can change them.
+        An operation in use is deactivated instead of deleted, so old records keep their history.
+      </div>
+      <div style={{ display: "flex", gap: 8, marginBottom: 12, maxWidth: 520 }}>
+        <input style={inp} placeholder="New operation, e.g. Deburring" value={name} maxLength={100} onChange={(e) => setName(e.target.value)} />
+        <button style={btn("primary")} onClick={add}>Add operation</button>
+      </div>
+      <Table headers={["Operation", "Status", "Job workers approved", ""]} minWidth={600}>
+        {rows.length === 0 && <tr><Td>No operations.</Td></tr>}
+        {rows.map((o) => (
+          <tr key={o.id}>
+            <Td>{renaming?.id === o.id
+              ? <input style={inp} value={renaming.name} maxLength={100} onChange={(e) => setRenaming({ ...renaming, name: e.target.value })} />
+              : o.operationName}</Td>
+            <Td><Badge map={WORKER_STYLE} value={o.status} /></Td>
+            <Td right>{o.workerCount}</Td>
+            <Td>
+              <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                {renaming?.id === o.id ? (
+                  <>
+                    <button style={btn("primary")} onClick={() => update(o, { operationName: renaming.name }, "Operation renamed.")}>Save</button>
+                    <button style={btn()} onClick={() => setRenaming(null)}>Cancel</button>
+                  </>
+                ) : <button style={btn()} onClick={() => setRenaming({ id: o.id, name: o.operationName })}>Rename</button>}
+                {o.status === "ACTIVE"
+                  ? <button style={btn("danger")} onClick={() => update(o, { status: "INACTIVE" }, "Operation deactivated.")}>Deactivate</button>
+                  : <button style={btn()} onClick={() => update(o, { status: "ACTIVE" }, "Operation reactivated.")}>Reactivate</button>}
+              </div>
+            </Td>
+          </tr>
+        ))}
+      </Table>
+    </div>
+  );
+}
+
 function Pager({ page, totalPages, total, onPage }) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10, fontSize: 12 }}>
@@ -546,13 +691,13 @@ function Pager({ page, totalPages, total, onPage }) {
 // Indents
 // ============================================================================
 
-function IndentForm({ user, locations, operations, categories, items, editing, onSaved, onClose }) {
+function IndentForm({ user, locations, operations, categories, items, workers = [], editing, onSaved, onClose }) {
   const init = editing ? {
-    requestingDepartmentId: String(editing.requestingDepartmentId), sourceDepartmentId: String(editing.sourceDepartmentId),
+    requestingDepartmentId: String(editing.requestingDepartmentId), preferredJobWorkerId: editing.preferredJobWorkerId ? String(editing.preferredJobWorkerId) : "",
     reason: editing.reason || "", requiredDispatchDate: editing.requiredDispatchDate || "", requiredReturnDate: editing.requiredReturnDate || "",
     productionRef: editing.productionRef || "", estimatedCost: String(editing.estimatedCost || ""), remarks: editing.remarks || "",
     lines: editing.lines.map((l) => ({ masterId: String(l.itemMasterId), category: l.category, operationId: String(l.operationId), requiredQty: String(l.requiredQty), remarks: l.remarks || "" }))
-  } : { requestingDepartmentId: "", sourceDepartmentId: "", reason: "", requiredDispatchDate: TODAY(), requiredReturnDate: addDays(20), productionRef: "", estimatedCost: "", remarks: "",
+  } : { requestingDepartmentId: "", preferredJobWorkerId: "", reason: "", requiredDispatchDate: TODAY(), requiredReturnDate: addDays(20), productionRef: "", estimatedCost: "", remarks: "",
     lines: [{ masterId: "", category: "", operationId: "", requiredQty: "", remarks: "" }] };
   const [f, setF] = useState(init);
   const [error, setError] = useState("");
@@ -563,13 +708,13 @@ function IndentForm({ user, locations, operations, categories, items, editing, o
   const save = async (submit) => {
     setError("");
     if (!f.requestingDepartmentId) return setError("Select the requesting department.");
-    if (!f.sourceDepartmentId) return setError("Select the source store / warehouse.");
     if (!f.reason.trim()) return setError("Give the reason for outsourcing this work.");
     if (f.lines.length === 0 || f.lines.some((l) => !l.masterId || !l.operationId || !(Number(l.requiredQty) > 0))) return setError("Every line needs an item, an operation and a quantity above zero.");
     setBusy(true);
     try {
       const body = {
-        clientRequestId: editing ? null : newKey("ind"), indentDate: TODAY(), requestingDepartmentId: Number(f.requestingDepartmentId), sourceDepartmentId: Number(f.sourceDepartmentId),
+        clientRequestId: editing ? null : newKey("ind"), indentDate: TODAY(), requestingDepartmentId: Number(f.requestingDepartmentId),
+        preferredJobWorkerId: f.preferredJobWorkerId ? Number(f.preferredJobWorkerId) : null,
         reason: f.reason, requiredDispatchDate: f.requiredDispatchDate || null, requiredReturnDate: f.requiredReturnDate || null, productionRef: f.productionRef || null,
         estimatedCost: f.estimatedCost === "" ? null : Number(f.estimatedCost), remarks: f.remarks || null, version: editing ? editing.version : undefined,
         lines: f.lines.map((l) => ({ masterId: Number(l.masterId), category: l.category || null, operationId: Number(l.operationId), requiredQty: Number(l.requiredQty), remarks: l.remarks || null }))
@@ -584,8 +729,9 @@ function IndentForm({ user, locations, operations, categories, items, editing, o
       footer={<><button style={btn()} onClick={onClose}>Cancel</button><button style={btn()} disabled={busy} onClick={() => save(false)}>Save draft</button><button style={btn("primary")} disabled={busy} onClick={() => save(true)}>Save and submit</button></>}>
       {error && <Banner kind="error">{error}</Banner>}
       <Section title="Request">
-        <Field label="Requesting department" required><select style={inp} value={f.requestingDepartmentId} onChange={set("requestingDepartmentId")}><option value="">Select</option>{locations.map((l) => <option key={l.id} value={l.id}>{l.departmentName}</option>)}</select></Field>
-        <Field label="Source store / warehouse" required hint="Stock is checked here before dispatch"><select style={inp} value={f.sourceDepartmentId} onChange={set("sourceDepartmentId")}><option value="">Select</option>{locations.map((l) => <option key={l.id} value={l.id}>{l.departmentName}</option>)}</select></Field>
+        <Field label="Requesting department" required><SearchableSelect value={f.requestingDepartmentId} onChange={set("requestingDepartmentId")} placeholder="Select department" options={locations.map((l) => ({ value: l.id, label: l.departmentName }))} /></Field>
+        <Field label="Preferred job worker" hint="Optional; filled in on the job work order"><SearchableSelect value={f.preferredJobWorkerId} onChange={set("preferredJobWorkerId")} emptyLabel="No preference" placeholder="Search job worker"
+          options={workers.filter((w) => w.status === "ACTIVE").map((w) => ({ value: w.id, label: `${w.legalName} (${w.workerCode})` }))} /></Field>
         <Field label="Reason for outsourcing" required span={2}><input style={inp} value={f.reason} onChange={set("reason")} /></Field>
         <Field label="Required dispatch date"><DateInput value={f.requiredDispatchDate} onChange={set("requiredDispatchDate")} style={inp} /></Field>
         <Field label="Required return date"><DateInput value={f.requiredReturnDate} onChange={set("requiredReturnDate")} style={inp} /></Field>
@@ -593,16 +739,16 @@ function IndentForm({ user, locations, operations, categories, items, editing, o
         <Field label="Estimated processing cost"><input type="number" min="0" step="0.01" style={inp} value={f.estimatedCost} onChange={set("estimatedCost")} /></Field>
         <Field label="Remarks" span={2}><input style={inp} value={f.remarks} onChange={set("remarks")} /></Field>
       </Section>
-      <Section title="Items" subtitle="The store's available quantity is shown on the register and checked again when material is dispatched.">
+      <Section title="Items" subtitle="Items come from the Item Master, categories from the Category Master and operations from the Job Work Operations master.">
         <div style={{ gridColumn: "1 / -1", display: "flex", flexDirection: "column", gap: 8 }}>
           {f.lines.map((l, i) => (
             <div key={i} style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 0.8fr 1fr auto", gap: 6, alignItems: "end" }}>
               <SearchableSelect options={itemOptions} value={l.masterId} placeholder="Item code / description"
-                onChange={(id) => { const m = items.find((x) => String(x.id) === String(id)); setF((x) => ({ ...x, lines: x.lines.map((y, j) => j === i ? { ...y, masterId: String(id), category: m ? m.category : "" } : y) })); }} />
-              <select style={inp} value={l.category} onChange={(e) => setLine(i, "category", e.target.value)} title="Stock category the material is held under">
-                <option value="">Category</option>{categories.map((c) => <option key={c.categoryName} value={c.categoryName}>{c.categoryName}</option>)}
-              </select>
-              <select style={inp} value={l.operationId} onChange={(e) => setLine(i, "operationId", e.target.value)}><option value="">Operation</option>{operations.map((o) => <option key={o.id} value={o.id}>{o.operationName}</option>)}</select>
+                onChange={(e) => { const id = e.target.value; const m = items.find((x) => String(x.id) === String(id)); setF((x) => ({ ...x, lines: x.lines.map((y, j) => j === i ? { ...y, masterId: String(id), category: m ? m.category : "" } : y) })); }} />
+              <SearchableSelect value={l.category} onChange={(e) => setLine(i, "category", e.target.value)} emptyLabel="Category" placeholder="Category"
+                options={categories.map((c) => ({ value: c.categoryName, label: c.categoryName }))} />
+              <SearchableSelect value={l.operationId} onChange={(e) => setLine(i, "operationId", e.target.value)} emptyLabel="Operation" placeholder="Operation"
+                options={operations.map((o) => ({ value: o.id, label: o.operationName }))} />
               <input type="number" min="0" step="0.01" style={inp} placeholder="Qty" value={l.requiredQty} onChange={(e) => setLine(i, "requiredQty", e.target.value)} />
               <input style={inp} placeholder="Remarks" value={l.remarks} onChange={(e) => setLine(i, "remarks", e.target.value)} />
               <button style={btn()} disabled={f.lines.length === 1} onClick={() => setF((x) => ({ ...x, lines: x.lines.filter((_, j) => j !== i) }))}>✕</button>
@@ -727,7 +873,7 @@ function ActionPanel({ title, rules, acts, handlers, status, role, styleMap, nex
   );
 }
 
-function IndentDetail({ id, user, locations, operations, categories, items, onClose, onChanged, flash, onOpenOrder }) {
+function IndentDetail({ id, user, locations, operations, categories, items, workers, onClose, onChanged, flash, onOpenOrder }) {
   const [d, setD] = useState(null);
   const [error, setError] = useState("");
   const [editing, setEditing] = useState(false);
@@ -738,7 +884,7 @@ function IndentDetail({ id, user, locations, operations, categories, items, onCl
     if (["reject", "cancel"].includes(action)) { comments = window.prompt(`Reason to ${label.toLowerCase()}?`); if (!comments) return; }
     try { await api("POST", `/indents/${id}/${action}`, user, { comments }); flash(`Indent ${label.toLowerCase()}d.`); load(); onChanged(); } catch (e) { flash(e.message, true); }
   };
-  if (editing && d) return <IndentForm user={user} locations={locations} operations={operations} categories={categories} items={items} editing={d}
+  if (editing && d) return <IndentForm user={user} locations={locations} operations={operations} categories={categories} items={items} workers={workers} editing={d}
     onSaved={(x, msg) => { setEditing(false); flash(msg); load(); onChanged(); }} onClose={() => setEditing(false)} />;
   if (!d) return <Modal title="Indent" onClose={onClose}>{error ? <Banner kind="error">{error}</Banner> : <Empty text="Loading…" />}</Modal>;
   const acts = d.allowedActions || [];
@@ -753,17 +899,16 @@ function IndentDetail({ id, user, locations, operations, categories, items, onCl
       {d.rejectionReason && <Banner kind="error">Rejected: {d.rejectionReason}</Banner>}
       <div style={grid4}>
         <KV label="Requesting department" value={d.requestingDepartment} />
-        <KV label="Source store" value={d.sourceDepartment} />
         <KV label="Required dispatch / return" value={`${dateText(d.requiredDispatchDate)} / ${dateText(d.requiredReturnDate)}`} />
         <KV label="Production reference" value={d.productionRef} />
         <KV label="Preferred job worker" value={d.preferredWorker} />
         <KV label="Estimated cost" value={money(d.estimatedCost)} />
       </div>
       <h4 style={h4}>Items</h4>
-      <Table headers={["#", "Item", "Category", "Operation", "Required", "Available at store", ""]} minWidth={700}>
+      <Table headers={["#", "Item", "Category", "Operation", "Required", "Remarks"]} minWidth={700}>
         {(d.lines || []).map((l) => (
           <tr key={l.id}><Td>{l.lineNo}</Td><Td>{l.itemCode} <span style={{ color: "#64748b" }}>{l.itemName}</span></Td><Td>{l.category}</Td><Td>{l.operationName}</Td><Td right>{qty(l.requiredQty)} {l.uom}</Td>
-            <Td right>{qty(l.availableQty)}</Td><Td>{l.stockShortfall && <span style={{ color: "#b45309", fontSize: 11, fontWeight: 700 }}>Short at store now</span>}</Td></tr>
+            <Td>{l.remarks || "—"}</Td></tr>
         ))}
       </Table>
       <h4 style={h4}>Job work orders from this indent</h4>
@@ -778,7 +923,7 @@ function IndentDetail({ id, user, locations, operations, categories, items, onCl
   );
 }
 
-function IndentsScreen({ user, filter, locations, operations, categories, items, flash, onOpenOrder }) {
+function IndentsScreen({ user, filter, locations, operations, categories, items, workers, flash, onOpenOrder }) {
   const [q, setQ] = useState("");
   const [status, setStatus] = useState(filter.status || "");
   const [page, setPage] = useState(0);
@@ -815,9 +960,9 @@ function IndentsScreen({ user, filter, locations, operations, categories, items,
         ))}
       </Table>
       <Pager page={page} totalPages={data.totalPages} total={data.totalElements} onPage={setPage} />
-      {creating && <IndentForm user={user} locations={locations} operations={operations} categories={categories} items={items}
+      {creating && <IndentForm user={user} locations={locations} operations={operations} categories={categories} items={items} workers={workers}
         onSaved={(d, msg) => { setCreating(false); flash(msg); setTick((t) => t + 1); setDetailId(d.id); }} onClose={() => setCreating(false)} />}
-      {detailId && <IndentDetail id={detailId} user={user} locations={locations} operations={operations} categories={categories} items={items} flash={flash}
+      {detailId && <IndentDetail id={detailId} user={user} locations={locations} operations={operations} categories={categories} items={items} workers={workers} flash={flash}
         onClose={() => setDetailId(null)} onChanged={() => setTick((t) => t + 1)} onOpenOrder={(d) => { setDetailId(null); onOpenOrder(d); }} />}
     </div>
   );
@@ -831,11 +976,17 @@ function OrderForm({ user, workers, locations, operations, categories, items, fr
   const [indentId, setIndentId] = useState(fromIndent ? String(fromIndent.id) : "");
   const [approvedIndents, setApprovedIndents] = useState([]);
   // Load approved indents when the form opens, so indents approved after the page loaded still appear.
+  // Job workers are loaded when the form opens, so a worker onboarded a moment ago is listed.
+  const [freshWorkers, setFreshWorkers] = useState(null);
+  const terms = usePaymentTerms();
   useEffect(() => {
     api("GET", "/indents?status=APPROVED&size=200", user).then((d) => setApprovedIndents(d.content || [])).catch(() => setApprovedIndents([]));
+    api("GET", "/workers?status=ACTIVE&size=500", user).then((d) => setFreshWorkers(d.content || [])).catch(() => setFreshWorkers(null));
   }, [user]);
-  const [f, setF] = useState({ jobWorkerId: "", jwoDate: TODAY(), requestingDepartmentId: fromIndent ? String(fromIndent.requestingDepartmentId) : "",
-    sourceDepartmentId: fromIndent ? String(fromIndent.sourceDepartmentId) : "", expectedReturnDate: addDays(20), expectedCompletionDate: addDays(15),
+  const idOrBlank = (v) => (v === null || v === undefined || v === "" ? "" : String(v));
+  const [f, setF] = useState({ jobWorkerId: fromIndent ? idOrBlank(fromIndent.preferredJobWorkerId) : "", jwoDate: TODAY(),
+    requestingDepartmentId: fromIndent ? idOrBlank(fromIndent.requestingDepartmentId) : "",
+    sourceDepartmentId: fromIndent ? idOrBlank(fromIndent.sourceDepartmentId) : "", expectedReturnDate: addDays(20), expectedCompletionDate: addDays(15),
     paymentTerms: "", qualitySpecs: "", deliveryTerms: "", rejectionTerms: "", remarks: "" });
   const [lines, setLines] = useState([]);
   const [error, setError] = useState("");
@@ -844,7 +995,8 @@ function OrderForm({ user, workers, locations, operations, categories, items, fr
   useEffect(() => {
     if (!indentId) return;
     api("GET", `/indents/${indentId}`, user).then((d) => {
-      setF((x) => ({ ...x, requestingDepartmentId: String(d.requestingDepartmentId), sourceDepartmentId: String(d.sourceDepartmentId) }));
+      setF((x) => ({ ...x, requestingDepartmentId: idOrBlank(d.requestingDepartmentId), sourceDepartmentId: idOrBlank(d.sourceDepartmentId) || x.sourceDepartmentId,
+        jobWorkerId: x.jobWorkerId || idOrBlank(d.preferredJobWorkerId) }));
       setLines(d.lines.map((l) => ({ indentLineNo: l.lineNo, masterId: String(l.itemMasterId), category: l.category, operationId: String(l.operationId), inputQty: String(l.requiredQty), remarks: "" })));
     }).catch((e) => setError(e.message));
   }, [indentId, user]);
@@ -869,22 +1021,22 @@ function OrderForm({ user, workers, locations, operations, categories, items, fr
       onSaved(d, submit ? `${d.jwoNumber} submitted for approval.` : `${d.jwoNumber} saved as draft.`);
     } catch (e) { setError(e.message); } finally { setBusy(false); }
   };
-  const workerOpts = workers.filter((w) => w.status === "ACTIVE").map((w) => ({ value: w.id, label: `${w.legalName} (${w.workerCode})` }));
+  const workerOpts = (freshWorkers || workers).filter((w) => w.status === "ACTIVE").map((w) => ({ value: w.id, label: `${w.legalName} (${w.workerCode})` }));
   return (
     <Modal title="New job work order" onClose={onClose} width={1000}
       footer={<><button style={btn()} onClick={onClose}>Cancel</button><button style={btn()} disabled={busy} onClick={() => save(false)}>Save draft</button><button style={btn("primary")} disabled={busy} onClick={() => save(true)}>Save and submit</button></>}>
       {error && <Banner kind="error">{error}</Banner>}
       <Section title="Order">
         <Field label="From approved indent" hint="Optional: lines and quantities are copied from the indent">
-          <select style={inp} value={indentId} onChange={(e) => setIndentId(e.target.value)}><option value="">Direct order (no indent)</option>{approvedIndents.map((i) => <option key={i.id} value={i.id}>{i.indentNumber} · {i.reason}</option>)}</select>
+          <SearchableSelect value={indentId} onChange={(e) => setIndentId(e.target.value)} emptyLabel="Direct order (no indent)" options={approvedIndents.map((i) => ({ value: i.id, label: i.indentNumber, sub: i.reason }))} />
         </Field>
         <Field label="Job worker" required><SearchableSelect options={workerOpts} value={f.jobWorkerId} placeholder="Search job worker" onChange={set("jobWorkerId")} /></Field>
         <Field label="Order date"><DateInput value={f.jwoDate} onChange={set("jwoDate")} style={inp} /></Field>
-        <Field label="Source store" required><select style={inp} value={f.sourceDepartmentId} onChange={set("sourceDepartmentId")}><option value="">Select</option>{locations.map((l) => <option key={l.id} value={l.id}>{l.departmentName}</option>)}</select></Field>
-        <Field label="Requesting department"><select style={inp} value={f.requestingDepartmentId} onChange={set("requestingDepartmentId")}><option value="">Select</option>{locations.map((l) => <option key={l.id} value={l.id}>{l.departmentName}</option>)}</select></Field>
+        <Field label="Source store" required><SearchableSelect value={f.sourceDepartmentId} onChange={set("sourceDepartmentId")} placeholder="Select store" options={locations.map((l) => ({ value: l.id, label: l.departmentName }))} /></Field>
+        <Field label="Requesting department"><SearchableSelect value={f.requestingDepartmentId} onChange={set("requestingDepartmentId")} placeholder="Select department" options={locations.map((l) => ({ value: l.id, label: l.departmentName }))} /></Field>
         <Field label="Expected completion"><DateInput value={f.expectedCompletionDate} onChange={set("expectedCompletionDate")} style={inp} /></Field>
         <Field label="Expected return date"><DateInput value={f.expectedReturnDate} onChange={set("expectedReturnDate")} style={inp} /></Field>
-        <Field label="Payment terms" hint="Blank = worker's terms"><input style={inp} value={f.paymentTerms} onChange={set("paymentTerms")} /></Field>
+        <Field label="Payment terms" hint="From Masters > Payment Terms. Blank = the job worker's terms"><PaymentTermsSelect value={f.paymentTerms} onChange={set("paymentTerms")} terms={terms} emptyLabel="Job worker's terms" /></Field>
         <Field label="Quality specifications / acceptance" span={2}><input style={inp} value={f.qualitySpecs} onChange={set("qualitySpecs")} /></Field>
         <Field label="Delivery and rejection terms" span={2}><input style={inp} value={f.deliveryTerms} onChange={set("deliveryTerms")} /></Field>
       </Section>
@@ -893,9 +1045,11 @@ function OrderForm({ user, workers, locations, operations, categories, items, fr
           {lines.map((l, i) => (
             <div key={i} style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 0.8fr auto", gap: 6, alignItems: "end" }}>
               <SearchableSelect options={items.map((m) => ({ value: m.id, label: `${m.code} — ${m.description || ""}`, sub: m.category }))} value={l.masterId} placeholder="Item"
-                onChange={(id) => { const m = items.find((x) => String(x.id) === String(id)); setLines((ls) => ls.map((y, j) => j === i ? { ...y, masterId: String(id), category: m ? m.category : "" } : y)); }} />
-              <select style={inp} value={l.category} onChange={(e) => setLine(i, "category", e.target.value)}><option value="">Category</option>{categories.map((c) => <option key={c.categoryName} value={c.categoryName}>{c.categoryName}</option>)}</select>
-              <select style={inp} value={l.operationId} onChange={(e) => setLine(i, "operationId", e.target.value)}><option value="">Operation</option>{operations.map((o) => <option key={o.id} value={o.id}>{o.operationName}</option>)}</select>
+                onChange={(e) => { const id = e.target.value; const m = items.find((x) => String(x.id) === String(id)); setLines((ls) => ls.map((y, j) => j === i ? { ...y, masterId: String(id), category: m ? m.category : "" } : y)); }} />
+              <SearchableSelect value={l.category} onChange={(e) => setLine(i, "category", e.target.value)} emptyLabel="Category" placeholder="Category"
+                options={categories.map((c) => ({ value: c.categoryName, label: c.categoryName }))} />
+              <SearchableSelect value={l.operationId} onChange={(e) => setLine(i, "operationId", e.target.value)} emptyLabel="Operation" placeholder="Operation"
+                options={operations.map((o) => ({ value: o.id, label: o.operationName }))} />
               <input type="number" min="0" step="0.01" style={inp} placeholder="Qty to send" value={l.inputQty} onChange={(e) => setLine(i, "inputQty", e.target.value)} />
               <button style={btn()} onClick={() => setLines((ls) => ls.filter((_, j) => j !== i))}>✕</button>
             </div>
@@ -989,7 +1143,8 @@ function ReceiptForm({ user, order, challans, onSaved, onClose }) {
       {error && <Banner kind="error">{error}</Banner>}
       <Section title="Receipt">
         <Field label="Receipt date"><DateInput value={f.receiptDate} onChange={set("receiptDate")} style={inp} /></Field>
-        <Field label="Against challan" hint="Optional"><select style={inp} value={f.challanId} onChange={set("challanId")}><option value="">Not linked</option>{challans.filter((c) => c.status === "POSTED").map((c) => <option key={c.id} value={c.id}>{c.challanNumber}</option>)}</select></Field>
+        <Field label="Against challan" hint="Optional"><SearchableSelect value={f.challanId} onChange={set("challanId")} emptyLabel="Not linked"
+  options={challans.filter((c) => c.status === "POSTED").map((c) => ({ value: c.id, label: c.challanNumber }))} /></Field>
         <Field label="Job worker's delivery note"><input style={inp} value={f.deliveryNoteNo} onChange={set("deliveryNoteNo")} /></Field>
         <Field label="Remarks" span={3}><input style={inp} value={f.remarks} onChange={set("remarks")} /></Field>
       </Section>
@@ -1337,7 +1492,8 @@ function LedgerScreen({ user, workers }) {
     <div>
       {error && <Banner kind="error">{error}</Banner>}
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10, alignItems: "flex-end" }}>
-        <div style={{ width: 280 }}><Field label="Job worker"><select style={inp} value={workerId} onChange={(e) => setWorkerId(e.target.value)}><option value="">All job workers</option>{workers.map((w) => <option key={w.id} value={w.id}>{w.legalName}</option>)}</select></Field></div>
+        <div style={{ width: 280 }}><Field label="Job worker"><SearchableSelect value={workerId} onChange={(e) => setWorkerId(e.target.value)} emptyLabel="All job workers"
+  options={workers.map((w) => ({ value: w.id, label: w.legalName }))} /></Field></div>
         <div style={{ width: 240 }}><Field label="Item or reference"><input style={inp} value={q} onChange={(e) => setQ(e.target.value)} /></Field></div>
         <div style={{ marginLeft: "auto" }}><button style={btn()} onClick={exportExcel}>Export Excel</button></div>
       </div>
@@ -1395,9 +1551,8 @@ function AdjustmentRequestForm({ user, order, onClose, onSaved }) {
       {error && <Banner kind="error">{error}</Banner>}
       <Section title="Adjustment" subtitle="Requests need approval by someone other than you. Nothing changes until it is approved.">
         <Field label="Order line" required>
-          <select style={inp} value={lineId} onChange={(e) => setLineId(e.target.value)}>
-            {order.lines.map((l) => <option key={l.jwoLineId} value={l.jwoLineId}>{l.lineNo} · {l.itemCode} ({l.category})</option>)}
-          </select>
+          <SearchableSelect value={lineId} onChange={(e) => setLineId(e.target.value)} placeholder="Select order line"
+            options={order.lines.map((l) => ({ value: l.jwoLineId, label: `${l.lineNo} · ${l.itemCode}`, sub: l.category }))} />
         </Field>
         <Field label="Type" required>
           <select style={inp} value={type} onChange={(e) => setType(e.target.value)}>
@@ -1605,8 +1760,10 @@ function ReconPolicyTab({ user, flash }) {
     <div>
       {error && <Banner kind="error">{error}</Banner>}
       <Section title="Permissible process loss" subtitle="Loss allowed for an operation, as a percentage of dispatched quantity. Approvers only. Blank category = all categories.">
-        <Field label="Operation" required><select style={inp} value={f.operationId} onChange={(e) => setF({ ...f, operationId: e.target.value })}><option value="">Select</option>{ops.map((o) => <option key={o.id} value={o.id}>{o.operationName}</option>)}</select></Field>
-        <Field label="Category"><select style={inp} value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })}><option value="">All categories</option>{cats.map((c) => <option key={c.categoryName} value={c.categoryName}>{c.categoryName}</option>)}</select></Field>
+        <Field label="Operation" required><SearchableSelect value={f.operationId} onChange={(e) => setF({ ...f, operationId: e.target.value })} placeholder="Select operation"
+  options={ops.map((o) => ({ value: o.id, label: o.operationName }))} /></Field>
+        <Field label="Category"><SearchableSelect value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })} emptyLabel="All categories"
+  options={cats.map((c) => ({ value: c.categoryName, label: c.categoryName }))} /></Field>
         <Field label="Permissible loss %" required><input type="number" min="0" max="100" step="0.01" style={inp} value={f.permissiblePct} onChange={(e) => setF({ ...f, permissiblePct: e.target.value })} /></Field>
         <div style={{ gridColumn: "1 / -1", display: "flex", justifyContent: "flex-end" }}><button style={btn("primary")} onClick={save}>Save rule</button></div>
       </Section>
@@ -1697,7 +1854,8 @@ function ReportsScreen({ user, flash }) {
             <div style={{ width: 160 }}><Field label="From"><DateInput value={from} onChange={(e) => setFrom(e.target.value)} style={inp} /></Field></div>
             <div style={{ width: 160 }}><Field label="To"><DateInput value={to} onChange={(e) => setTo(e.target.value)} style={inp} /></Field></div>
           </>}
-          <div style={{ width: 220 }}><Field label="Job worker"><select style={inp} value={workerId} onChange={(e) => setWorkerId(e.target.value)}><option value="">All</option>{workers.map((w) => <option key={w.id} value={w.id}>{w.legalName}</option>)}</select></Field></div>
+          <div style={{ width: 220 }}><Field label="Job worker"><SearchableSelect value={workerId} onChange={(e) => setWorkerId(e.target.value)} emptyLabel="All"
+  options={workers.map((w) => ({ value: w.id, label: w.legalName }))} /></Field></div>
           <div style={{ width: 240 }}><Field label={key === "order-history" ? "Order number (exact)" : "Search"} hint={key === "order-history" ? "e.g. JWO-2026-00001" : ""}><input style={inp} value={q} onChange={(e) => setQ(e.target.value)} /></Field></div>
           <button style={btn("primary")} onClick={run} disabled={loading}>{loading ? "Running…" : "Run report"}</button>
           <button style={btn()} onClick={exportExcel} disabled={!report}>Export Excel</button>
@@ -1745,9 +1903,11 @@ export function JobWorkPage({ screen = "dashboard", onBackToHome, onOpenSidebar,
       plainGet("/inventory/items"),
       api("GET", "/indents?size=200", user).then((d) => d.content).catch(() => [])
     ]);
-    setRefs({ workers, locations, operations, categories, items: items.map((m) => ({ id: m.id, code: m.item_code, description: m.item_name, category: m.category, unitOfMeasurement: m.uom_clean })), indents });
+    // Same stock category the server uses: the item's category, or its group when it has none.
+    setRefs({ workers, locations, operations, categories, items: items.map((m) => ({ id: m.id, code: m.item_code, description: m.item_name, category: m.category || m.group_name || "", unitOfMeasurement: m.uom_clean })), indents });
   }, [user]);
-  useEffect(() => { loadRefs(); }, [loadRefs]);
+  // Reloaded on every tab change, so a job worker, indent or operation added on one tab is offered on the next.
+  useEffect(() => { loadRefs(); }, [loadRefs, current]);
 
   const goTo = (key, f) => { setFilter(f || {}); setCurrent(key); };
   const openOrderFromIndent = (indent) => { setOrderFromIndent(indent); setOrderForm(true); };
@@ -1784,17 +1944,18 @@ export function JobWorkPage({ screen = "dashboard", onBackToHome, onOpenSidebar,
         <div style={{ width: "100%", flex: 1, minHeight: 0, display: "flex", flexDirection: "column", boxSizing: "border-box", background: "#fff", border: "none", borderRadius: 0, padding: 16, overflowY: "auto" }}>
           <div style={{ fontSize: 12, color: "#64748b", marginBottom: 10 }}>
             Purchase › Job Work › <b style={{ color: "#0f172a" }}>{SCREENS.find((s) => s.key === current)?.label}</b>
-            <span style={{ marginLeft: 12 }}>Company stock moves through the Inventory engine; job worker balances are tracked in the worker ledger.</span>
+            <span style={{ marginLeft: 12 }}>Job worker balances are tracked in the worker ledger. Store stock is not checked or moved here.</span>
           </div>
           {current === "dashboard" && <DashboardScreen user={user} goTo={goTo} flash={flash} />}
           {current === "workers" && <WorkersScreen user={user} flash={flash} />}
-          {current === "indents" && <IndentsScreen user={user} filter={filter} locations={refs.locations} operations={refs.operations} categories={refs.categories} items={refs.items} flash={flash} onOpenOrder={openOrderFromIndent} />}
+          {current === "indents" && <IndentsScreen user={user} filter={filter} locations={refs.locations} operations={refs.operations} categories={refs.categories} items={refs.items} workers={refs.workers} flash={flash} onOpenOrder={openOrderFromIndent} />}
           {current === "orders" && <OrdersScreen user={user} filter={filter} workers={refs.workers} locations={refs.locations} operations={refs.operations} categories={refs.categories} items={refs.items} indents={refs.indents} flash={flash} />}
           {current === "challans" && <ChallansScreen user={user} flash={flash} refs={refs} />}
           {current === "receipts" && <ReceiptsScreen user={user} filter={filter} flash={flash} />}
           {current === "ledger" && <LedgerScreen user={user} workers={refs.workers} />}
           {current === "recon" && <ReconScreen user={user} flash={flash} />}
           {current === "reports" && <ReportsScreen user={user} flash={flash} />}
+          {current === "operations" && <OperationsScreen user={user} flash={flash} onChanged={loadRefs} />}
         </div>
       </div>
 

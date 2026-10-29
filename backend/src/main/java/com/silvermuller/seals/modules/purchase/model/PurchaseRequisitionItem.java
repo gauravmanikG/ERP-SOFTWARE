@@ -24,6 +24,8 @@ public class PurchaseRequisitionItem {
     private BigDecimal orderedQty = BigDecimal.ZERO;
     @JsonAlias({"remaining_qty", "remainingQty"})
     private BigDecimal remainingQty = null;
+    /** Read-only for clients: quantity reserved in open vendor drafts. Never taken from a save request. */
+    private BigDecimal draftedQty = BigDecimal.ZERO;
     @JsonAlias({"est_rate", "estRate", "rate", "price"})
     private BigDecimal estRate = BigDecimal.ZERO;
     @JsonAlias({"est_total", "estTotal", "total"})
@@ -85,6 +87,9 @@ public class PurchaseRequisitionItem {
 
     public BigDecimal getRemainingQty() { return remainingQty; }
     public void setRemainingQty(BigDecimal remainingQty) { this.remainingQty = remainingQty; }
+
+    public BigDecimal getDraftedQty() { return draftedQty; }
+    public void setDraftedQty(BigDecimal draftedQty) { this.draftedQty = draftedQty; }
 
     public BigDecimal getEstRate() { return estRate; }
     public void setEstRate(BigDecimal estRate) { this.estRate = estRate; }

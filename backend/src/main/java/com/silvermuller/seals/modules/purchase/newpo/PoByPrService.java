@@ -48,15 +48,21 @@ public class PoByPrService {
 
     private static final String PR_LINE_SQL =
             "SELECT pri.id, pri.pr_number, pr.pr_date, pri.item_code, pri.item_name, pri.uom, pri.category, pri.hsn_code, " +
-            "pri.req_qty, pri.ordered_qty, pri.required_by_date, pr.status AS pr_status, pr.department, pr.requisitioner " +
+            "pri.req_qty, pri.ordered_qty, pri.drafted_qty, pri.required_by_date, pr.status AS pr_status, pr.department, pr.requisitioner " +
             "FROM public.purchase_requisition_items pri " +
             "JOIN public.purchase_requisitions pr ON pr.id = pri.pr_id ";
 
     /** A PR line as read from the database. */
     private record PrLine(long id, String prNumber, LocalDate prDate, String itemCode, String itemName, String uom,
-                          String category, String hsnCode, BigDecimal reqQty, BigDecimal orderedQty,
+                          String category, String hsnCode, BigDecimal reqQty, BigDecimal orderedQty, BigDecimal draftedQty,
                           String requiredBy, String prStatus, String department, String requisitioner) {
+        /** What can still be ordered: quantity reserved in a vendor draft belongs to that draft. */
         BigDecimal remaining() {
+            return reqQty.subtract(orderedQty).subtract(draftedQty);
+        }
+
+        /** Requested minus ordered. Includes quantity still sitting in drafts. */
+        BigDecimal remainingToOrder() {
             return reqQty.subtract(orderedQty);
         }
     }
@@ -121,10 +127,10 @@ public class PoByPrService {
         }
         return jdbc.queryForList(
                 "SELECT pri.item_code, MAX(pri.item_name) AS item_name, COUNT(DISTINCT pri.pr_number) AS pr_count, " +
-                "COUNT(*) AS line_count, SUM(pri.req_qty - pri.ordered_qty) AS outstanding_qty " +
+                "COUNT(*) AS line_count, SUM(pri.req_qty - pri.ordered_qty - pri.drafted_qty) AS outstanding_qty " +
                 "FROM public.purchase_requisition_items pri " +
                 "JOIN public.purchase_requisitions pr ON pr.id = pri.pr_id " +
-                "WHERE " + ORDERABLE_SQL + " AND pri.req_qty - pri.ordered_qty > 0 " +
+                "WHERE " + ORDERABLE_SQL + " AND pri.req_qty - pri.ordered_qty - pri.drafted_qty > 0 " +
                 "AND (pri.item_code ILIKE ? OR pri.item_name ILIKE ?) " + notIn +
                 "GROUP BY pri.item_code ORDER BY pri.item_code LIMIT 200",
                 args.toArray());
@@ -139,9 +145,9 @@ public class PoByPrService {
         String like = "%" + (q == null ? "" : q.trim()) + "%";
         return jdbc.queryForList(
                 "SELECT pr.pr_number, pr.pr_date, pr.department, pr.requisitioner, pr.status, " +
-                "COUNT(pri.id) AS outstanding_line_count, SUM(pri.req_qty - pri.ordered_qty) AS outstanding_qty " +
+                "COUNT(pri.id) AS outstanding_line_count, SUM(pri.req_qty - pri.ordered_qty - pri.drafted_qty) AS outstanding_qty " +
                 "FROM public.purchase_requisitions pr JOIN public.purchase_requisition_items pri ON pri.pr_id = pr.id " +
-                "WHERE " + ORDERABLE_SQL + " AND pri.req_qty - pri.ordered_qty > 0 " +
+                "WHERE " + ORDERABLE_SQL + " AND pri.req_qty - pri.ordered_qty - pri.drafted_qty > 0 " +
                 "AND (pr.pr_number ILIKE ? OR COALESCE(pr.department, '') ILIKE ?) " +
                 "GROUP BY pr.id, pr.pr_number, pr.pr_date, pr.department, pr.requisitioner, pr.status " +
                 "ORDER BY pr.pr_date DESC, pr.pr_number DESC LIMIT 200",
@@ -154,7 +160,7 @@ public class PoByPrService {
             throw new NewPoException(HttpStatus.BAD_REQUEST, "Select a PR.");
         }
         List<PrLine> lines = jdbc.query(
-                PR_LINE_SQL + "WHERE pr.pr_number = ? AND " + ORDERABLE_SQL + " AND pri.req_qty - pri.ordered_qty > 0 ORDER BY pri.id",
+                PR_LINE_SQL + "WHERE pr.pr_number = ? AND " + ORDERABLE_SQL + " AND pri.req_qty - pri.ordered_qty - pri.drafted_qty > 0 ORDER BY pri.id",
                 (rs, n) -> toPrLine(rs), prNumber.trim());
         LocalDate asOf = poDate == null ? LocalDate.now() : poDate;
         List<EligiblePrLine> out = new ArrayList<>();
@@ -180,7 +186,7 @@ public class PoByPrService {
             throw new NewPoException(HttpStatus.BAD_REQUEST, "Select an item.");
         }
         List<PrLine> lines = jdbc.query(
-                PR_LINE_SQL + "WHERE " + ORDERABLE_SQL + " AND pri.item_code = ? AND pri.req_qty - pri.ordered_qty > 0 " +
+                PR_LINE_SQL + "WHERE " + ORDERABLE_SQL + " AND pri.item_code = ? AND pri.req_qty - pri.ordered_qty - pri.drafted_qty > 0 " +
                 "ORDER BY pr.pr_date, pri.id",
                 (rs, n) -> toPrLine(rs), itemCode.trim());
 
@@ -218,7 +224,7 @@ public class PoByPrService {
             BigDecimal received = receivedForPrItem(l.id());
             BigDecimal allocated = allocatedForPrItem(l.id());
             BigDecimal outside = orderedOutsidePoByPr(l);
-            BigDecimal remaining = l.remaining().max(BigDecimal.ZERO);
+            BigDecimal remaining = l.remainingToOrder().max(BigDecimal.ZERO);
             String ordering = l.orderedQty().signum() == 0 ? "NOT_ORDERED"
                     : remaining.signum() == 0 ? "FULLY_ORDERED" : "PARTIALLY_ORDERED";
             String receiving = received.signum() == 0 ? "NOT_RECEIVED"
@@ -309,14 +315,22 @@ public class PoByPrService {
      */
     public Map<String, Object> poDetail(String poNumber) {
         List<Map<String, Object>> header = jdbc.queryForList(
-                "SELECT po_number, po_date, vendor_code, vendor_name, status, grand_total, taxable_amount, total_tax, details_json, created_at, po_origin " +
+                "SELECT po_number, po_date, vendor_code, vendor_name, vendor_gstin, vendor_pan, contact_person, phone, email, " +
+                "billing_address, shipping_address, payment_terms, status, items_gross, total_discount, taxable_amount, total_tax, " +
+                "delivery_charges, other_charges, round_off, grand_total, remarks, approved_by, details_json, created_at, po_origin, " +
+                "invoice_to, ship_to, voucher_no, reference_no, reference_date " +
                 "FROM public.purchase_orders WHERE po_number = ?", poNumber.trim());
         if (header.isEmpty()) throw new NewPoException(HttpStatus.NOT_FOUND, "PO " + poNumber + " was not found.");
         Map<String, Object> h = header.get(0);
 
         List<Map<String, Object>> allocations = jdbc.queryForList(
-                "SELECT id, pr_item_id, pr_number, item_code, allocated_qty, unit_price, rate_id FROM public.po_pr_allocations " +
-                "WHERE po_number = ? ORDER BY id", poNumber.trim());
+                "SELECT a.id, a.pr_item_id, a.pr_number, a.item_code, a.allocated_qty, a.unit_price, a.rate_id, " +
+                "pr.department, d.draft_number FROM public.po_pr_allocations a " +
+                "JOIN public.purchase_requisition_items pri ON pri.id = a.pr_item_id " +
+                "JOIN public.purchase_requisitions pr ON pr.id = pri.pr_id " +
+                "LEFT JOIN public.po_draft_allocations da ON da.id = a.draft_allocation_id " +
+                "LEFT JOIN public.po_drafts d ON d.id = da.draft_id " +
+                "WHERE a.po_number = ? ORDER BY a.id", poNumber.trim());
         List<Map<String, Object>> rows = new ArrayList<>();
         for (Map<String, Object> a : allocations) {
             BigDecimal received = jdbc.queryForObject(
@@ -337,13 +351,67 @@ public class PoByPrService {
         out.put("vendorName", h.get("vendor_name"));
         out.put("status", h.get("status"));
         out.put("grandTotal", h.get("grand_total"));
+        out.put("vendorGstin", h.get("vendor_gstin"));
+        out.put("vendorPan", h.get("vendor_pan"));
+        out.put("contactPerson", h.get("contact_person"));
+        out.put("phone", h.get("phone"));
+        out.put("email", h.get("email"));
+        out.put("billingAddress", h.get("billing_address"));
+        out.put("shippingAddress", h.get("shipping_address"));
+        out.put("paymentTerms", h.get("payment_terms"));
+        out.put("itemsGross", h.get("items_gross"));
+        out.put("totalDiscount", h.get("total_discount"));
+        out.put("taxableAmount", h.get("taxable_amount"));
+        out.put("totalTax", h.get("total_tax"));
+        out.put("deliveryCharges", h.get("delivery_charges"));
+        out.put("otherCharges", h.get("other_charges"));
+        out.put("roundOff", h.get("round_off"));
+        out.put("remarks", h.get("remarks"));
+        out.put("approvedBy", h.get("approved_by"));
         out.put("origin", originOf(h.get("po_origin"), rows.isEmpty()));
         out.put("allocations", rows);
         List<PurchaseItemLine> lines = linesOf(h.get("details_json"));
         out.put("lines", lines);
+        out.put("vendorAddress", vendorAddress(String.valueOf(h.get("vendor_code"))));
+        out.put("invoiceTo", h.get("invoice_to"));
+        out.put("shipTo", h.get("ship_to"));
+        out.put("voucherNo", h.get("voucher_no") == null ? h.get("po_number") : h.get("voucher_no"));
+        out.put("referenceNo", h.get("reference_no"));
+        out.put("referenceDate", h.get("reference_date") == null ? null : h.get("reference_date").toString());
         out.put("terms", poTerms.find(poNumber.trim()));
+        out.put("termNames", termNames(poTerms.find(poNumber.trim())));
         out.put("receiptPosition", receiptPosition(poNumber.trim(), lines));
         return out;
+    }
+
+    private String vendorAddress(String vendorCode) {
+        List<Map<String, Object>> rows = jdbc.queryForList(
+                "SELECT address, city, state, pincode FROM public.supplier_master WHERE supplier_code = ?", vendorCode);
+        if (rows.isEmpty()) return null;
+        Map<String, Object> r = rows.get(0);
+        String city = r.get("city") == null ? "" : r.get("city").toString().trim();
+        String state = r.get("state") == null ? "" : r.get("state").toString().trim();
+        String pin = r.get("pincode") == null ? "" : r.get("pincode").toString().trim();
+        String address = r.get("address") == null ? "" : r.get("address").toString().trim();
+        String tail = String.join(" ", List.of(city, state.isEmpty() ? "" : "- " + state, pin)).trim();
+        String out = String.join("\n", java.util.stream.Stream.of(address, tail).filter(s -> !s.isBlank()).toList());
+        return out.isBlank() ? null : out;
+    }
+
+    /** The name of each term code (the masters store code and name; the PO shows the name). Null when the PO has no such term. */
+    private Map<String, Object> termNames(Map<String, Object> terms) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("modeOfPayment", masterName("master_mode_of_payment", terms.get("mode_of_payment_code")));
+        out.put("paymentTerms", masterName("master_payment_terms", terms.get("payment_terms_code")));
+        out.put("creditPeriodFrom", masterName("master_credit_period_basis", terms.get("credit_period_basis_code")));
+        out.put("freight", masterName("master_freight_options", terms.get("freight_option_code")));
+        return out;
+    }
+
+    private String masterName(String table, Object code) {
+        if (code == null || String.valueOf(code).isBlank()) return null;
+        List<String> rows = jdbc.queryForList("SELECT name FROM public." + table + " WHERE code = ?", String.class, String.valueOf(code));
+        return rows.isEmpty() ? String.valueOf(code) : rows.get(0);
     }
 
     /** Receipts recorded against this PR line, attributed from the POSTED GRNs of every PO it was ordered on. */
@@ -527,7 +595,7 @@ public class PoByPrService {
             }
             BigDecimal remaining = pl.remaining();
             if (remaining.signum() <= 0) {
-                throw conflict("PR " + pl.prNumber() + " / " + pl.itemCode() + " is already fully ordered.");
+                throw conflict("PR " + pl.prNumber() + " / " + pl.itemCode() + " has nothing left to order: it is fully ordered or the rest is reserved in a vendor draft.");
             }
             BigDecimal qty;
             if (mode == Mode.FULL) {
@@ -553,6 +621,12 @@ public class PoByPrService {
         }
 
         // One PO line per item, so GRN (which receives by PO and item) counts every receipt once.
+        // An item's due date is the earliest due date of its PR lines on this PO.
+        Map<String, LocalDate> dueByItem = new HashMap<>();
+        for (LineRequest l : requested) {
+            if (l.dueOn() == null) continue;
+            dueByItem.merge(prLines.get(l.prItemId()).itemCode(), l.dueOn(), (a, b) -> a.isBefore(b) ? a : b);
+        }
         List<PurchaseItemLine> calcItems = new ArrayList<>();
         Map<String, Long> rateIdByItem = new HashMap<>();
         Map<String, BigDecimal> priceByItem = new HashMap<>();
@@ -605,11 +679,13 @@ public class PoByPrService {
                             .divide(new BigDecimal("100"), 2, RoundingMode.HALF_UP));
                 }
                 itemDiscount = itemDiscount.add(a.manualDiscount());
-                if (a.remarks() != null) remarkParts.add(a.prNumber() + ": " + a.remarks());
+                if (a.remarks() != null) remarkParts.add(a.remarks());
             }
             line.setDiscountPercent(null);
             line.setManualDiscount(itemDiscount);
             line.setRemarks(remarkParts.isEmpty() ? null : String.join(" | ", remarkParts));
+            LocalDate due = dueByItem.get(itemCode);
+            line.setExpectedDeliveryDate(due == null ? null : due.toString());
             calcItems.add(line);
         }
 
@@ -693,7 +769,7 @@ public class PoByPrService {
                     g.getAddress() != null ? g.getAddress() : "Silver Muller Central Warehouse, Plant 1, Silvassa",
                     g.getPaymentTerms() != null ? g.getPaymentTerms() : "Net 30 Days from MRN",
                     po.itemsGross(), po.totalDiscount(), po.taxableAmount(), po.totalTax(), po.deliveryCharges(), po.otherCharges(),
-                    po.roundOff(), po.grandTotal(), "Generated from PO by PR" + (plan.remarks() == null ? "" : " | " + plan.remarks()), actor.trim(),
+                    po.roundOff(), po.grandTotal(), plan.remarks(), actor.trim(),
                     LocalDate.now().toString(), detailsJson);
         } catch (DataIntegrityViolationException e) {
             throw new NewPoException(HttpStatus.CONFLICT, "PO number " + poNumber + " was already used. Try again.");
@@ -707,7 +783,7 @@ public class PoByPrService {
         return new PrLine(rs.getLong("id"), rs.getString("pr_number"), d == null ? null : d.toLocalDate(),
                 rs.getString("item_code"), rs.getString("item_name"), rs.getString("uom"), rs.getString("category"),
                 rs.getString("hsn_code"), rs.getBigDecimal("req_qty"), rs.getBigDecimal("ordered_qty"),
-                rs.getString("required_by_date"), rs.getString("pr_status"), rs.getString("department"),
+                rs.getBigDecimal("drafted_qty"), rs.getString("required_by_date"), rs.getString("pr_status"), rs.getString("department"),
                 rs.getString("requisitioner"));
     }
 

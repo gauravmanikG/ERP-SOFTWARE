@@ -1,6 +1,7 @@
 import { useResizableColumns, ResizableColGroup, ColumnResizeHandle } from "../../../shared/components/ResizableTable";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { Eye, Pencil, Trash2, Search, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
+import SearchableSelect from "../../../shared/components/SearchableSelect";
 
 // Master lists extracted directly from the reference sheet
 const GROUP_OPTIONS = [
@@ -124,6 +125,9 @@ const INITIAL_ITEM_FORM = {
   safety_lead_time: "",
   procurement_lead_time: ""
 };
+
+// Stored fields without the empty ones, so a form input never receives null.
+const withoutNulls = (row) => Object.fromEntries(Object.entries(row).filter(([, v]) => v !== null && v !== undefined));
 
 // Helper functions to extract digits for group, subgroup, subsubgroup and generate part number
 function getGroupDigit(groupStr) {
@@ -292,7 +296,7 @@ export function ItemMasterFormPage({
           const mapped = dbItems.map((it) => {
             const code = it.sms_new_part_no || it.item_code || "";
             return {
-              ...it,
+              ...withoutNulls(it),
               id: it.id,
               sms_new_part_no: code,
               sms_old_part_no: it.old_code || "",
@@ -428,11 +432,12 @@ export function ItemMasterFormPage({
       consumption_uom: item.consumption_uom || item.purchased_uom || "",
       price: item.price || item.rate || "",
       rate: item.rate || item.price || "",
-      group: item.group || item.product || item.product_group || "",
-      subgroup: item.subgroup || item.segment || "",
+      // The Group dropdown lists products; the stored product is in subgroup (group_name is always FG).
+      group: item.product || item.product_group || "",
+      subgroup: item.segment || "",
       sub_subgroup: item.sub_subgroup || item.region || "",
       product: item.product || item.group || item.product_group || "",
-      segment: item.segment || item.subgroup || "",
+      segment: item.segment || "",
       region: item.region || item.sub_subgroup || ""
     });
     if (detailItem) setDetailItem(null);
@@ -626,7 +631,7 @@ export function ItemMasterFormPage({
       description_size: formData.description_size || "",
       item_description: formData.description_size || "",
       group_name: "FG",
-      category: "FG",
+      category: (formData.category || "").trim() || "FG",
       item_type: "FG",
       subgroup: formData.product || "FG",
       uom: formData.purchased_uom || "PCS",
@@ -661,6 +666,18 @@ export function ItemMasterFormPage({
       max_stock_lvl: formData.max_stock_lvl || "",
       reorder_stock_lvl: formData.reorder_stock_lvl || "",
       rej_tolerance: formData.rej_tolerance || "",
+      domestic_exports: formData.domestic_exports || "",
+      application: formData.application || "",
+      ref_no: formData.ref_no || "",
+      oem: formData.oem || "",
+      corteco_no: formData.corteco_no || "",
+      cross_reference: formData.cross_reference || "",
+      fitting_position: formData.fitting_position || "",
+      swirl_type: formData.swirl_type || "",
+      file_name: formData.file_name || "",
+      fg_outsource: formData.fg_outsource || "",
+      sfg_outsource: formData.sfg_outsource || "",
+      outsource_combo_fg_sfg: formData.outsource_combo_fg_sfg || "",
       image: formData.image || null,
       id: editingId || null
     };
@@ -2475,18 +2492,15 @@ export function ItemMasterFormPage({
                       <label style={{ fontSize: 10, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 2 }}>
                         HSN / SAC Code{editingId === null && " *"}
                       </label>
-                      <select
+                      <SearchableSelect
                         value={formData.hsn_code}
                         onChange={(e) => handleInputChange("hsn_code", e.target.value)}
-                        style={fieldInputStyle}
-                      >
-                        <option value="">-- Select HSN --</option>
-                        {hsnList.map((h, idx) => (
-                          <option key={idx} value={h.code}>
-                            {h.code} {h.desc ? `- ${h.desc.substring(0, 24)}...` : ""}
-                          </option>
-                        ))}
-                      </select>
+                        placeholder="Search HSN code or description"
+                        options={[
+                          ...(formData.hsn_code && !hsnList.some((h) => h.code === formData.hsn_code) ? [{ value: formData.hsn_code, label: formData.hsn_code }] : []),
+                          ...hsnList.map((h) => ({ value: h.code, label: h.code, sub: h.desc }))
+                        ]}
+                      />
                     </div>
                   </div>
 

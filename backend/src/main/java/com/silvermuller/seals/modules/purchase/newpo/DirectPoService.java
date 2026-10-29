@@ -34,17 +34,27 @@ public class DirectPoService {
 
     /** One requested item. Duplicate item codes in one request are merged. */
     /** hsnCode is optional: when blank the Item Master HSN is used. The GST rate always comes from HSN Tax Master. */
-    public record Line(String itemCode, BigDecimal quantity, String hsnCode) {
+    /** dueOn is optional: when blank the PO's expected delivery date is used. */
+    public record Line(String itemCode, BigDecimal quantity, String hsnCode, LocalDate dueOn) {
+        public Line(String itemCode, BigDecimal quantity, String hsnCode) {
+            this(itemCode, quantity, hsnCode, null);
+        }
         public Line(String itemCode, BigDecimal quantity) {
-            this(itemCode, quantity, null);
+            this(itemCode, quantity, null, null);
         }
     }
 
-    /** deliveryFreight, terms and schedules are optional. schedules are delivery lots per item (see DeliveryLots). */
+    /**
+     * PO Terms, as in the PO-by-PR conversion. The printed header (invoiceTo, shipTo, voucherNo, referenceNo) is
+     * required on create; a blank voucherNo takes the PO number. deliveryFreight, terms and schedules are optional.
+     * schedules are delivery lots per item (see DeliveryLots). directReason is why this PO bypasses PO by PR; required on create.
+     */
     public record Request(String vendorCode, LocalDate poDate, LocalDate expectedDeliveryDate, List<Line> lines, String remarks,
-                          BigDecimal deliveryFreight, PurchaseOrderTerms terms, List<DeliveryLots.Lot> schedules) {
+                          BigDecimal deliveryFreight, PurchaseOrderTerms terms, List<DeliveryLots.Lot> schedules,
+                          String invoiceTo, String shipTo, String voucherNo, String referenceNo,
+                          BigDecimal otherCharges, BigDecimal roundOff, String directReason) {
         public Request(String vendorCode, LocalDate poDate, LocalDate expectedDeliveryDate, List<Line> lines, String remarks) {
-            this(vendorCode, poDate, expectedDeliveryDate, lines, remarks, null, null, null);
+            this(vendorCode, poDate, expectedDeliveryDate, lines, remarks, null, null, null, null, null, null, null, null, null, null);
         }
     }
 
@@ -77,6 +87,10 @@ public class DirectPoService {
         if (actor == null || actor.isBlank()) {
             throw new NewPoException(HttpStatus.UNAUTHORIZED, "Missing current user (X-User-Name header).");
         }
+        if (blank(r.invoiceTo())) throw bad("Invoice To is required.");
+        if (blank(r.shipTo())) throw bad("Ship To is required.");
+        if (blank(r.referenceNo())) throw bad("Reference No is required.");
+        if (blank(r.directReason())) throw bad("Reason for Direct PO is required.");
         Plan plan = plan(r);
         String poNumber = purchaseProcessing.reservePoNumber();
         String poId = "PO-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
@@ -121,6 +135,7 @@ public class DirectPoService {
         // Merge duplicate item codes; validate each quantity.
         Map<String, BigDecimal> qty = new LinkedHashMap<>();
         Map<String, String> hsnByCode = new LinkedHashMap<>();
+        Map<String, LocalDate> dueByCode = new HashMap<>();
         for (Line l : r.lines()) {
             String code = l.itemCode() == null ? "" : l.itemCode().trim();
             if (code.isEmpty()) throw bad("Every line needs an item.");
@@ -128,6 +143,10 @@ public class DirectPoService {
             if (l.quantity().scale() > 2) throw bad("Quantity for " + code + " can have at most 2 decimal places.");
             qty.merge(code, l.quantity(), BigDecimal::add);
             if (l.hsnCode() != null && !l.hsnCode().isBlank()) hsnByCode.putIfAbsent(code, l.hsnCode().trim());
+            if (l.dueOn() != null) {
+                if (l.dueOn().isBefore(poDate)) throw bad("Due on for " + code + " cannot be before the PO date.");
+                dueByCode.merge(code, l.dueOn(), (a, b) -> a.isBefore(b) ? a : b);
+            }
         }
 
         List<PurchaseItemLine> calcItems = new ArrayList<>();
@@ -162,7 +181,8 @@ public class DirectPoService {
             line.setQuantity(e.getValue());
             line.setUnitRate((BigDecimal) rate.get("offered_unit_price"));
             line.setHsnCode(hsn);
-            line.setExpectedDeliveryDate(r.expectedDeliveryDate() == null ? null : r.expectedDeliveryDate().toString());
+            LocalDate due = dueByCode.getOrDefault(code, r.expectedDeliveryDate());
+            line.setExpectedDeliveryDate(due == null ? null : due.toString());
             calcItems.add(line);
         }
 
@@ -172,9 +192,9 @@ public class DirectPoService {
 
         PurchaseCalculationRequest calcRequest = new PurchaseCalculationRequest();
         calcRequest.setItems(calcItems);
-        // The freight amount is the vendor group's delivery freight, as in PO by PR.
+        // Freight, other charges and round-off are the vendor group's charges, as in PO by PR.
         Map<String, VendorExtraCharges> vendorCharges = new HashMap<>();
-        vendorCharges.put(vendorCode, new VendorExtraCharges(r.deliveryFreight(), null, null));
+        vendorCharges.put(vendorCode, new VendorExtraCharges(r.deliveryFreight(), r.otherCharges(), r.roundOff()));
         calcRequest.setVendorCharges(vendorCharges);
         PurchaseCalculationResponse calc = purchaseProcessing.calculate(calcRequest);
         if (calc.getVendorGroups() == null || calc.getVendorGroups().isEmpty()) {
@@ -207,8 +227,9 @@ public class DirectPoService {
                     "INSERT INTO public.purchase_orders (id, po_number, po_date, pr_number, pr_date, department, requested_by, " +
                     "vendor_code, vendor_name, vendor_gstin, vendor_pan, contact_person, phone, email, billing_address, shipping_address, " +
                     "payment_terms, status, items_gross, total_discount, taxable_amount, total_tax, delivery_charges, other_charges, " +
-                    "round_off, grand_total, remarks, approved_by, approved_at, details_json, po_type, created_at, updated_at, po_origin, expected_delivery) " +
-                    "VALUES (?, ?, ?, NULL, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'APPROVED', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'STANDARD', NOW(), NOW(), 'DIRECT', ?)",
+                    "round_off, grand_total, remarks, approved_by, approved_at, details_json, po_type, created_at, updated_at, po_origin, expected_delivery, " +
+                    "invoice_to, ship_to, voucher_no, reference_no, reference_date, direct_po_reason) " +
+                    "VALUES (?, ?, ?, NULL, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'APPROVED', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'STANDARD', NOW(), NOW(), 'DIRECT', ?, ?, ?, ?, ?, ?, ?)",
                     poId, poNumber, po.poDate().toString(), actor,
                     po.vendorCode(), po.vendorName(), po.vendorGstin(), g.getVendorPan(), g.getContactPerson(), g.getPhone(), g.getEmail(),
                     PurchaseProcessingService.COMPANY_BILLING_ADDRESS,
@@ -217,7 +238,10 @@ public class DirectPoService {
                     po.itemsGross(), po.totalDiscount(), po.taxableAmount(), po.totalTax(), po.deliveryCharges(), po.otherCharges(),
                     po.roundOff(), po.grandTotal(), r.remarks() == null ? "Direct PO" : "Direct PO: " + r.remarks().trim(),
                     actor, LocalDate.now().toString(), detailsJson,
-                    r.expectedDeliveryDate() == null ? null : java.sql.Date.valueOf(r.expectedDeliveryDate()));
+                    r.expectedDeliveryDate() == null ? null : java.sql.Date.valueOf(r.expectedDeliveryDate()),
+                    r.invoiceTo().trim(), r.shipTo().trim(),
+                    blank(r.voucherNo()) ? poNumber : r.voucherNo().trim(), r.referenceNo().trim(),
+                    java.sql.Date.valueOf(po.poDate()), r.directReason().trim());
         } catch (DataIntegrityViolationException e) {
             throw new NewPoException(HttpStatus.CONFLICT, "PO number " + poNumber + " was already used. Try again.");
         }
@@ -232,5 +256,9 @@ public class DirectPoService {
 
     private static NewPoException bad(String message) {
         return new NewPoException(HttpStatus.BAD_REQUEST, message);
+    }
+
+    private static boolean blank(String s) {
+        return s == null || s.isBlank();
     }
 }

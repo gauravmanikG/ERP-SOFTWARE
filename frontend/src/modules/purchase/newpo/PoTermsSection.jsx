@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { masterApi } from "../../masters/api";
 import { inp, label, card, errorBox } from "./ui";
+import SearchableSelect from "../../../shared/components/SearchableSelect";
 
 // Terms that can be set on a PO. Everything here is optional.
 export const EMPTY_TERMS = {
@@ -84,7 +85,7 @@ export function freightAmountOf(t) {
   return t.freightOptionCode && t.freightAmount !== "" ? Number(t.freightAmount) : null;
 }
 
-export default function PoTermsSection({ terms, onChange }) {
+export default function PoTermsSection({ terms, onChange, embedded = false }) {
   const [options, setOptions] = useState({});
   const [optionError, setOptionError] = useState("");
 
@@ -98,8 +99,8 @@ export default function PoTermsSection({ terms, onChange }) {
   const noMasterEntries = !optionError && DROPDOWNS.every((d) => (options[d.key] || []).length === 0) && Object.keys(options).length > 0;
 
   return (
-    <div style={card}>
-      <div style={{ fontSize: 14, fontWeight: 800, color: "#0f172a" }}>PO terms</div>
+    <div style={embedded ? undefined : card}>
+      {!embedded && <div style={{ fontSize: 14, fontWeight: 800, color: "#0f172a" }}>PO terms</div>}
       <div style={{ fontSize: 12, color: "#64748b", marginBottom: 12 }}>
         All optional. Choices come from Engineering &gt; Masters.
       </div>
@@ -115,10 +116,8 @@ export default function PoTermsSection({ terms, onChange }) {
         {DROPDOWNS.map((d) => (
           <div key={d.key}>
             <span style={label}>{d.label}</span>
-            <select style={inp} value={terms[d.key]} onChange={(e) => set(d.key, e.target.value)}>
-              <option value="">— Not selected —</option>
-              {(options[d.key] || []).map((o) => <option key={o.code} value={o.code}>{o.name}</option>)}
-            </select>
+            <SearchableSelect value={terms[d.key]} onChange={(e) => set(d.key, e.target.value)} emptyLabel="— Not selected —"
+              options={(options[d.key] || []).map((o) => ({ value: o.code, label: o.name }))} />
           </div>
         ))}
         {terms.freightOptionCode && (

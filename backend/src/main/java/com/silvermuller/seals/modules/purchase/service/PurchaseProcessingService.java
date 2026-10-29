@@ -28,7 +28,6 @@ public class PurchaseProcessingService {
     private final JdbcTemplate jdbc;
     private final ObjectMapper objectMapper;
     private final Map<String, PurchaseOrder> purchaseOrdersMap = new ConcurrentHashMap<>();
-    private final AtomicInteger poCounter = new AtomicInteger(200); // in-memory cache counter; numbering now comes from po_number_seq
 
     public static final String COMPANY_BILLING_ADDRESS =
             "Silver Muller Seals Ltd, Plot 42, GIDC Sector 3, Silvassa, D&NH - 396230. GSTIN: 24AAACS1234D1Z5";
@@ -304,25 +303,14 @@ public class PurchaseProcessingService {
         return sb.toString();
     }
 
-    /**
-     * Next PO number from po_number_seq (PostgreSQL). Every creation path uses it, so
-     * numbers are unique across requests and backend restarts. A rolled-back transaction leaves a gap, never a reuse.
-     */
+    /** Next PO number (PO-YEAR-NNNNN, restarting each year). Every PO creation path uses it; see DocumentNumbers. */
     public String reservePoNumber() {
-        return formatPoNumber(jdbc.queryForObject("SELECT nextval('public.po_number_seq')", Long.class));
+        return DocumentNumbers.next(jdbc, DocumentNumbers.Doc.PO);
     }
 
-    /** The number the next PO will get. Reads the sequence without taking a number, so it can be shown before saving. */
+    /** The number the next PO will get, shown before saving. Nothing is reserved. */
     public String peekPoNumber() {
-        Map<String, Object> seq = jdbc.queryForMap("SELECT last_value, is_called FROM public.po_number_seq");
-        long last = ((Number) seq.get("last_value")).longValue();
-        boolean called = Boolean.TRUE.equals(seq.get("is_called"));
-        return formatPoNumber(called ? last + 1 : last);
-    }
-
-    /** PO number format used across the module. The number itself is always taken from po_number_seq. */
-    public static String formatPoNumber(long seq) {
-        return "PO-2026-" + String.format("%05d", seq);
+        return DocumentNumbers.peek(jdbc, DocumentNumbers.Doc.PO);
     }
 
     public PurchaseOrder cancelPurchaseOrder(String poNumberOrId, String user, String reason) {
@@ -464,12 +452,6 @@ public class PurchaseProcessingService {
                 }
                 purchaseOrdersMap.put(po.getId(), po);
                 purchaseOrdersMap.put(po.getPoNumber(), po);
-                if (po.getPoNumber() != null && po.getPoNumber().startsWith("PO-2026-")) {
-                    try {
-                        int num = Integer.parseInt(po.getPoNumber().replace("PO-2026-", ""));
-                        poCounter.accumulateAndGet(num, Math::max);
-                    } catch (Exception ignored) {}
-                }
             });
         } catch (Exception e) {
             System.err.println("Could not load POs from DB: " + e.getMessage());

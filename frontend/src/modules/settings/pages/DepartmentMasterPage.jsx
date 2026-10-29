@@ -1,5 +1,6 @@
 import { useResizableColumns, ResizableColGroup, ColumnResizeHandle } from "../../../shared/components/ResizableTable";
 import { useState, useRef, useEffect, useMemo } from "react";
+import SearchableSelect from "../../../shared/components/SearchableSelect";
 import { Eye, Pencil, Trash2, Search, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Plus, RefreshCw, Download, Printer, Building2, ShieldCheck, Layers, Boxes } from "lucide-react";
 
 const INITIAL_DEPARTMENT_FORM = {
@@ -1285,25 +1286,12 @@ export function DepartmentMasterPage({
                   <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 5 }}>
                     Category / Group
                   </label>
-                  <select
+                  <SearchableSelect
                     value={formData.category}
                     onChange={(e) => handleInputChange("category", e.target.value)}
-                    style={{
-                      width: "100%",
-                      padding: "8px 12px",
-                      borderRadius: 6,
-                      border: "1px solid #cbd5e1",
-                      fontSize: 13,
-                      boxSizing: "border-box",
-                      background: "#ffffff"
-                    }}
-                  >
-                    {CATEGORY_OPTIONS.map((cat) => (
-                      <option key={cat} value={cat}>
-                        {cat}
-                      </option>
-                    ))}
-                  </select>
+                    placeholder="Search category"
+                    options={CATEGORY_OPTIONS.map((cat) => ({ value: cat, label: cat }))}
+                  />
                 </div>
               </div>
 

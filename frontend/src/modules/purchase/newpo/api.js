@@ -26,7 +26,8 @@ export async function request(method, path, user, body) {
   const text = await res.text();
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch (e) { data = text; }
-  if (!res.ok) throw new Error((data && data.error) || `Request failed (${res.status})`);
+  // New PO endpoints answer {error}; the shared handler answers {message, error: "Conflict" | "Bad Request"}.
+  if (!res.ok) throw new Error((data && (data.message || data.error)) || `Request failed (${res.status})`);
   return data;
 }
 
@@ -49,19 +50,37 @@ export const vendorRateApi = {
   create: (user, body) => request("POST", "/vendor-rates", user, body)
 };
 
-export const poByPrApi = {
-  nextPoNumber: () => request("GET", "/pr/next-po-number", null),
-  // excludePrItemIds: PR lines already on the PO being built; items whose lines are all in it are left out
-  eligibleItems: (q, excludePrItemIds = []) =>
-    request("GET", `/pr/eligible-items?q=${enc(q || "")}&exclude=${enc(excludePrItemIds.join(","))}`, null),
-  eligibleLines: (itemCode, vendorCode, poDate) =>
-    request("GET", `/pr/eligible-lines?itemCode=${enc(itemCode)}&vendorCode=${enc(vendorCode)}&poDate=${poDate}`, null),
-  preview: (body) => request("POST", "/pr/preview", null, body),
-  create: (user, body) => request("POST", "/pr/purchase-orders", user, body)
+// Sourcing: clubbed demand -> vendor drafts -> PO. Rules and quantity checks live on the server.
+export const sourcingApi = {
+  demand: () => request("GET", "/sourcing/demand", null),
+  assignBatch: (user, items) => request("POST", "/sourcing/drafts/assign-batch", user, items),
+  drafts: (filters) => request("GET", `/sourcing/drafts${query(filters)}`, null),
+  release: (user, draftNumber, body) => request("POST", `/sourcing/drafts/${enc(draftNumber)}/release`, user, body),
+  conversionLines: (draftNumber, poDate) =>
+    request("GET", `/sourcing/drafts/${enc(draftNumber)}/conversion-lines${query({ poDate })}`, null),
+  preview: (draftNumber, body) => request("POST", `/sourcing/drafts/${enc(draftNumber)}/preview`, null, body),
+  convert: (user, draftNumber, body) => request("POST", `/sourcing/drafts/${enc(draftNumber)}/convert`, user, body),
+  audit: (ref) => request("GET", `/sourcing/audit${query({ ref })}`, null)
+};
+
+// PR -> draft -> PO -> GRN tracking report. `flat` returns export rows.
+export const trackingApi = {
+  report: (filters) => request("GET", `/reports/traceability${query(filters)}`, null),
+  flat: (filters) => request("GET", `/reports/traceability${query({ ...filters, flat: "true" })}`, null)
+};
+
+// Department Master names, for filters. (The PR form reads the same master.)
+export const departmentApi = {
+  list: async () => {
+    const res = await fetch(`${API_ROOT}/inventory/departments`);
+    if (!res.ok) throw new Error(`Departments could not be loaded (${res.status})`);
+    const rows = await res.json();
+    return rows.map((d) => d.departmentName || d.name).filter(Boolean);
+  }
 };
 
 export const poRegisterApi = {
-  orders: () => request("GET", "/pr/purchase-orders", null),
+  orders: () => request("GET", "/reports/all-purchase-orders", null),
   detail: (poNumber) => request("GET", `/pr/purchase-orders/${enc(poNumber)}`, null),
   cancel: (user, poNumber, reason) => request("POST", `/pr/purchase-orders/${enc(poNumber)}/cancel`, user, { reason })
 };
@@ -81,8 +100,3 @@ function query(filters) {
   return s ? `?${s}` : "";
 }
 
-export const prFirstApi = {
-  eligiblePrs: (q) => request("GET", `/pr/eligible-prs?q=${enc(q || "")}`, null),
-  outstandingLines: (prNumber, vendorCode, poDate) =>
-    request("GET", `/pr/prs/${enc(prNumber)}/outstanding-lines?vendorCode=${enc(vendorCode)}&poDate=${poDate}`, null)
-};

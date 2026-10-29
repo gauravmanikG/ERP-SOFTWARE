@@ -315,39 +315,130 @@ public class PurchaseRequisitionService {
         return pr;
     }
 
+    /**
+     * Approval decisions and manual status changes. Allowed moves:
+     *   Pending Approval -> Approved | Rejected (a reason is required to reject)
+     *   Draft | Rejected -> Pending Approval (submit or resubmit)
+     *   Draft | Pending Approval | Approved | Rejected -> Cancelled, only while nothing is drafted or ordered
+     * Partially Ordered and Fully Ordered are never set here: they follow the ordered quantity (recalculatePrStatus).
+     * Each decision is written to procurement_audit_log.
+     */
     @Transactional
     public void updateStatus(String prNumber, String status, String reason, String user) {
-        if ("Approved".equalsIgnoreCase(status)) {
-            jdbc.update(
-                "UPDATE purchase_requisitions SET status = ?, approved_by = COALESCE(?, 'VP Operations'), approved_at = NOW(), rejection_reason = NULL, updated_at = NOW() WHERE pr_number = ?",
-                status, user, prNumber
-            );
-        } else if ("Rejected".equalsIgnoreCase(status)) {
-            jdbc.update(
-                "UPDATE purchase_requisitions SET status = ?, rejection_reason = ?, updated_at = NOW() WHERE pr_number = ?",
-                status, reason, prNumber
-            );
-        } else {
-            jdbc.update(
-                "UPDATE purchase_requisitions SET status = ?, rejection_reason = ?, updated_at = NOW() WHERE pr_number = ?",
-                status, reason, prNumber
-            );
+        String target = status == null ? "" : status.trim();
+        List<Map<String, Object>> rows = jdbc.queryForList(
+                "SELECT id, status FROM purchase_requisitions WHERE pr_number = ? FOR UPDATE", prNumber);
+        if (rows.isEmpty()) {
+            throw new com.silvermuller.seals.common.exception.ResourceNotFoundException("PR " + prNumber + " was not found.");
+        }
+        long prId = ((Number) rows.get(0).get("id")).longValue();
+        String current = String.valueOf(rows.get(0).get("status"));
+        String actor = user == null || user.isBlank() ? "Authorizer" : user.trim();
+
+        switch (target) {
+            case "Approved" -> {
+                requireCurrent(prNumber, current, target, "Pending Approval");
+                jdbc.update("UPDATE purchase_requisitions SET status = 'Approved', approved_by = ?, approved_at = NOW(), rejection_reason = NULL, updated_at = NOW() WHERE id = ?",
+                        actor, prId);
+            }
+            case "Rejected" -> {
+                requireCurrent(prNumber, current, target, "Pending Approval");
+                if (reason == null || reason.isBlank()) throw new IllegalArgumentException("A reason is required to reject a PR.");
+                jdbc.update("UPDATE purchase_requisitions SET status = 'Rejected', rejection_reason = ?, updated_at = NOW() WHERE id = ?", reason.trim(), prId);
+            }
+            case "Pending Approval" -> {
+                requireCurrent(prNumber, current, target, "Draft", "Rejected");
+                jdbc.update("UPDATE purchase_requisitions SET status = 'Pending Approval', updated_at = NOW() WHERE id = ?", prId);
+            }
+            case "Cancelled" -> {
+                requireCurrent(prNumber, current, target, "Draft", "Pending Approval", "Approved", "Rejected");
+                assertNothingOrderedOrDrafted(prId);
+                jdbc.update("UPDATE purchase_requisitions SET status = 'Cancelled', cancellation_reason = ?, updated_at = NOW() WHERE id = ?",
+                        reason == null ? null : reason.trim(), prId);
+            }
+            default -> throw new IllegalArgumentException("Status " + target + " cannot be set here. Use Approved, Rejected, Pending Approval or Cancelled.");
+        }
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("from", current);
+        details.put("to", target);
+        if (reason != null && !reason.isBlank()) details.put("reason", reason.trim());
+        ProcurementAudit.record(jdbc, "PR", prNumber, "STATUS_" + target.toUpperCase(Locale.ROOT).replace(' ', '_'), actor, details);
+    }
+
+    private static void requireCurrent(String prNumber, String current, String target, String... allowed) {
+        for (String a : allowed) {
+            if (a.equals(current)) return;
+        }
+        throw new ConflictException("PR " + prNumber + " is " + current + "; it cannot be moved to " + target
+                + ". Allowed from: " + String.join(", ", allowed) + ".");
+    }
+
+    /** The number the next PR will get, shown on the form before saving. Nothing is reserved. */
+    public String getNextPrNumber() {
+        return DocumentNumbers.peek(jdbc, DocumentNumbers.Doc.PR);
+    }
+
+    /** Takes the next PR number (PR-YEAR-NNNNN, restarting each year); see DocumentNumbers. */
+    public String reservePrNumber() {
+        return DocumentNumbers.next(jdbc, DocumentNumbers.Doc.PR);
+    }
+
+    /** Statuses a PR can be saved with from the PR form. Every other status is set by approval or ordering. */
+    private static final Set<String> FORM_STATUSES = Set.of("Draft", "Pending Approval");
+
+    /**
+     * Header and line checks for a PR save. Items and department must exist in their masters; quantities follow
+     * the unit rules. Status from the form may only be Draft or Pending Approval: an edited PR that was already
+     * Approved or Rejected goes back to Pending Approval, so a changed PR is never ordered without approval.
+     */
+    private void validateForSave(PurchaseRequisition pr) {
+        if (pr.getStatus() == null || !FORM_STATUSES.contains(pr.getStatus())) {
+            pr.setStatus("Pending Approval");
+        }
+        String dept = pr.getDepartment() == null ? "" : pr.getDepartment().trim();
+        if (dept.isEmpty()) {
+            throw new IllegalArgumentException("Select a department from the Department Master.");
+        }
+        Integer deptCount = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM public.department_master WHERE department_name = ?", Integer.class, dept);
+        if (deptCount == null || deptCount == 0) {
+            throw new IllegalArgumentException("Department " + dept + " is not in the Department Master.");
+        }
+        List<PurchaseRequisitionItem> items = pr.getItems() == null ? List.of() : pr.getItems();
+        if (items.isEmpty() && "Pending Approval".equals(pr.getStatus())) {
+            throw new IllegalArgumentException("Add at least one item before submitting the PR for approval.");
+        }
+        for (PurchaseRequisitionItem it : items) {
+            String code = it.getItemCode() == null ? "" : it.getItemCode().trim();
+            if (code.isEmpty()) throw new IllegalArgumentException("Every PR line needs an item from the Item Master.");
+            // Same item resolution as PO by PR: part number first, then old code. The PR line takes the item's
+            // purchase UoM from the Item Master; the UoM chosen on the form is used only when the item has none.
+            List<Map<String, Object>> master = jdbc.queryForList(
+                    "SELECT COALESCE(NULLIF(TRIM(purchased_uom), ''), NULLIF(TRIM(uom), '')) AS purchase_uom FROM public.item_master " +
+                    "WHERE sms_new_part_no = ? OR old_code = ? ORDER BY (sms_new_part_no = ?) DESC, id LIMIT 1", code, code, code);
+            if (master.isEmpty()) {
+                throw new IllegalArgumentException("Item " + code + " is not in the Item Master.");
+            }
+            Object purchaseUom = master.get(0).get("purchase_uom");
+            if (purchaseUom != null) {
+                it.setUom(purchaseUom.toString());
+            } else if (it.getUom() == null || it.getUom().isBlank()) {
+                throw new IllegalArgumentException("Item " + code + " has no purchase UoM in the Item Master; choose a UoM on the PR line.");
+            }
+            String error = QuantityRules.check(it.getReqQty(), it.getUom(), code, false);
+            if (error != null) throw new IllegalArgumentException(error);
         }
     }
 
-    public synchronized String getNextPrNumber() {
-        int year = LocalDate.now().getYear();
-        Long maxVal = jdbc.queryForObject(
-            "SELECT COALESCE(MAX(CAST(SUBSTRING(pr_number FROM 'PR-[0-9]+-([0-9]+)') AS BIGINT)), 20) FROM purchase_requisitions",
-            Long.class
-        );
-        long nextVal = (maxVal != null ? maxVal : 20) + 1;
-        String candidate = String.format("PR-%d-%05d", year, nextVal);
-        while (jdbc.queryForObject("SELECT count(*) FROM purchase_requisitions WHERE pr_number = ?", Integer.class, candidate) > 0) {
-            nextVal++;
-            candidate = String.format("PR-%d-%05d", year, nextVal);
+    /** Refuses an edit or delete once any line has quantity ordered or reserved in a vendor draft. */
+    private void assertNothingOrderedOrDrafted(long prId) {
+        Integer n = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM public.purchase_requisition_items WHERE pr_id = ? AND (ordered_qty > 0 OR drafted_qty > 0)",
+                Integer.class, prId);
+        if (n != null && n > 0) {
+            throw new ConflictException("This PR already has quantity in a vendor draft or on a purchase order, so it cannot be changed or deleted. "
+                    + "Release the draft quantity or cancel the PO first.");
         }
-        return candidate;
     }
 
     @Transactional
@@ -360,6 +451,14 @@ public class PurchaseRequisitionService {
                 isUpdate = true;
             }
         }
+        if (isUpdate) {
+            // Lock the PR row so an edit cannot interleave with a draft or PO taking its lines. A PR that cannot
+            // be edited at all is refused before its form contents are checked.
+            jdbc.queryForList("SELECT id FROM purchase_requisitions WHERE id = ? FOR UPDATE", Long.class, prId);
+            assertNoPoByPrAllocationsForPrId(prId);
+            assertNothingOrderedOrDrafted(prId);
+        }
+        validateForSave(pr);
 
         if (isUpdate) {
             jdbc.update(
@@ -375,21 +474,12 @@ public class PurchaseRequisitionService {
                 pr.getCostCenter(), pr.getProjectReference(), pr.getCancellationReason(),
                 prId
             );
-            // Items that POs were raised against (PO by PR) are referenced by po_pr_allocations, so they cannot be
-            // replaced. Refuse here with a clear message; the transaction rolls back the header update as well.
-            assertNoPoByPrAllocationsForPrId(prId);
+            // Nothing on this PR is drafted or ordered (checked above), so its lines can be replaced.
             jdbc.update("DELETE FROM purchase_requisition_items WHERE pr_id = ?", prId);
         } else {
-            // New PR insertion: ensure prNumber is assigned and completely unique
-            if (pr.getPrNumber() == null || pr.getPrNumber().isBlank()) {
-                pr.setPrNumber(getNextPrNumber());
-            } else {
-                Integer count = jdbc.queryForObject("SELECT count(*) FROM purchase_requisitions WHERE pr_number = ?", Integer.class, pr.getPrNumber());
-                if (count != null && count > 0) {
-                    // Avoid duplicate collision by generating next sequence
-                    pr.setPrNumber(getNextPrNumber());
-                }
-            }
+            // The server owns PR numbers: a new PR always takes the next sequence number. A number the form showed
+            // earlier (next-number endpoint) is only a preview and is ignored here.
+            pr.setPrNumber(reservePrNumber());
 
             KeyHolder kh = new GeneratedKeyHolder();
             jdbc.update(conn -> {
@@ -434,9 +524,10 @@ public class PurchaseRequisitionService {
 
         if (pr.getItems() != null) {
             for (PurchaseRequisitionItem it : pr.getItems()) {
-                BigDecimal req = it.getReqQty() != null ? it.getReqQty() : BigDecimal.ONE;
-                BigDecimal ord = it.getOrderedQty() != null ? it.getOrderedQty() : BigDecimal.ZERO;
-                BigDecimal rem = it.getRemainingQty() != null ? it.getRemainingQty() : req.subtract(ord).max(BigDecimal.ZERO);
+                BigDecimal req = it.getReqQty();
+                // Ordered and remaining quantities are never taken from the client: a saved PR has nothing ordered.
+                BigDecimal ord = BigDecimal.ZERO;
+                BigDecimal rem = req;
                 BigDecimal rate = it.getEstRate() != null ? it.getEstRate() : BigDecimal.ZERO;
                 BigDecimal total = it.getEstTotal() != null ? it.getEstTotal() : req.multiply(rate);
 
@@ -452,6 +543,8 @@ public class PurchaseRequisitionService {
                 );
             }
         }
+        ProcurementAudit.record(jdbc, "PR", pr.getPrNumber(), isUpdate ? "EDITED" : "CREATED", pr.getCreatedBy(),
+                Map.of("status", pr.getStatus(), "lineCount", pr.getItems() == null ? 0 : pr.getItems().size()));
         return getRequisitionByNumber(pr.getPrNumber());
     }
 
@@ -465,16 +558,16 @@ public class PurchaseRequisitionService {
     public void updateItemOrderedQty(String prNumber, String itemCode, BigDecimal deltaOrdered) {
         if (deltaOrdered.signum() > 0) {
             List<Map<String, Object>> rows = jdbc.queryForList(
-                "SELECT id, req_qty, ordered_qty FROM purchase_requisition_items WHERE pr_number = ? AND item_code = ? ORDER BY id FOR UPDATE",
+                "SELECT id, req_qty, ordered_qty, drafted_qty FROM purchase_requisition_items WHERE pr_number = ? AND item_code = ? ORDER BY id FOR UPDATE",
                 prNumber, itemCode);
             if (rows.isEmpty()) {
                 throw new ConflictException("PR " + prNumber + " has no line for item " + itemCode + ".");
             }
             for (Map<String, Object> r : rows) {
-                BigDecimal remaining = ((BigDecimal) r.get("req_qty")).subtract((BigDecimal) r.get("ordered_qty"));
-                if (remaining.compareTo(deltaOrdered) < 0) {
-                    throw new ConflictException("PR " + prNumber + " / " + itemCode + " has " + remaining.stripTrailingZeros().toPlainString()
-                            + " remaining; cannot order " + deltaOrdered.stripTrailingZeros().toPlainString() + ".");
+                BigDecimal available = availableToOrder(r);
+                if (available.compareTo(deltaOrdered) < 0) {
+                    throw new ConflictException("PR " + prNumber + " / " + itemCode + " has " + available.stripTrailingZeros().toPlainString()
+                            + " available (quantity in vendor drafts is excluded); cannot order " + deltaOrdered.stripTrailingZeros().toPlainString() + ".");
                 }
             }
         }
@@ -496,11 +589,11 @@ public class PurchaseRequisitionService {
             throw new IllegalArgumentException("Quantity to reserve must be greater than zero.");
         }
         Map<String, Object> r = lockItem(prItemId);
-        BigDecimal remaining = ((BigDecimal) r.get("req_qty")).subtract((BigDecimal) r.get("ordered_qty"));
+        BigDecimal available = availableToOrder(r);
         String prNumber = (String) r.get("pr_number");
-        if (remaining.compareTo(qty) < 0) {
-            throw new ConflictException("PR " + prNumber + " / " + r.get("item_code") + " has " + remaining.stripTrailingZeros().toPlainString()
-                    + " remaining; cannot order " + qty.stripTrailingZeros().toPlainString() + ".");
+        if (available.compareTo(qty) < 0) {
+            throw new ConflictException("PR " + prNumber + " / " + r.get("item_code") + " has " + available.stripTrailingZeros().toPlainString()
+                    + " available (quantity in vendor drafts is excluded); cannot order " + qty.stripTrailingZeros().toPlainString() + ".");
         }
         jdbc.update("UPDATE purchase_requisition_items SET ordered_qty = ordered_qty + ?, " +
                 "remaining_qty = GREATEST(0, req_qty - (ordered_qty + ?)) WHERE id = ?", qty, qty, prItemId);
@@ -527,11 +620,50 @@ public class PurchaseRequisitionService {
 
     private Map<String, Object> lockItem(long prItemId) {
         List<Map<String, Object>> rows = jdbc.queryForList(
-                "SELECT pr_number, item_code, req_qty, ordered_qty FROM purchase_requisition_items WHERE id = ? FOR UPDATE", prItemId);
+                "SELECT pr_number, item_code, req_qty, ordered_qty, drafted_qty FROM purchase_requisition_items WHERE id = ? FOR UPDATE", prItemId);
         if (rows.isEmpty()) {
             throw new ConflictException("PR line " + prItemId + " no longer exists.");
         }
         return rows.get(0);
+    }
+
+    /** Requested minus ordered minus drafted: what can still go to a new draft or PO. */
+    private static BigDecimal availableToOrder(Map<String, Object> row) {
+        BigDecimal drafted = row.get("drafted_qty") == null ? BigDecimal.ZERO : (BigDecimal) row.get("drafted_qty");
+        return ((BigDecimal) row.get("req_qty")).subtract((BigDecimal) row.get("ordered_qty")).subtract(drafted);
+    }
+
+    /**
+     * Reserves quantity on one PR line for a vendor draft. Same lock and check as reserveOrdered, so a quantity
+     * can be in at most one draft or one PO. Drafted quantity does not change the PR's ordering status.
+     */
+    @Transactional
+    public void reserveDrafted(long prItemId, BigDecimal qty) {
+        if (qty == null || qty.signum() <= 0) {
+            throw new IllegalArgumentException("Quantity to reserve must be greater than zero.");
+        }
+        Map<String, Object> r = lockItem(prItemId);
+        BigDecimal available = availableToOrder(r);
+        if (available.compareTo(qty) < 0) {
+            throw new ConflictException("PR " + r.get("pr_number") + " / " + r.get("item_code") + " has " + available.stripTrailingZeros().toPlainString()
+                    + " ready for sourcing; cannot reserve " + qty.stripTrailingZeros().toPlainString() + " in a draft.");
+        }
+        jdbc.update("UPDATE purchase_requisition_items SET drafted_qty = drafted_qty + ? WHERE id = ?", qty, prItemId);
+    }
+
+    /** Releases draft-reserved quantity (back to sourcing, or just before it is converted into a PO). */
+    @Transactional
+    public void releaseDrafted(long prItemId, BigDecimal qty) {
+        if (qty == null || qty.signum() <= 0) {
+            throw new IllegalArgumentException("Quantity to release must be greater than zero.");
+        }
+        Map<String, Object> r = lockItem(prItemId);
+        BigDecimal drafted = r.get("drafted_qty") == null ? BigDecimal.ZERO : (BigDecimal) r.get("drafted_qty");
+        if (drafted.compareTo(qty) < 0) {
+            throw new ConflictException("PR " + r.get("pr_number") + " / " + r.get("item_code") + " has only "
+                    + drafted.stripTrailingZeros().toPlainString() + " in drafts; cannot release " + qty.stripTrailingZeros().toPlainString() + ".");
+        }
+        jdbc.update("UPDATE purchase_requisition_items SET drafted_qty = drafted_qty - ? WHERE id = ?", qty, prItemId);
     }
 
     /** Sets the PR to Approved / Partially Ordered / Fully Ordered from its item ordered quantities. */
@@ -609,6 +741,7 @@ public class PurchaseRequisitionService {
         it.setReqQty(rs.getBigDecimal("req_qty"));
         it.setOrderedQty(rs.getBigDecimal("ordered_qty"));
         it.setRemainingQty(rs.getBigDecimal("remaining_qty"));
+        it.setDraftedQty(rs.getBigDecimal("drafted_qty"));
         it.setEstRate(rs.getBigDecimal("est_rate"));
         it.setEstTotal(rs.getBigDecimal("est_total"));
         it.setRemarks(rs.getString("remarks"));
@@ -632,6 +765,7 @@ public class PurchaseRequisitionService {
         if (!ids.isEmpty()) {
             long id = ids.get(0);
             assertNoPoByPrAllocationsForPrId(id);
+            assertNothingOrderedOrDrafted(id);
             jdbc.update("DELETE FROM purchase_requisition_items WHERE pr_id = ?", id);
             jdbc.update("DELETE FROM purchase_requisitions WHERE id = ?", id);
         }

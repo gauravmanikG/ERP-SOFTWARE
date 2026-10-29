@@ -17,9 +17,12 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * Job Work (subcontracting). Company stock moves through the existing inventory engine, so the
- * balances in the Inventory module always agree with job work. The job-worker-wise ledger tracks
- * which worker holds which quantity, and every posting runs in one transaction with its records.
+ * Job Work (subcontracting). There is no inventory engine any more, so company store stock is not checked or moved
+ * here; the job-worker-wise ledger tracks which worker holds which quantity, and every posting runs in one
+ * transaction with its records.
+ *
+ * Masters it reads: Vendor Master (supplier_master), Item Master, Department Master, Category Master, Payment Terms,
+ * and its own Job Work Operations master (job_work_operations).
  *
  * Identity and roles come from X-User-Name / X-User-Role (no login system yet).
  */
@@ -46,12 +49,10 @@ public class JobWorkService {
     static final Set<String> WORKER_STATUS = Set.of("ACTIVE", "INACTIVE", "BLOCKED");
     static final java.util.regex.Pattern GSTIN_FORMAT =
             java.util.regex.Pattern.compile("^\\d{2}[A-Z]{5}\\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$");
-    static final String EXTERNAL = "External Job Work";
-    static final String QUALITY_HOLD = "Quality Hold";
-    static final String REJECTION_STORE = "Rejection Store";
+    static final java.util.regex.Pattern PAN_FORMAT = java.util.regex.Pattern.compile("^[A-Z]{5}\\d{4}[A-Z]$");
+    static final java.util.regex.Pattern PHONE_FORMAT = java.util.regex.Pattern.compile("^\\d{10}$");
+    static final java.util.regex.Pattern EMAIL_FORMAT = java.util.regex.Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
     static final String REWORK_STORE = "Rework-Burning";
-    static final String SEND_TYPE = "Material Send for Job work";
-    static final String TRANSFER_TYPE = "Material Transfer";
     static final int MAX_LIST = 200;
 
     private final JdbcTemplate jdbc;
@@ -84,8 +85,55 @@ public class JobWorkService {
 
     // ================================================================== reference data
 
-    public List<Map<String, Object>> operations() {
-        return camelList(jdbc.queryForList("SELECT id, operation_name FROM public.job_work_operations WHERE status = 'ACTIVE' ORDER BY operation_name"));
+    /** Job Work Operations master. Inactive operations stay on old records but are not offered for new ones. */
+    public List<Map<String, Object>> operations(boolean includeInactive) {
+        return camelList(jdbc.queryForList("SELECT o.id, o.operation_name, o.status, "
+                + "(SELECT COUNT(*) FROM public.job_worker_operations jo WHERE jo.operation_id = o.id) AS worker_count "
+                + "FROM public.job_work_operations o" + (includeInactive ? "" : " WHERE o.status = 'ACTIVE'") + " ORDER BY o.operation_name"));
+    }
+
+    @Transactional
+    public Map<String, Object> createOperation(Map<String, Object> body, Actor actor) {
+        require(actor, "APPROVER");
+        String name = operationName(body);
+        if (jdbc.queryForObject("SELECT COUNT(*) FROM public.job_work_operations WHERE LOWER(operation_name) = LOWER(?)", Integer.class, name) > 0) {
+            throw conflict("Operation '" + name + "' already exists. Reactivate it instead of adding it again.");
+        }
+        long id = jdbc.queryForObject("INSERT INTO public.job_work_operations (operation_name, status) VALUES (?, 'ACTIVE') RETURNING id", Long.class, name);
+        return operationRow(id);
+    }
+
+    /** Renames an operation and/or sets it ACTIVE or INACTIVE. Records point at the id, so a rename shows everywhere. */
+    @Transactional
+    public Map<String, Object> updateOperation(long id, Map<String, Object> body, Actor actor) {
+        require(actor, "APPROVER");
+        if (jdbc.queryForList("SELECT id FROM public.job_work_operations WHERE id = ? FOR UPDATE", Long.class, id).isEmpty()) {
+            throw notFound("Operation " + id + " not found.");
+        }
+        if (body.get("operationName") != null) {
+            String name = operationName(body);
+            if (jdbc.queryForObject("SELECT COUNT(*) FROM public.job_work_operations WHERE LOWER(operation_name) = LOWER(?) AND id <> ?", Integer.class, name, id) > 0) {
+                throw conflict("Operation '" + name + "' already exists.");
+            }
+            jdbc.update("UPDATE public.job_work_operations SET operation_name = ? WHERE id = ?", name, id);
+        }
+        if (body.get("status") != null) {
+            String status = body.get("status").toString().trim().toUpperCase(Locale.ROOT);
+            if (!Set.of("ACTIVE", "INACTIVE").contains(status)) throw bad("Status must be ACTIVE or INACTIVE.");
+            jdbc.update("UPDATE public.job_work_operations SET status = ? WHERE id = ?", status, id);
+        }
+        return operationRow(id);
+    }
+
+    private String operationName(Map<String, Object> body) {
+        String name = body.get("operationName") == null ? null : blank(body.get("operationName").toString());
+        if (name == null) throw bad("Enter the operation name.");
+        if (name.length() > 100) throw bad("Operation name is too long (maximum 100 characters).");
+        return name;
+    }
+
+    private Map<String, Object> operationRow(long id) {
+        return operations(true).stream().filter(o -> ((Number) o.get("id")).longValue() == id).findFirst().orElseThrow();
     }
 
     public List<Map<String, Object>> locations() {
@@ -96,10 +144,44 @@ public class JobWorkService {
         return camelList(jdbc.queryForList("SELECT category_name FROM public.category_master ORDER BY category_name"));
     }
 
-    /** Vendors that can still be onboarded as job workers. */
+    /** Vendors that can still be onboarded as job workers, with the details the form shows for checking. */
     public List<Map<String, Object>> vendorCandidates() {
-        return camelList(jdbc.queryForList("SELECT supplier_code, supplier_name, gstin, state FROM public.supplier_master "
-                + "WHERE status = 'ACTIVE' AND supplier_code NOT IN (SELECT supplier_code FROM public.job_workers) ORDER BY supplier_name LIMIT 500"));
+        List<Map<String, Object>> rows = camelList(jdbc.queryForList(
+                "SELECT supplier_code, supplier_name, gstin, pan, address, city, state, pincode, contact_person, phone, email "
+                + "FROM public.supplier_master WHERE status = 'ACTIVE' AND supplier_code NOT IN (SELECT supplier_code FROM public.job_workers) "
+                + "ORDER BY supplier_name"));
+        for (Map<String, Object> r : rows) {
+            r.put("registeredAddress", joinNonBlank(", ", (String) r.get("address"), (String) r.get("city"), (String) r.get("state"), (String) r.get("pincode")));
+        }
+        return rows;
+    }
+
+    /** Checked worker details: phone exactly 10 digits, a valid e-mail, GSTIN and PAN formats, PAN matching the GSTIN. */
+    static Map<String, String> workerContact(WorkerRequest r) {
+        Map<String, String> out = new LinkedHashMap<>();
+        String phone = blank(r.phone());
+        if (phone != null) {
+            phone = phone.replaceAll("[\\s-]", "");
+            if (!PHONE_FORMAT.matcher(phone).matches()) throw bad("Phone must be exactly 10 digits (numbers only).");
+        }
+        String email = blank(r.email());
+        if (email != null && (email.length() > 255 || !EMAIL_FORMAT.matcher(email).matches())) throw bad("Enter a valid e-mail address, for example name@company.com.");
+        String gstin = blank(r.gstin()) == null ? null : r.gstin().trim().toUpperCase(Locale.ROOT);
+        if (gstin != null && !GSTIN_FORMAT.matcher(gstin).matches()) throw bad("GSTIN " + gstin + " is not valid. It has 15 characters, for example 27AABCU9603R1ZX.");
+        String pan = blank(r.pan()) == null ? null : r.pan().trim().toUpperCase(Locale.ROOT);
+        if (pan != null && !PAN_FORMAT.matcher(pan).matches()) throw bad("PAN " + pan + " is not valid. It has 10 characters, for example AABCU9603R.");
+        if (gstin != null && pan != null && !gstin.substring(2, 12).equals(pan)) throw bad("PAN " + pan + " does not match the PAN inside GSTIN " + gstin + ".");
+        String contact = blank(r.contactPerson());
+        if (contact != null && contact.length() > 255) throw bad("Contact person is too long (maximum 255 characters).");
+        out.put("contact_person", contact);
+        out.put("phone", phone);
+        out.put("email", email);
+        out.put("gstin", gstin);
+        out.put("pan", pan);
+        out.put("registered_address", blank(r.registeredAddress()));
+        out.put("work_location", blank(r.workLocation()));
+        out.put("payment_terms", blank(r.paymentTerms()));
+        return out;
     }
 
     // ================================================================== job workers
@@ -115,10 +197,10 @@ public class JobWorkService {
         if (!"ACTIVE".equalsIgnoreCase(str(v, "status"))) throw bad("Vendor " + supplierCode + " is not active.");
         Integer already = jdbc.queryForObject("SELECT COUNT(*) FROM public.job_workers WHERE supplier_code = ?", Integer.class, supplierCode);
         if (already != null && already > 0) throw conflict("Vendor " + supplierCode + " is already registered as a job worker.");
-        String gstin = blank(str(v, "gstin"));
+        // Only what the form sends is stored (the form shows the vendor's details for the user to check or change).
+        Map<String, String> details = workerContact(r);
+        String gstin = details.get("gstin");
         if (gstin != null) {
-            gstin = gstin.toUpperCase(Locale.ROOT);
-            if (!GSTIN_FORMAT.matcher(gstin).matches()) throw bad("Vendor GSTIN " + gstin + " is not in a valid GSTIN format. Correct it in the Vendor Master first.");
             Integer dup = jdbc.queryForObject("SELECT COUNT(*) FROM public.job_workers WHERE gstin = ?", Integer.class, gstin);
             if (dup != null && dup > 0) throw conflict("GSTIN " + gstin + " is already used by another job worker.");
         }
@@ -128,20 +210,13 @@ public class JobWorkService {
             if (jdbc.queryForObject("SELECT COUNT(*) FROM public.job_work_operations WHERE id = ?", Integer.class, op) == 0) throw bad("Operation " + op + " does not exist.");
         }
         int credit = r.creditDays() == null ? 30 : r.creditDays();
-        if (credit < 0) throw bad("Credit days cannot be negative.");
-        String code = String.format(Locale.ROOT, "JW-%04d", nextSeq());
+        if (credit < 0 || credit > 365) throw bad("Credit days must be between 0 and 365.");
+        String code = nextWorkerCode();
         Map<String, Object> cols = new LinkedHashMap<>();
         cols.put("worker_code", code);
         cols.put("supplier_code", supplierCode);
         cols.put("legal_name", str(v, "supplier_name"));
-        cols.put("contact_person", blank(r.contactPerson()) != null ? r.contactPerson().trim() : blank(str(v, "contact_person")));
-        cols.put("phone", blank(r.phone()) != null ? r.phone().trim() : blank(str(v, "phone")));
-        cols.put("email", blank(r.email()) != null ? r.email().trim() : blank(str(v, "email")));
-        cols.put("registered_address", joinNonBlank(", ", str(v, "address"), str(v, "city"), str(v, "state"), str(v, "pincode")));
-        cols.put("work_location", blank(r.workLocation()));
-        cols.put("gstin", gstin);
-        cols.put("pan", blank(str(v, "pan")));
-        cols.put("payment_terms", blank(r.paymentTerms()) != null ? r.paymentTerms().trim() : blank(str(v, "payment_terms_id")));
+        cols.putAll(details);
         cols.put("credit_days", credit);
         cols.put("status", "ACTIVE");
         cols.put("created_by", actor.name());
@@ -166,11 +241,21 @@ public class JobWorkService {
             jdbc.update("DELETE FROM public.job_worker_operations WHERE job_worker_id = ?", id);
             for (Long op : ops) jdbc.update("INSERT INTO public.job_worker_operations (job_worker_id, operation_id) VALUES (?, ?)", id, op);
         }
+        Map<String, String> d = workerContact(r);
+        if (r.creditDays() != null && (r.creditDays() < 0 || r.creditDays() > 365)) throw bad("Credit days must be between 0 and 365.");
+        if (d.get("gstin") != null && jdbc.queryForObject("SELECT COUNT(*) FROM public.job_workers WHERE gstin = ? AND id <> ?", Integer.class, d.get("gstin"), id) > 0) {
+            throw conflict("GSTIN " + d.get("gstin") + " is already used by another job worker.");
+        }
         jdbc.update("UPDATE public.job_workers SET contact_person = COALESCE(?, contact_person), phone = COALESCE(?, phone), email = COALESCE(?, email), "
                         + "work_location = COALESCE(?, work_location), payment_terms = COALESCE(?, payment_terms), credit_days = COALESCE(?, credit_days), "
+                        + "gstin = COALESCE(?, gstin), pan = COALESCE(?, pan), registered_address = COALESCE(?, registered_address), "
                         + "status = ?, blocked_reason = ?, modified_by = ?, modified_at = NOW() WHERE id = ?",
-                blank(r.contactPerson()), blank(r.phone()), blank(r.email()), blank(r.workLocation()), blank(r.paymentTerms()),
-                r.creditDays(), status, "BLOCKED".equals(status) ? blank(r.blockedReason()) : null, actor.name(), id);
+                d.get("contact_person"), d.get("phone"), d.get("email"), d.get("work_location"), d.get("payment_terms"),
+                r.creditDays(), d.get("gstin"), d.get("pan"), d.get("registered_address"),
+                status, "BLOCKED".equals(status) ? blank(r.blockedReason()) : null, actor.name(), id);
+        if (r.contactPerson() != null || r.phone() != null || r.email() != null || r.gstin() != null) {
+            history("WORKER", id, "EDITED", null, null, actor, "Details updated");
+        }
         if (!status.equals(str(w, "status"))) history("WORKER", id, "STATUS_CHANGED", str(w, "status"), status, actor, r.reason() != null ? r.reason() : r.blockedReason());
         return workerDetails(id);
     }
@@ -361,8 +446,9 @@ public class JobWorkService {
         if (r.requestingDepartmentId() == null || jdbc.queryForObject("SELECT COUNT(*) FROM public.department_master WHERE id = ?", Integer.class, r.requestingDepartmentId()) == 0) {
             throw bad("Select the requesting department.");
         }
-        if (r.sourceDepartmentId() == null || jdbc.queryForObject("SELECT COUNT(*) FROM public.department_master WHERE id = ?", Integer.class, r.sourceDepartmentId()) == 0) {
-            throw bad("Select the source store / warehouse.");
+        // The source store is chosen on the job work order; an indent may still carry one from older screens.
+        if (r.sourceDepartmentId() != null && jdbc.queryForObject("SELECT COUNT(*) FROM public.department_master WHERE id = ?", Integer.class, r.sourceDepartmentId()) == 0) {
+            throw bad("The source store does not exist in Department Master.");
         }
         if (notBlank(r.reason()) == false) throw bad("Give the reason for outsourcing this work.");
         LocalDate date = r.indentDate() == null ? today() : r.indentDate();
@@ -420,18 +506,12 @@ public class JobWorkService {
         }
     }
 
-    /** Stock available at the source location right now. Inventory transaction tracking removed. */
-    BigDecimal available(long masterId, String category, long sourceDeptId) {
-        // Returns zero since inventory transaction tracking has been removed
-        return BigDecimal.ZERO;
-    }
-
     public Map<String, Object> indentDetails(long id, Actor actor) {
         List<Map<String, Object>> rows = jdbc.queryForList(
                 "SELECT i.*, rd.department_name AS requesting_department, sd.department_name AS source_department, "
                         + "w.legal_name AS preferred_worker FROM public.job_work_indents i "
                         + "JOIN public.department_master rd ON rd.id = i.requesting_department_id "
-                        + "JOIN public.department_master sd ON sd.id = i.source_department_id "
+                        + "LEFT JOIN public.department_master sd ON sd.id = i.source_department_id "
                         + "LEFT JOIN public.job_workers w ON w.id = i.preferred_job_worker_id WHERE i.id = ?", id);
         if (rows.isEmpty()) throw notFound("Indent " + id + " not found.");
         Map<String, Object> row = rows.get(0);
@@ -440,15 +520,7 @@ public class JobWorkService {
         List<Map<String, Object>> lines = jdbc.queryForList(
                 "SELECT l.*, o.operation_name FROM public.job_work_indent_lines l JOIN public.job_work_operations o ON o.id = l.operation_id "
                         + "WHERE l.indent_id = ? ORDER BY l.line_no", id);
-        List<Map<String, Object>> outLines = new ArrayList<>();
-        for (Map<String, Object> l : lines) {
-            Map<String, Object> c = camel(l);
-            BigDecimal avail = available(((Number) l.get("item_master_id")).longValue(), str(l, "category"), ((Number) row.get("source_department_id")).longValue());
-            c.put("availableQty", avail);
-            c.put("stockShortfall", ((BigDecimal) l.get("required_qty")).compareTo(avail) > 0);
-            outLines.add(c);
-        }
-        out.put("lines", outLines);
+        out.put("lines", camelList(lines));
         out.put("orders", camelList(jdbc.queryForList("SELECT id, jwo_number, status FROM public.job_work_orders WHERE indent_id = ? ORDER BY id", id)));
         out.put("history", historyOf("INDENT", id));
         out.put("attachments", attachmentsOf("INDENT", id));
@@ -742,14 +814,7 @@ public class JobWorkService {
                 "SELECT l.*, o.operation_name, (l.dispatched_qty + l.rework_redispatched_qty - l.received_qty - l.unused_returned_qty - l.written_off_qty) AS pending_with_worker, "
                         + "(l.input_qty - l.dispatched_qty) AS to_dispatch, (l.rework_qty - l.rework_redispatched_qty) AS rework_pending "
                         + "FROM public.job_work_order_lines l JOIN public.job_work_operations o ON o.id = l.operation_id WHERE l.jwo_id = ? ORDER BY l.line_no", id);
-        List<Map<String, Object>> outLines = new ArrayList<>();
-        for (Map<String, Object> l : lines) {
-            Map<String, Object> c = camel(l);
-            c.put("sourceAvailable", available(((Number) l.get("item_master_id")).longValue(), str(l, "category"),
-                    ((Number) row.get("source_department_id")).longValue()));
-            outLines.add(c);
-        }
-        out.put("lines", outLines);
+        out.put("lines", camelList(lines));
         out.put("challans", listChallanRows("c.jwo_id = ?", List.of(id)));
         out.put("receipts", listReceiptRows("r.jwo_id = ?", List.of(id)));
         out.put("ledger", camelList(jdbc.queryForList(
@@ -822,8 +887,12 @@ public class JobWorkService {
         if (date.isAfter(today())) throw bad("Challan date cannot be in the future.");
         if (date.isBefore(ld(o.get("jwo_date")))) throw bad("Challan date cannot be before the order date.");
         if (!notBlank(r.authorizedBy())) throw bad("Enter the authorised person for this dispatch.");
-        long sourceDept = r.reworkDispatch() ? departmentId(REWORK_STORE) : ((Number) o.get("source_department_id")).longValue();
-        long externalDept = departmentId(EXTERNAL);
+        // Rework goes out from the rework store when Department Master has one, otherwise from the order's store.
+        long orderStore = ((Number) o.get("source_department_id")).longValue();
+        long sourceDept = r.reworkDispatch()
+                ? jdbc.queryForList("SELECT id FROM public.department_master WHERE department_name = ? AND status = 'ACTIVE'", Long.class, REWORK_STORE)
+                        .stream().findFirst().orElse(orderStore)
+                : orderStore;
         Set<Long> seen = new HashSet<>();
         List<Map<String, Object>> lines = new ArrayList<>();
         int no = 0;
@@ -1218,12 +1287,6 @@ public class JobWorkService {
 
     // ================================================================== inventory & ledger helpers
 
-    long departmentId(String name) {
-        List<Long> ids = jdbc.queryForList("SELECT id FROM public.department_master WHERE department_name = ? AND status = 'ACTIVE'", Long.class, name);
-        if (ids.isEmpty()) throw new JobWorkException(HttpStatus.INTERNAL_SERVER_ERROR, "Location '" + name + "' is missing from Department Master.");
-        return ids.get(0);
-    }
-
     // Inventory transaction posting removed - job work now tracks stock only in job_work_stock_ledger
 
     /** Job-worker-wise ledger. Locks the worker row so two postings for one worker cannot read the same balance. */
@@ -1308,16 +1371,21 @@ public class JobWorkService {
     }
 
     Map<String, Object> masterRow(long masterId, int lineNo) {
-        List<Map<String, Object>> rows = jdbc.queryForList("SELECT id, code, description, category, unit_of_measurement FROM public.item_master_lookup WHERE id = ?", masterId);
+        // An item's stock category is its Item Master category, or its group when it has none (FG for finished goods).
+        List<Map<String, Object>> rows = jdbc.queryForList(
+                "SELECT l.id, l.code, l.description, COALESCE(NULLIF(TRIM(i.category), ''), NULLIF(TRIM(i.group_name), '')) AS category, "
+                        + "l.unit_of_measurement FROM public.item_master_lookup l JOIN public.item_master i ON i.id = l.id WHERE l.id = ?", masterId);
         if (rows.isEmpty()) throw bad("Line " + lineNo + ": item " + masterId + " does not exist.");
         Map<String, Object> m = rows.get(0);
-        if (blank(str(m, "category")) == null) throw bad("Line " + lineNo + ": item " + str(m, "code") + " has no category.");
+        if (blank(str(m, "category")) == null) throw bad("Line " + lineNo + ": item " + str(m, "code") + " has no category or group in the Item Master.");
         return m;
     }
 
-    /** Stock category the material is held under. Defaults to the item master category; must exist in the category master. */
+    /** Stock category the material is held under: the item's own (category or group), or one picked from the category master. */
     String stockCategory(String requested, Map<String, Object> master, int lineNo) {
-        String category = notBlank(requested) ? requested.trim() : str(master, "category");
+        String own = str(master, "category");
+        if (!notBlank(requested) || requested.trim().equalsIgnoreCase(own)) return own;
+        String category = requested.trim();
         if (jdbc.queryForObject("SELECT COUNT(*) FROM public.category_master WHERE category_name = ?", Integer.class, category) == 0) {
             throw bad("Line " + lineNo + ": category " + category + " is not in the category master.");
         }
@@ -1367,12 +1435,18 @@ public class JobWorkService {
         return (Map<String, Object>) o;
     }
 
-    long nextSeq() {
-        return jdbc.queryForObject("SELECT nextval('public.job_work_number_seq')", Long.class);
+    /** PREFIX-YEAR-NNNNN with its own counter per document type, restarting each year (same as PR / PO / GRN). */
+    String nextNumber(String prefix) {
+        return com.silvermuller.seals.modules.purchase.service.DocumentNumbers.next(jdbc,
+                com.silvermuller.seals.modules.purchase.service.DocumentNumbers.Doc.valueOf(prefix), today().getYear());
     }
 
-    String nextNumber(String prefix) {
-        return String.format(Locale.ROOT, "%s-%d-%05d", prefix, today().getYear(), nextSeq());
+    /** JW-NNNN, one after the highest worker code. The lock keeps two onboardings from taking the same code. */
+    String nextWorkerCode() {
+        jdbc.queryForObject("SELECT pg_advisory_xact_lock(hashtext('job_workers:worker_code'))", Object.class);
+        Long max = jdbc.queryForObject("SELECT COALESCE(MAX(CAST(SUBSTRING(worker_code FROM 4) AS BIGINT)), 0) FROM public.job_workers "
+                + "WHERE worker_code ~ '^JW-[0-9]+$'", Long.class);
+        return String.format(Locale.ROOT, "JW-%04d", (max == null ? 0 : max) + 1);
     }
 
     long insertRow(String table, Map<String, Object> cols) {

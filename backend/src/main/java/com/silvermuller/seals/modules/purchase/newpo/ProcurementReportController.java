@@ -42,6 +42,30 @@ public class ProcurementReportController {
         return reports.prVsPoItemSummary(from, to);
     }
 
+    /** PR -> draft -> PO -> GRN, one row per PR line with drafts, POs and GRNs nested. flat=true gives export rows. */
+    @GetMapping("/traceability")
+    public List<Map<String, Object>> traceability(@RequestParam(required = false) String department,
+                                                  @RequestParam(required = false) String vendorCode,
+                                                  @RequestParam(required = false) String item,
+                                                  @RequestParam(required = false) String docNumber,
+                                                  @RequestParam(required = false) String status,
+                                                  @RequestParam(defaultValue = "false") boolean flat) {
+        return flat
+                ? reports.traceabilityFlat(blankToNull(department), blankToNull(vendorCode), blankToNull(item), blankToNull(docNumber), blankToNull(status))
+                : reports.traceability(blankToNull(department), blankToNull(vendorCode), blankToNull(item), blankToNull(docNumber), blankToNull(status));
+    }
+
+    /** The PO register: every standard purchase order, with its origin and the PRs it came from. */
+    @GetMapping("/all-purchase-orders")
+    public List<Map<String, Object>> allPurchaseOrders() {
+        return reports.allPurchaseOrders();
+    }
+
+    @GetMapping("/pr-status/{prNumber}")
+    public Map<String, Object> prStatus(@PathVariable String prNumber) {
+        return reports.prStatus(prNumber.trim());
+    }
+
     @GetMapping("/legacy-reconciliation")
     public Map<String, Object> legacyReconciliation() {
         return reports.legacyReconciliation();

@@ -144,7 +144,8 @@ export const MODULES_LIST = [
         name: "Purchase Orders",
         isParent: true,
         children: [
-          { name: "PO by PR", targetPage: "new-po-po-by-pr", ready: true },
+          { name: "Clubbed Demand", targetPage: "new-po-clubbed-demand", ready: true },
+          { name: "Draft POs", targetPage: "new-po-draft-pos", ready: true },
           { name: "Direct PO", targetPage: "new-po-direct-po", ready: true },
           { name: "Capital PO", targetPage: "capital-po", ready: true },
           { name: "Service PO", targetPage: "service-po", ready: true },
@@ -156,6 +157,7 @@ export const MODULES_LIST = [
         name: "Procurement Reports",
         isParent: true,
         children: [
+          { name: "PR Tracking", targetPage: "new-po-tracking", ready: true },
           { name: "PR vs PO Report", targetPage: "new-po-report-po-vs-pr", ready: true },
           { name: "PR vs PO vs MRN/GRN Report", targetPage: "new-po-report-po-vs-pr-grn", ready: true },
           { name: "Legacy Reconciliation", targetPage: "new-po-reconciliation", ready: true }
@@ -176,7 +178,8 @@ export const MODULES_LIST = [
           { name: "Worker Stock Ledger", targetPage: "job-work-ledger", ready: true },
           { name: "Reconciliation & Scrap", targetPage: "job-work-recon", ready: true },
           { name: "Job Work Invoices" },
-          { name: "Compliance & Reports", targetPage: "job-work-reports", ready: true }
+          { name: "Compliance & Reports", targetPage: "job-work-reports", ready: true },
+          { name: "Operations Master", targetPage: "job-work-operations", ready: true }
         ]
       },
       { name: "Purchase Returns" },

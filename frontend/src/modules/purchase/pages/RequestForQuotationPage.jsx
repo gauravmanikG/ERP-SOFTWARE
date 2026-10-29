@@ -1,6 +1,7 @@
 import { setHandoff, getHandoff, removeHandoff } from "../../../shared/utils/handoffStore";
 import { formatDisplayDate, formatDisplayDateTime } from "../../../shared/utils/dateFormat";
 import DateInput from "../../../shared/components/DateInput";
+import SearchableSelect from "../../../shared/components/SearchableSelect";
 import { useResizableColumns, ResizableColGroup, ColumnResizeHandle } from "../../../shared/components/ResizableTable";
 import React, { useState, useEffect, useMemo } from "react";
 
@@ -741,15 +742,14 @@ export function RequestForQuotationPage({ dark = false, onBackToHome, onNavigate
         vendorName: bidVendorName,
         quotationDate: new Date().toISOString().split("T")[0],
         validUntil: selectedRfq.dueDate || new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0],
-        validityDate: selectedRfq.dueDate || new Date().toISOString().split("T")[0],
         prNumber: selectedRfq.prNumber || null,
         subtotalAmount: subtotalSum,
         taxAmount: taxSum,
         finalAmount: finalSum,
-        currency: "INR",
         paymentTerms: selectedRfq.paymentTerms || "30 Days Credit",
-        deliveryDays: Number(bidLeadDays) || 7,
-        remarks: `Logged against RFQ #${selectedRfq.rfqNumber} • ${bidRemarks}`,
+        // Saved as the quotation's delivery time and notes, the fields Vendor Quotations shows.
+        deliveryTime: `${Number(bidLeadDays) || 7} Days`,
+        notes: `Logged against RFQ #${selectedRfq.rfqNumber}${bidRemarks.trim() ? ` • ${bidRemarks.trim()}` : ""}`,
         items: computedItems
       };
 
@@ -1943,7 +1943,7 @@ export function RequestForQuotationPage({ dark = false, onBackToHome, onNavigate
                                   ₹ {Number(quote.finalAmount || (unitRate * (selectedRfq.items[0]?.requiredQty || 1) * 1.18)).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                                 </td>
                                 <td style={{ padding: "10px 12px", textAlign: "center", color: "#475569" }}>
-                                  {quote.deliveryDays || 7} Days
+                                  {quote.deliveryTime || "-"}
                                 </td>
                                 <td style={{ padding: "10px 12px", textAlign: "right" }}>
                                   <button
@@ -2170,8 +2170,9 @@ export function RequestForQuotationPage({ dark = false, onBackToHome, onNavigate
                 <label style={{ display: "block", fontSize: 11.5, fontWeight: 700, color: "#475569", marginBottom: 5 }}>
                   SELECT SUPPLIER *
                 </label>
-                <select
+                <SearchableSelect
                   value={bidVendorName}
+                  placeholder="Choose supplier"
                   onChange={(e) => {
                     const selName = e.target.value;
                     setBidVendorName(selName);
@@ -2191,29 +2192,21 @@ export function RequestForQuotationPage({ dark = false, onBackToHome, onNavigate
                       setBidVendorCode("VEND-" + Math.floor(100 + Math.random() * 900));
                     }
                   }}
-                  style={{
-                    width: "100%",
-                    boxSizing: "border-box",
-                    padding: "8px 10px",
-                    borderRadius: 6,
-                    border: "1px solid #cbd5e1",
-                    fontSize: 13,
-                    fontWeight: 600,
-                    outline: "none"
-                  }}
-                >
-                  <option value="">-- Choose Supplier --</option>
-                  {(selectedRfq.selectedVendors || []).map((v) => (
-                    <option key={v.id} value={v.name || v.supplier_name}>
-                      [Invited] {v.name || v.supplier_name} ({v.code})
-                    </option>
-                  ))}
-                  {suppliers.map((s) => (
-                    <option key={s.id} value={s.supplier_name || s.supplierName}>
-                      {s.supplier_name || s.supplierName} ({s.supplier_code || s.supplierCode})
-                    </option>
-                  ))}
-                </select>
+                  options={[
+                    ...(selectedRfq.selectedVendors || []).map((v) => ({
+                      value: v.name || v.supplier_name,
+                      label: v.name || v.supplier_name,
+                      sub: `${v.code} · invited`,
+                      group: "Invited to this RFQ"
+                    })),
+                    ...suppliers.map((s) => ({
+                      value: s.supplier_name || s.supplierName,
+                      label: s.supplier_name || s.supplierName,
+                      sub: s.supplier_code || s.supplierCode,
+                      group: "All suppliers"
+                    }))
+                  ]}
+                />
               </div>
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>

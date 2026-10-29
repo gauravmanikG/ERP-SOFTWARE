@@ -76,7 +76,8 @@ class DirectPoIntegrationTest {
     }
 
     private Request request(Line... lines) {
-        return new Request(VENDOR, PO_DATE, PO_DATE.plusDays(7), List.of(lines), "integration " + TAG);
+        return new Request(VENDOR, PO_DATE, PO_DATE.plusDays(7), List.of(lines), "integration " + TAG,
+                null, null, null, "Integration invoice to", "Integration ship to", null, "REF-" + TAG, null, null, "Integration test reason");
     }
 
     private Created create(Request r) {

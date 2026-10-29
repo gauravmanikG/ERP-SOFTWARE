@@ -83,6 +83,24 @@ ALTER TABLE public.item_master
   ADD COLUMN IF NOT EXISTS procurement_lead_time NUMERIC(10,2),
   ADD COLUMN IF NOT EXISTS total_lead_time NUMERIC(10,2);
 
+-- Item form fields that were collected on screen but had no column, so every save dropped them.
+ALTER TABLE public.item_master
+  ADD COLUMN IF NOT EXISTS sub_subgroup VARCHAR(255),
+  ADD COLUMN IF NOT EXISTS style VARCHAR(255),
+  ADD COLUMN IF NOT EXISTS drawing_no VARCHAR(255),
+  ADD COLUMN IF NOT EXISTS item_class VARCHAR(255),
+  ADD COLUMN IF NOT EXISTS procurement_type VARCHAR(255),
+  ADD COLUMN IF NOT EXISTS process_type VARCHAR(255),
+  ADD COLUMN IF NOT EXISTS status VARCHAR(30) DEFAULT 'Active',
+  ADD COLUMN IF NOT EXISTS opening_balance NUMERIC(15,3),
+  ADD COLUMN IF NOT EXISTS gross_wt NUMERIC(15,3),
+  ADD COLUMN IF NOT EXISTS net_wt NUMERIC(15,3),
+  ADD COLUMN IF NOT EXISTS rej_tolerance NUMERIC(5,2),
+  ADD COLUMN IF NOT EXISTS min_stock_lvl NUMERIC(15,3),
+  ADD COLUMN IF NOT EXISTS max_stock_lvl NUMERIC(15,3),
+  ADD COLUMN IF NOT EXISTS reorder_stock_lvl NUMERIC(15,3),
+  ADD COLUMN IF NOT EXISTS mrp NUMERIC(15,2);
+
 -- The one place that turns an item_master row into the code / name / uom other modules display and store.
 CREATE OR REPLACE VIEW public.item_master_lookup AS
 SELECT id,
@@ -1333,7 +1351,7 @@ CREATE TABLE IF NOT EXISTS public.job_work_indents (
   indent_date           DATE NOT NULL,
   requesting_department_id BIGINT NOT NULL REFERENCES public.department_master(id),
   requester             VARCHAR(150) NOT NULL,
-  source_department_id  BIGINT NOT NULL REFERENCES public.department_master(id),
+  source_department_id  BIGINT REFERENCES public.department_master(id),
   status                VARCHAR(20) NOT NULL DEFAULT 'DRAFT',
   reason                TEXT NOT NULL,
   required_dispatch_date DATE,
@@ -1350,6 +1368,9 @@ CREATE TABLE IF NOT EXISTS public.job_work_indents (
   modified_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CONSTRAINT ck_jw_indent_status CHECK (status IN ('DRAFT','SUBMITTED','APPROVED','REJECTED','CANCELLED'))
 );
+
+-- The source store is chosen on the job work order, not on the indent.
+ALTER TABLE public.job_work_indents ALTER COLUMN source_department_id DROP NOT NULL;
 
 CREATE TABLE IF NOT EXISTS public.job_work_indent_lines (
   id                    BIGSERIAL PRIMARY KEY,
@@ -1674,6 +1695,81 @@ ALTER TABLE public.grn_item_allocations ADD COLUMN IF NOT EXISTS accepted_qty NU
 -- NULL on older rows, which are classified by their allocation records instead (see ProcurementReportService).
 ALTER TABLE public.purchase_orders ADD COLUMN IF NOT EXISTS po_origin VARCHAR(20);
 ALTER TABLE public.purchase_orders ADD COLUMN IF NOT EXISTS expected_delivery DATE;
+
+-- Printed PO header: invoice-to and ship-to blocks, voucher number, and the customer reference.
+ALTER TABLE public.purchase_orders ADD COLUMN IF NOT EXISTS invoice_to TEXT;
+ALTER TABLE public.purchase_orders ADD COLUMN IF NOT EXISTS ship_to TEXT;
+ALTER TABLE public.purchase_orders ADD COLUMN IF NOT EXISTS voucher_no VARCHAR(50);
+ALTER TABLE public.purchase_orders ADD COLUMN IF NOT EXISTS reference_no VARCHAR(100);
+ALTER TABLE public.purchase_orders ADD COLUMN IF NOT EXISTS reference_date DATE;
+
+-- Direct PO only: why the items were bought without a PR instead of through PO by PR. Required when the PO is created.
+ALTER TABLE public.purchase_orders ADD COLUMN IF NOT EXISTS direct_po_reason TEXT;
+
+-- =============================================================================
+-- Sourcing: clubbed demand -> vendor-wise draft POs -> PO by PR
+-- =============================================================================
+-- Quantity of the PR line reserved in open vendor drafts. Kept in step with po_draft_allocations under the PR
+-- line's row lock, exactly like ordered_qty. Ready for sourcing = req_qty - ordered_qty - drafted_qty.
+ALTER TABLE public.purchase_requisition_items ADD COLUMN IF NOT EXISTS drafted_qty NUMERIC(15,2) NOT NULL DEFAULT 0;
+
+-- Document number counters: one row per document type (PR, PO, GRN, DRAFT) and calendar year. Numbers are
+-- PREFIX-YEAR-NNNNN and restart at 1 each year (see DocumentNumbers).
+CREATE TABLE IF NOT EXISTS public.document_number_counters (
+  doc_type    VARCHAR(20) NOT NULL,
+  year        INT         NOT NULL,
+  last_value  BIGINT      NOT NULL,
+  PRIMARY KEY (doc_type, year)
+);
+
+-- One vendor draft. At most one OPEN draft per vendor, so every item given to a vendor lands in the same draft.
+CREATE TABLE IF NOT EXISTS public.po_drafts (
+  id            BIGSERIAL PRIMARY KEY,
+  draft_number  VARCHAR(30)  NOT NULL UNIQUE,
+  vendor_code   VARCHAR(50)  NOT NULL REFERENCES public.supplier_master(supplier_code),
+  status        VARCHAR(20)  NOT NULL DEFAULT 'OPEN',
+  created_by    VARCHAR(150) NOT NULL,
+  created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  updated_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  closed_at     TIMESTAMPTZ,
+  CONSTRAINT ck_po_drafts_status CHECK (status IN ('OPEN', 'CLOSED'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_po_drafts_open_vendor ON public.po_drafts(vendor_code) WHERE status = 'OPEN';
+
+-- One PR line's quantity inside a draft. Rows are never deleted: open = reserved - converted - released.
+CREATE TABLE IF NOT EXISTS public.po_draft_allocations (
+  id             BIGSERIAL PRIMARY KEY,
+  draft_id       BIGINT        NOT NULL REFERENCES public.po_drafts(id),
+  pr_item_id     BIGINT        NOT NULL REFERENCES public.purchase_requisition_items(id),
+  pr_number      VARCHAR(50)   NOT NULL,
+  item_code      VARCHAR(100)  NOT NULL,
+  uom            VARCHAR(50)   NOT NULL,
+  reserved_qty   NUMERIC(15,2) NOT NULL,
+  converted_qty  NUMERIC(15,2) NOT NULL DEFAULT 0,
+  released_qty   NUMERIC(15,2) NOT NULL DEFAULT 0,
+  created_by     VARCHAR(150)  NOT NULL,
+  created_at     TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+  updated_at     TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+  CONSTRAINT ck_pda_reserved CHECK (reserved_qty > 0),
+  CONSTRAINT ck_pda_split CHECK (converted_qty >= 0 AND released_qty >= 0 AND converted_qty + released_qty <= reserved_qty),
+  CONSTRAINT uq_pda_draft_line UNIQUE (draft_id, pr_item_id)
+);
+CREATE INDEX IF NOT EXISTS idx_pda_pr_item ON public.po_draft_allocations(pr_item_id);
+
+-- The draft line a PO allocation was converted from (NULL for POs raised directly through PO by PR).
+ALTER TABLE public.po_pr_allocations ADD COLUMN IF NOT EXISTS draft_allocation_id BIGINT REFERENCES public.po_draft_allocations(id);
+
+-- Audit trail for PR approval decisions and draft actions (assign, release, convert). Insert-only.
+CREATE TABLE IF NOT EXISTS public.procurement_audit_log (
+  id            BIGSERIAL PRIMARY KEY,
+  entity_type   VARCHAR(30)  NOT NULL,
+  entity_ref    VARCHAR(60)  NOT NULL,
+  action        VARCHAR(40)  NOT NULL,
+  actor         VARCHAR(150) NOT NULL,
+  details_json  TEXT,
+  created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_proc_audit_ref ON public.procurement_audit_log(entity_ref);
 
 -- =============================================================================
 -- Item master groups and subgroups (Other Item Master > Groups & Subgroups)

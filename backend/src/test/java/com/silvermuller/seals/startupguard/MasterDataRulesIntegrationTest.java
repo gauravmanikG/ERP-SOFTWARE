@@ -167,6 +167,108 @@ class MasterDataRulesIntegrationTest {
     }
 
     @Test
+    void everyItemFormFieldIsStoredAndReadBack() {
+        Map<String, Object> other = item("ALL-" + tag, "Consumables", "Production Consumables");
+        other.put("sub_subgroup", "tool room consumables");
+        other.put("style", "Metal");
+        other.put("drawing_no", "DWG-7");
+        other.put("item_class", "High");
+        other.put("procurement_type", "IMPORTED");
+        other.put("process_type", "PR-2");
+        other.put("opening_balance", "25.5");
+        other.put("gross_wt", "18.250");
+        other.put("net_wt", "16");
+        other.put("rej_tolerance", "2.5");
+        other.put("min_stock_lvl", "10");
+        other.put("max_stock_lvl", "500");
+        other.put("reorder_stock_lvl", "50");
+        other.put("mrp", "120.75");
+        other.put("status", "Active");
+        long id = save(other);
+
+        Map<String, Object> row = items.list(null, null, "OTHER").stream()
+                .filter(r -> ((Number) r.get("id")).longValue() == id).findFirst().orElseThrow();
+        assertEquals("Tool Room Consumables", row.get("sub_subgroup"), "stored as the subgroup is named");
+        assertEquals("Metal", row.get("style"));
+        assertEquals("DWG-7", row.get("drawing_no"));
+        assertEquals("High", row.get("item_class"));
+        assertEquals("IMPORTED", row.get("procurement_type"));
+        assertEquals("PR-2", row.get("process_type"));
+        assertEquals(0, new java.math.BigDecimal("25.5").compareTo((java.math.BigDecimal) row.get("opening_balance")));
+        assertEquals(0, new java.math.BigDecimal("18.25").compareTo((java.math.BigDecimal) row.get("gross_wt")));
+        assertEquals(0, new java.math.BigDecimal("16").compareTo((java.math.BigDecimal) row.get("net_wt")));
+        assertEquals(0, new java.math.BigDecimal("2.5").compareTo((java.math.BigDecimal) row.get("rej_tolerance")));
+        assertEquals(0, new java.math.BigDecimal("10").compareTo((java.math.BigDecimal) row.get("min_stock_lvl")));
+        assertEquals(0, new java.math.BigDecimal("500").compareTo((java.math.BigDecimal) row.get("max_stock_lvl")));
+        assertEquals(0, new java.math.BigDecimal("50").compareTo((java.math.BigDecimal) row.get("reorder_stock_lvl")));
+        assertEquals(0, new java.math.BigDecimal("120.75").compareTo((java.math.BigDecimal) row.get("mrp")));
+
+        Map<String, Object> fg = item("FGALL-" + tag, "FG", "OIL SEAL");
+        fg.put("domestic_exports", "Export");
+        fg.put("application", "Gearbox");
+        fg.put("ref_no", "REF-1");
+        fg.put("corteco_no", "19033588");
+        fg.put("cross_reference", "XR-9");
+        fg.put("fitting_position", "Front");
+        fg.put("swirl_type", "Right Hand (RH)");
+        fg.put("file_name", "seal.dwg");
+        fg.put("fg_outsource", "Yes");
+        fg.put("sfg_outsource", "No");
+        fg.put("outsource_combo_fg_sfg", "FG only");
+        long fgId = save(fg);
+        Map<String, Object> fgRow = jdbc.queryForMap("SELECT domestic_exports, application, ref_no, corteco_no, cross_reference, "
+                + "fitting_position, swirl_type, file_name, fg_outsource, sfg_outsource, outsource_combo_fg_sfg, status "
+                + "FROM public.item_master WHERE id = ?", fgId);
+        assertEquals("Export|Gearbox|REF-1|19033588|XR-9|Front|Right Hand (RH)|seal.dwg|Yes|No|FG only|Active",
+                String.join("|", fgRow.values().stream().map(String::valueOf).toList()), "status defaults to Active");
+
+        // An edit that does not carry a field (the other form does not show it) keeps the stored value.
+        Map<String, Object> edit = item("ALL-" + tag, "Consumables", "Production Consumables");
+        edit.put("id", id);
+        edit.put("style", "Rubber");
+        items.save(edit);
+        assertEquals("Rubber|DWG-7|Tool Room Consumables", jdbc.queryForObject(
+                "SELECT style || '|' || drawing_no || '|' || sub_subgroup FROM public.item_master WHERE id = ?", String.class, id));
+    }
+
+    @Test
+    void badItemFieldValuesAreRejected() {
+        Map<String, Object> wrongSub = item("SS1-" + tag, "Consumables", "Production Consumables");
+        wrongSub.put("sub_subgroup", "Primary Raw Material");
+        assertThrows(IllegalArgumentException.class, () -> items.save(wrongSub), "a sub-subgroup of a different group");
+        Map<String, Object> rej = item("SS2-" + tag, "Consumables", "");
+        rej.put("rej_tolerance", "101");
+        assertThrows(IllegalArgumentException.class, () -> items.save(rej));
+        Map<String, Object> levels = item("SS3-" + tag, "Consumables", "");
+        levels.put("min_stock_lvl", "20");
+        levels.put("max_stock_lvl", "10");
+        assertThrows(IllegalArgumentException.class, () -> items.save(levels));
+        Map<String, Object> weight = item("SS4-" + tag, "Consumables", "");
+        weight.put("gross_wt", "heavy");
+        assertThrows(IllegalArgumentException.class, () -> items.save(weight));
+        assertEquals(0, count("SELECT COUNT(*) FROM public.item_master WHERE sms_new_part_no LIKE ?", "SS_-" + tag));
+    }
+
+    @Test
+    void aSubgroupUsedAsASubSubgroupFollowsRenamesAndCannotBeDeleted() {
+        Map<String, Object> g = groups.createGroup("Sub " + tag, null, null);
+        long gid = ((Number) g.get("id")).longValue();
+        groups.createSubgroup(gid, "First", null, null);
+        long second = ((Number) groups.createSubgroup(gid, "Second", null, null).get("id")).longValue();
+        Map<String, Object> body = item("SSG-" + tag, "Sub " + tag, "First");
+        body.put("sub_subgroup", "Second");
+        long id = save(body);
+
+        assertThrows(ConflictException.class, () -> groups.deleteSubgroup(second), "used as a sub-subgroup");
+        groups.updateSubgroup(second, null, "Second Renamed", null, null);
+        assertEquals("Second Renamed", jdbc.queryForObject("SELECT sub_subgroup FROM public.item_master WHERE id = ?", String.class, id));
+        long otherGroup = ((Number) groups.createGroup("Away " + tag, null, null).get("id")).longValue();
+        assertThrows(ConflictException.class, () -> groups.updateSubgroup(second, otherGroup, "Second Renamed", null, null),
+                "moving it would leave the item with a sub-subgroup from another group");
+        assertEquals("First", jdbc.queryForObject("SELECT subgroup FROM public.item_master WHERE id = ?", String.class, id));
+    }
+
+    @Test
     void renamingAGroupOrSubgroupRenamesItOnItsItems() {
         Map<String, Object> g = groups.createGroup("Ren " + tag, null, null);
         long gid = ((Number) g.get("id")).longValue();

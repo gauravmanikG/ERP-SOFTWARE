@@ -249,9 +249,22 @@ public class ItemGroupService implements ApplicationRunner {
         if (exists("SELECT COUNT(*) FROM public.item_subgroup WHERE group_id = ? AND LOWER(name) = LOWER(?) AND id <> ?", target, n, id)) {
             throw new ConflictException("Subgroup '" + n + "' already exists in this group");
         }
+        // A sub-subgroup must belong to its item's group, so it may move only with the items whose subgroup it also is.
+        if (!target.equals(((Number) current.get("group_id")).longValue())) {
+            long staying = count("SELECT COUNT(*) FROM public.item_master WHERE LOWER(group_name) = LOWER(?) "
+                    + "AND LOWER(sub_subgroup) = LOWER(?) AND LOWER(COALESCE(subgroup, '')) <> LOWER(?)",
+                    current.get("group_name"), current.get("name"), current.get("name"));
+            if (staying > 0) {
+                throw new ConflictException("Subgroup '" + current.get("name") + "' is the sub-subgroup of " + staying
+                        + " item(s) that stay in '" + current.get("group_name") + "'. Change those items first.");
+            }
+        }
         jdbc.update(
             "UPDATE public.item_subgroup SET group_id = ?, name = ?, code = ?, description = ?, updated_at = now() WHERE id = ?",
             target, n, clean(code), clean(description), id);
+        jdbc.update("UPDATE public.item_master SET sub_subgroup = ?, updated_at = now() "
+                + "WHERE LOWER(group_name) = LOWER(?) AND LOWER(sub_subgroup) = LOWER(?)",
+                n, current.get("group_name"), current.get("name"));
         jdbc.update("UPDATE public.item_master SET group_name = ?, subgroup = ?, updated_at = now() "
                 + "WHERE LOWER(group_name) = LOWER(?) AND LOWER(subgroup) = LOWER(?)",
                 targetName, n, current.get("group_name"), current.get("name"));
@@ -261,8 +274,9 @@ public class ItemGroupService implements ApplicationRunner {
     @Transactional
     public void deleteSubgroup(Long id) {
         Map<String, Object> sub = lockSubgroup(id);
-        long used = count("SELECT COUNT(*) FROM public.item_master WHERE LOWER(group_name) = LOWER(?) AND LOWER(subgroup) = LOWER(?)",
-                sub.get("group_name"), sub.get("name"));
+        long used = count("SELECT COUNT(*) FROM public.item_master WHERE LOWER(group_name) = LOWER(?) "
+                + "AND (LOWER(subgroup) = LOWER(?) OR LOWER(sub_subgroup) = LOWER(?))",
+                sub.get("group_name"), sub.get("name"), sub.get("name"));
         if (used > 0) {
             throw new ConflictException("Subgroup '" + sub.get("name") + "' is used by " + used
                     + " item(s). Move or delete those items first.");
@@ -318,7 +332,8 @@ public class ItemGroupService implements ApplicationRunner {
     @Transactional
     public List<Map<String, Object>> resetToDefaults() {
         jdbc.update("DELETE FROM public.item_subgroup s USING public.item_group g WHERE g.id = s.group_id AND NOT EXISTS "
-                + "(SELECT 1 FROM public.item_master i WHERE LOWER(i.group_name) = LOWER(g.name) AND LOWER(i.subgroup) = LOWER(s.name))");
+                + "(SELECT 1 FROM public.item_master i WHERE LOWER(i.group_name) = LOWER(g.name) "
+                + "AND (LOWER(i.subgroup) = LOWER(s.name) OR LOWER(i.sub_subgroup) = LOWER(s.name)))");
         jdbc.update("DELETE FROM public.item_group g WHERE NOT EXISTS "
                 + "(SELECT 1 FROM public.item_master i WHERE LOWER(i.group_name) = LOWER(g.name))");
         seedMissingDefaults();

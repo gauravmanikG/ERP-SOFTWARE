@@ -26,14 +26,23 @@ public class DirectPoController {
         this.purchaseProcessing = purchaseProcessing;
     }
 
-    /** Body: vendorCode, poDate, expectedDeliveryDate, lines [{itemCode, quantity}], remarks, deliveryFreight, terms. */
+    /** Body: vendorCode, poDate, expectedDeliveryDate, lines [{itemCode, quantity, dueOn}], remarks, PO Terms and printed header. */
     public record Body(String vendorCode, LocalDate poDate, LocalDate expectedDeliveryDate, List<Line> lines, String remarks,
                        java.math.BigDecimal deliveryFreight,
                        com.silvermuller.seals.modules.masters.PurchaseOrderTerms terms,
-                       List<DeliveryLots.Lot> schedules) {
+                       List<DeliveryLots.Lot> schedules,
+                       String invoiceTo, String shipTo, String voucherNo, String referenceNo,
+                       java.math.BigDecimal otherCharges, java.math.BigDecimal roundOff, String directReason) {
         Request toRequest() {
-            return new Request(vendorCode, poDate, expectedDeliveryDate, lines, remarks, deliveryFreight, terms, schedules);
+            return new Request(vendorCode, poDate, expectedDeliveryDate, lines, remarks, deliveryFreight, terms, schedules,
+                    invoiceTo, shipTo, voucherNo, referenceNo, otherCharges, roundOff, directReason);
         }
+    }
+
+    /** The number the next Direct PO will get. Read only: nothing is reserved until the PO is created. */
+    @GetMapping("/next-number")
+    public Map<String, String> nextNumber() {
+        return Map.of("poNumber", purchaseProcessing.peekPoNumber());
     }
 
     @PostMapping("/preview")

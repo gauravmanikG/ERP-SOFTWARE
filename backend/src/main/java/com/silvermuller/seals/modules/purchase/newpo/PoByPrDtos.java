@@ -15,9 +15,12 @@ public final class PoByPrDtos {
      * One PR line the user is ordering. Quantity is ignored in FULL mode (the server uses the remaining quantity).
      * discountPercent and manualDiscount apply to this PR line's share of the item's price; remarks are kept with it.
      */
-    public record LineRequest(Long prItemId, BigDecimal quantity, BigDecimal discountPercent, BigDecimal manualDiscount, String remarks) {
+    public record LineRequest(Long prItemId, BigDecimal quantity, BigDecimal discountPercent, BigDecimal manualDiscount, String remarks, LocalDate dueOn) {
         public LineRequest(Long prItemId, BigDecimal quantity) {
-            this(prItemId, quantity, null, null, null);
+            this(prItemId, quantity, null, null, null, null);
+        }
+        public LineRequest(Long prItemId, BigDecimal quantity, BigDecimal discountPercent, BigDecimal manualDiscount, String remarks) {
+            this(prItemId, quantity, discountPercent, manualDiscount, remarks, null);
         }
     }
 

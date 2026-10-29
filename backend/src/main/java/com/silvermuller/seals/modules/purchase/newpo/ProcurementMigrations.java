@@ -19,8 +19,6 @@ import org.springframework.stereotype.Component;
 public class ProcurementMigrations implements ApplicationRunner {
 
     private static final Logger log = LoggerFactory.getLogger(ProcurementMigrations.class);
-    /** Sequence numbers start above the legacy counter's initial value (200). */
-    private static final long PO_NUMBER_FLOOR = 200L;
 
     private final JdbcTemplate jdbc;
 
@@ -31,7 +29,6 @@ public class ProcurementMigrations implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) {
         ensureReleasedQtyConstraint();
-        ensurePoNumberSequence();
         ensureAcceptedQtyOnAttributions();
     }
 
@@ -79,23 +76,4 @@ public class ProcurementMigrations implements ApplicationRunner {
         }
     }
 
-    /**
-     * Creates po_number_seq and moves it past the highest PO-2026-NNNNN already stored, so numbers keep
-     * increasing across restarts and never collide with existing POs. Only ever moves the sequence forward.
-     */
-    public void ensurePoNumberSequence() {
-        jdbc.execute("CREATE SEQUENCE IF NOT EXISTS public.po_number_seq START WITH " + (PO_NUMBER_FLOOR + 1));
-        Long max = jdbc.queryForObject(
-                "SELECT COALESCE(MAX(CAST(SUBSTRING(po_number FROM 9) AS BIGINT)), 0) FROM public.purchase_orders " +
-                "WHERE po_number ~ '^PO-2026-[0-9]+$'", Long.class);
-        long floor = Math.max(max == null ? 0 : max, PO_NUMBER_FLOOR);
-        java.util.Map<String, Object> state = jdbc.queryForMap("SELECT last_value, is_called FROM public.po_number_seq");
-        long last = ((Number) state.get("last_value")).longValue();
-        boolean called = (Boolean) state.get("is_called");
-        long nextValue = called ? last + 1 : last;
-        if (nextValue <= floor) {
-            jdbc.queryForObject("SELECT setval('public.po_number_seq', ?, true)", Long.class, floor);
-            log.info("po_number_seq moved to {} so the next PO number is {}.", floor, floor + 1);
-        }
-    }
 }

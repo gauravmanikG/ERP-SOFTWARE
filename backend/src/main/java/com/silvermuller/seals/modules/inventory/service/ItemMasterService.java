@@ -29,6 +29,9 @@ public class ItemMasterService {
             + "width, thickness, segment, region, material, color, uom, COALESCE(price, 0.00) AS price, image, application, "
             + "ref_no, oem, corteco_no, type, fitting_position, swirl_type, file_name, domestic_exports, cross_reference, "
             + "hsn_code, drawing_image, safety_lead_time, procurement_lead_time, total_lead_time, created_at, updated_at, "
+            + "sub_subgroup, style, drawing_no, item_class, procurement_type, process_type, COALESCE(status, 'Active') AS status, "
+            + "opening_balance, gross_wt, net_wt, rej_tolerance, min_stock_lvl, max_stock_lvl, reorder_stock_lvl, mrp, "
+            + "fg_outsource, sfg_outsource, outsource_combo_fg_sfg, "
             + "COALESCE(NULLIF(sms_new_part_no, ''), NULLIF(main_fg_code, ''), NULLIF(old_code, ''), 'ITM-' || id) AS item_code, "
             + "COALESCE(NULLIF(description_size, ''), NULLIF(subgroup, ''), 'Item ' || id) AS item_name, "
             + "COALESCE(NULLIF(purchased_uom, ''), NULLIF(uom, ''), 'PCS') AS uom_clean, "
@@ -36,9 +39,49 @@ public class ItemMasterService {
             + "CASE WHEN " + isFg("") + " THEN 'FG' ELSE 'OTHER' END AS item_type "
             + "FROM public.item_master WHERE 1=1 ";
 
-    /** Column limits: price NUMERIC(15,2), lead times NUMERIC(10,2). */
+    /** Column limits: price NUMERIC(15,2), lead times NUMERIC(10,2), quantities and weights NUMERIC(15,3). */
     private static final BigDecimal PRICE_MAX = new BigDecimal("10000000000000");
     private static final BigDecimal LEAD_TIME_MAX = new BigDecimal("100000000");
+    private static final BigDecimal QTY_MAX = new BigDecimal("1000000000000");
+    private static final BigDecimal HUNDRED = new BigDecimal("100");
+
+    private static final String CORE_COLUMNS = "sms_new_part_no, old_code, description_size, category, group_name, subgroup, "
+            + "segment, region, uom, purchased_uom, consumption_uom, price, material, color, inner_diameter, "
+            + "outer_diameter, width, thickness, image, main_fg_code, oem, hsn_code, drawing_image, "
+            + "safety_lead_time, procurement_lead_time, total_lead_time";
+
+    /** A field one item form shows and the other does not. Text when max is null, otherwise a number below max. */
+    private record Extra(String column, String label, Integer maxLength, BigDecimal max) {}
+
+    // Written only when the request carries the key (the JSON key is the column name), so saving from the FG form
+    // never clears a field only the Other form shows, and the reverse.
+    private static final List<Extra> EXTRAS = List.of(
+            new Extra("sub_subgroup", "Sub-subgroup", 255, null),
+            new Extra("style", "Style", 255, null),
+            new Extra("drawing_no", "Drawing no.", 255, null),
+            new Extra("item_class", "Class", 255, null),
+            new Extra("procurement_type", "Procurement type", 255, null),
+            new Extra("process_type", "Process type", 255, null),
+            new Extra("status", "Status", 30, null),
+            new Extra("domestic_exports", "Domestic / exports", 255, null),
+            new Extra("application", "Application", 255, null),
+            new Extra("ref_no", "Ref. no.", 255, null),
+            new Extra("corteco_no", "Corteco no.", 255, null),
+            new Extra("cross_reference", "Cross reference", 255, null),
+            new Extra("fitting_position", "Fitting position", 255, null),
+            new Extra("swirl_type", "Swirl type", 255, null),
+            new Extra("file_name", "File name", 255, null),
+            new Extra("fg_outsource", "FG outsource", 255, null),
+            new Extra("sfg_outsource", "SFG outsource", 255, null),
+            new Extra("outsource_combo_fg_sfg", "Outsource combo FG & SFG", 255, null),
+            new Extra("opening_balance", "Opening balance", null, QTY_MAX),
+            new Extra("gross_wt", "Gross weight", null, QTY_MAX),
+            new Extra("net_wt", "Net weight", null, QTY_MAX),
+            new Extra("rej_tolerance", "Rejection tolerance %", null, new BigDecimal("1000")),
+            new Extra("min_stock_lvl", "Min stock level", null, QTY_MAX),
+            new Extra("max_stock_lvl", "Max stock level", null, QTY_MAX),
+            new Extra("reorder_stock_lvl", "Reorder stock level", null, QTY_MAX),
+            new Extra("mrp", "MRP", null, PRICE_MAX));
 
     private final JdbcTemplate jdbc;
 
@@ -86,13 +129,16 @@ public class ItemMasterService {
         String uom = orDefault(text(body, 100, "UOM", "uom", "purchased_uom"), "PCS");
         String purchasedUom = orDefault(text(body, 100, "Purchased UOM", "purchased_uom"), uom);
         String consumptionUom = orDefault(text(body, 100, "Consumption UOM", "consumption_uom"), purchasedUom);
+        Map<String, Object> extras = extras(body);
 
         if ("FG".equalsIgnoreCase(groupName)) {
             groupName = "FG"; // finished goods: product type in subgroup, not governed by Item Groups
         } else {
-            String[] canonical = groupAndSubgroup(groupName, subgroup);
+            String subSubgroup = (String) extras.get("sub_subgroup");
+            String[] canonical = groupAndSubgroups(groupName, subgroup, subSubgroup == null ? "" : subSubgroup);
             groupName = canonical[0];
             subgroup = canonical[1];
+            if (subSubgroup != null) extras.put("sub_subgroup", canonical[2]);
         }
 
         BigDecimal safety = number(body, LEAD_TIME_MAX, "Safety lead time", "safety_lead_time");
@@ -143,24 +189,30 @@ public class ItemMasterService {
             }
         }
 
+        // Extra column names come from EXTRAS only, never from the request, so they are safe to put in the SQL text.
+        List<String> extraColumns = new ArrayList<>(extras.keySet());
+        Object[] args = java.util.Arrays.copyOf(values, values.length + extraColumns.size() + 1);
+        for (int i = 0; i < extraColumns.size(); i++) args[values.length + i] = extras.get(extraColumns.get(i));
         if (created) {
+            StringBuilder columns = new StringBuilder(CORE_COLUMNS);
+            extraColumns.forEach(c -> columns.append(", ").append(c));
+            String marks = String.join(", ", java.util.Collections.nCopies(values.length + extraColumns.size(), "?"));
             id = jdbc.queryForObject(
-                    "INSERT INTO public.item_master (sms_new_part_no, old_code, description_size, category, group_name, subgroup, "
-                            + "segment, region, uom, purchased_uom, consumption_uom, price, material, color, inner_diameter, "
-                            + "outer_diameter, width, thickness, image, main_fg_code, oem, hsn_code, drawing_image, "
-                            + "safety_lead_time, procurement_lead_time, total_lead_time, created_at, updated_at) "
-                            + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW()) RETURNING id",
-                    Long.class, values);
+                    "INSERT INTO public.item_master (" + columns + ", created_at, updated_at) VALUES (" + marks
+                            + ", NOW(), NOW()) RETURNING id",
+                    Long.class, java.util.Arrays.copyOf(args, args.length - 1));
         } else {
-            Object[] withId = java.util.Arrays.copyOf(values, values.length + 1);
-            withId[values.length] = id;
+            StringBuilder extraSet = new StringBuilder();
+            extraColumns.forEach(c -> extraSet.append(c).append(" = ?, "));
+            args[args.length - 1] = id;
             int rows = jdbc.update(
                     "UPDATE public.item_master SET sms_new_part_no = ?, old_code = ?, description_size = ?, category = ?, "
                             + "group_name = ?, subgroup = ?, segment = ?, region = ?, uom = ?, purchased_uom = ?, consumption_uom = ?, "
                             + "price = ?, material = ?, color = ?, inner_diameter = ?, outer_diameter = ?, width = ?, thickness = ?, "
                             + "image = COALESCE(?, image), main_fg_code = ?, oem = ?, hsn_code = ?, drawing_image = COALESCE(?, drawing_image), "
-                            + "safety_lead_time = ?, procurement_lead_time = ?, total_lead_time = ?, updated_at = NOW() WHERE id = ?",
-                    withId);
+                            + "safety_lead_time = ?, procurement_lead_time = ?, total_lead_time = ?, " + extraSet
+                            + "updated_at = NOW() WHERE id = ?",
+                    args);
             if (rows == 0) throw new ResourceNotFoundException("Item " + id + " no longer exists. Refresh the list.");
         }
 
@@ -195,6 +247,7 @@ public class ItemMasterService {
         out.put("safety_lead_time", safety);
         out.put("procurement_lead_time", procurement);
         out.put("total_lead_time", total);
+        out.putAll(extras);
         out.put("item_type", "FG".equals(groupName) ? "FG" : "OTHER");
         return new Saved(out, created);
     }
@@ -226,22 +279,54 @@ public class ItemMasterService {
         delete(ids.get(0));
     }
 
-    /** Canonical group and subgroup names from Item Groups. Locks the rows so a rename or delete cannot interleave. */
-    private String[] groupAndSubgroup(String groupName, String subgroup) {
+    /** The extra fields the request carries, checked; blank text is stored as "" and a blank number as null. */
+    private static Map<String, Object> extras(Map<String, Object> body) {
+        Map<String, Object> out = new java.util.LinkedHashMap<>();
+        for (Extra e : EXTRAS) {
+            if (!body.containsKey(e.column())) continue;
+            out.put(e.column(), e.max() == null
+                    ? orDefault(text(body, e.maxLength(), e.label(), e.column()), "")
+                    : number(body, e.max(), e.label(), e.column()));
+        }
+        if ("".equals(out.get("status"))) out.put("status", "Active");
+        if (out.get("rej_tolerance") instanceof BigDecimal rej && rej.compareTo(HUNDRED) > 0) {
+            throw new IllegalArgumentException("Rejection tolerance % cannot be above 100.");
+        }
+        if (out.get("min_stock_lvl") instanceof BigDecimal min && out.get("max_stock_lvl") instanceof BigDecimal max
+                && min.compareTo(max) > 0) {
+            throw new IllegalArgumentException("Min stock level cannot be above max stock level.");
+        }
+        return out;
+    }
+
+    /**
+     * Canonical group name and subgroup names (subgroup, sub-subgroup) from Item Groups; each given subgroup must belong
+     * to the group. Locks the rows so a rename or delete cannot interleave.
+     */
+    private String[] groupAndSubgroups(String groupName, String... subgroups) {
         List<Map<String, Object>> groups = jdbc.queryForList(
                 "SELECT id, name FROM public.item_group WHERE LOWER(name) = LOWER(?) FOR SHARE", groupName);
         if (groups.isEmpty()) {
             throw new IllegalArgumentException("Group '" + groupName + "' is not in Item Groups. Select an existing group.");
         }
         String group = (String) groups.get(0).get("name");
-        if (subgroup.isEmpty()) return new String[] {group, ""};
-        List<String> subs = jdbc.queryForList(
-                "SELECT name FROM public.item_subgroup WHERE group_id = ? AND LOWER(name) = LOWER(?) FOR SHARE",
-                String.class, groups.get(0).get("id"), subgroup);
-        if (subs.isEmpty()) {
-            throw new IllegalArgumentException("Subgroup '" + subgroup + "' is not a subgroup of '" + group + "'.");
+        String[] out = new String[subgroups.length + 1];
+        out[0] = group;
+        for (int i = 0; i < subgroups.length; i++) {
+            String subgroup = subgroups[i];
+            if (subgroup.isEmpty()) {
+                out[i + 1] = "";
+                continue;
+            }
+            List<String> subs = jdbc.queryForList(
+                    "SELECT name FROM public.item_subgroup WHERE group_id = ? AND LOWER(name) = LOWER(?) FOR SHARE",
+                    String.class, groups.get(0).get("id"), subgroup);
+            if (subs.isEmpty()) {
+                throw new IllegalArgumentException("Subgroup '" + subgroup + "' is not a subgroup of '" + group + "'.");
+            }
+            out[i + 1] = subs.get(0);
         }
-        return new String[] {group, subs.get(0)};
+        return out;
     }
 
     private static Long id(Map<String, Object> body) {

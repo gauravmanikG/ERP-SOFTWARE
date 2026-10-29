@@ -1,5 +1,6 @@
 import { formatDisplayDate, formatDisplayDateTime } from "../../../shared/utils/dateFormat";
 import DateInput from "../../../shared/components/DateInput";
+import SearchableSelect from "../../../shared/components/SearchableSelect";
 import { useResizableColumns, ResizableColGroup, ColumnResizeHandle } from "../../../shared/components/ResizableTable";
 import React, { useState, useEffect, useMemo } from "react";
 
@@ -206,9 +207,9 @@ export function GoodsReceiptNotePage({ dark = false, onBackToHome, onNavigate, o
         poOrderedQty: Number(it.orderedQty) || 0,
         priorReceivedQty: Number(it.receivedQty) || 0,
         balanceExpectedQty: bal,
-        challanQty: bal,
-        receivedQty: bal,
-        acceptedQty: bal,
+        challanQty: 0,
+        receivedQty: 0,
+        acceptedQty: 0,
         rejectedQty: 0,
         pendingInspectionQty: 0,
         rejectionReason: "",
@@ -257,16 +258,16 @@ export function GoodsReceiptNotePage({ dark = false, onBackToHome, onNavigate, o
           poOrderedQty: Number(it.orderedQty) || 0,
           priorReceivedQty: Number(it.receivedQty) || 0,
           balanceExpectedQty: bal,
-          challanQty: bal,
-          receivedQty: bal,
-          acceptedQty: bal,
+          challanQty: 0,
+          receivedQty: 0,
+          acceptedQty: 0,
           rejectedQty: 0,
           pendingInspectionQty: 0,
           rejectionReason: "",
           storageBin: "BIN-A1",
           unitRate: Number(it.unitRate) || 0,
           taxPercent: Number(it.taxPercent) || 18,
-          itemTotal: (Number(it.unitRate) || 0) * bal,
+          itemTotal: 0,
           remarks: ""
         };
       });
@@ -301,16 +302,16 @@ export function GoodsReceiptNotePage({ dark = false, onBackToHome, onNavigate, o
         poOrderedQty: Number(ls.scheduledQty) || 0,
         priorReceivedQty: Number(ls.receivedQty) || 0,
         balanceExpectedQty: bal,
-        challanQty: bal,
-        receivedQty: bal,
-        acceptedQty: bal,
+        challanQty: 0,
+        receivedQty: 0,
+        acceptedQty: 0,
         rejectedQty: 0,
         pendingInspectionQty: 0,
         rejectionReason: "",
         storageBin: "BIN-A1",
         unitRate: Number(origItem.unitRate) || 0,
         taxPercent: Number(origItem.taxPercent) || 18,
-        itemTotal: (Number(origItem.unitRate) || 0) * bal,
+        itemTotal: 0,
         remarks: `Inward for Lot #${ls.lotNumber} (Due: ${formatDisplayDate(ls.scheduledDate)})`
       };
     });
@@ -367,6 +368,10 @@ export function GoodsReceiptNotePage({ dark = false, onBackToHome, onNavigate, o
     }
     if (formItems.length === 0) {
       alert("No line items to receive.");
+      return;
+    }
+    if (!formItems.some((it) => Number(it.receivedQty) > 0)) {
+      alert("Enter the quantity received for at least one item.");
       return;
     }
 
@@ -691,7 +696,7 @@ export function GoodsReceiptNotePage({ dark = false, onBackToHome, onNavigate, o
                     <tr key={po.poNumber || idx} style={{ borderBottom: `1px solid ${dark ? "#334155" : "#f1f5f9"}` }}>
                       <td style={{ padding: "12px 14px", fontWeight: 800, color: "#0284c7" }}>
                         {po.poNumber}
-                        {po.prNumber && <span style={{ display: "block", fontSize: 10, color: "#64748b", fontWeight: 500 }}>PR: {po.prNumber}</span>}
+                        {(po.prNumbers || po.prNumber) && <span style={{ display: "block", fontSize: 10, color: "#64748b", fontWeight: 500 }}>PR: {po.prNumbers || po.prNumber}</span>}
                       </td>
                       <td style={{ padding: "12px 14px", color: dark ? "#cbd5e1" : "#475569" }}>{formatDisplayDate(po.poDate) || "-"}</td>
                       <td style={{ padding: "12px 14px" }}>
@@ -954,7 +959,7 @@ export function GoodsReceiptNotePage({ dark = false, onBackToHome, onNavigate, o
                 <div>
                   <span style={{ color: "#0369a1", fontWeight: 700, display: "block" }}>DEPARTMENT / REQUISITION</span>
                   <strong style={{ fontSize: 14 }}>{selectedPo.department || "Stores"}</strong>
-                  <span style={{ fontSize: 11, color: "#64748b", display: "block" }}>PR: {selectedPo.prNumber || "Direct"}</span>
+                  <span style={{ fontSize: 11, color: "#64748b", display: "block" }}>PR: {selectedPo.prNumbers || selectedPo.prNumber || "Direct"}</span>
                 </div>
               </div>
 
@@ -971,31 +976,30 @@ export function GoodsReceiptNotePage({ dark = false, onBackToHome, onNavigate, o
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", fontSize: 12 }}>
                     <span style={{ fontWeight: 700, color: "#166534" }}>Select Consignment Lot:</span>
-                    <select
+                    <SearchableSelect
                       value={selectedLotNumber || ""}
                       onChange={(e) => handleSelectDeliveryLot(e.target.value || null)}
-                      style={{ padding: "6px 12px", borderRadius: 5, border: "1px solid #22c55e", background: "#ffffff", fontWeight: 700, color: "#166534" }}
-                    >
-                      <option value="">Full Inward / All Pending Items</option>
-                      <optgroup label="Single Item Lot (Receive Only Selected Item Lot)">
-                        {poDeliverySchedules.map((s) => (
-                          <option key={s.id} value={`SCHED_${s.id}`}>
-                            Item {s.itemCode} — Lot #{s.lotNumber} ({s.balanceQty !== undefined ? s.balanceQty : s.scheduledQty} PCS, Due: {formatDisplayDate(s.scheduledDate)}) [{s.status}]
-                          </option>
-                        ))}
-                      </optgroup>
-                      <optgroup label="Delivery Date Consignment (All items due on date)">
-                        {Array.from(new Set(poDeliverySchedules.map((s) => s.scheduledDate).filter(Boolean))).map((dt) => {
+                      emptyLabel="Full Inward / All Pending Items"
+                      options={[
+                        ...poDeliverySchedules.map((s) => ({
+                          value: `SCHED_${s.id}`,
+                          label: `Item ${s.itemCode} — Lot #${s.lotNumber}`,
+                          sub: `${s.balanceQty !== undefined ? s.balanceQty : s.scheduledQty} PCS, Due: ${formatDisplayDate(s.scheduledDate)} [${s.status}]`,
+                          group: "Single Item Lot (Receive Only Selected Item Lot)"
+                        })),
+                        ...Array.from(new Set(poDeliverySchedules.map((s) => s.scheduledDate).filter(Boolean))).map((dt) => {
                           const schedsOnDate = poDeliverySchedules.filter((s) => s.scheduledDate === dt);
                           const totalQty = schedsOnDate.reduce((sum, s) => sum + (Number(s.balanceQty !== undefined ? s.balanceQty : s.scheduledQty) || 0), 0);
-                          return (
-                            <option key={dt} value={`DATE_${dt}`}>
-                              Consignment Date: {dt} ({schedsOnDate.length} item(s), {totalQty} PCS total)
-                            </option>
-                          );
-                        })}
-                      </optgroup>
-                    </select>
+                          return {
+                            value: `DATE_${dt}`,
+                            label: `Consignment Date: ${dt}`,
+                            sub: `${schedsOnDate.length} item(s), ${totalQty} PCS total`,
+                            group: "Delivery Date Consignment (All items due on date)"
+                          };
+                        })
+                      ]}
+                      style={{ minWidth: 320 }}
+                    />
                     {selectedLotNumber && (
                       <span style={{ fontSize: 11, background: "#dcfce7", color: "#15803d", padding: "3px 8px", borderRadius: 4, fontWeight: 700 }}>
                         ⚡ {String(selectedLotNumber).startsWith("SCHED_") ? "Single Lot Isolated" : String(selectedLotNumber).startsWith("DATE_") ? "Date Consignment Isolated" : "Lot Filter Active"}
@@ -1078,7 +1082,7 @@ export function GoodsReceiptNotePage({ dark = false, onBackToHome, onNavigate, o
               </div>
 
               {/* Items Inward Verification Grid */}
-              <div style={{ border: "1px solid #cbd5e1", borderRadius: 8, overflow: "hidden", background: "#ffffff", display: "flex", flexDirection: "column" }}>
+              <div style={{ border: "1px solid #cbd5e1", borderRadius: 8, overflow: "hidden", background: "#ffffff", display: "flex", flexDirection: "column", flexShrink: 0 }}>
                 <div style={{ padding: "10px 16px", background: "#f8fafc", borderBottom: "1px solid #cbd5e1", display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
                   <span style={{ fontWeight: 800, fontSize: 13, color: "#1e293b" }}>
                     Item Physical Verification &amp; Inspection Breakdown
@@ -1290,7 +1294,7 @@ export function GoodsReceiptNotePage({ dark = false, onBackToHome, onNavigate, o
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12, fontSize: 12 }}>
                 {[
                   ["PO date", formatDisplayDate(poViewTarget.poDate) || "-"],
-                  ["PR number", poViewTarget.prNumber || "-"],
+                  ["PR number", poViewTarget.prNumbers || poViewTarget.prNumber || "-"],
                   ["Status", poViewTarget.status || "APPROVED"],
                   ["Vendor", `${poViewTarget.vendorName || "-"} (${poViewTarget.vendorCode || "-"})`],
                   ["Vendor GSTIN", poViewTarget.vendorGstin || "-"],

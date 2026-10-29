@@ -167,6 +167,13 @@ public class GoodsReceiptNoteService {
         List<PurchaseOrder> allOrders = purchaseProcessingService.getAllPurchaseOrders();
         List<Map<String, Object>> pendingList = new ArrayList<>();
 
+        // PRs behind each PO, from its allocations: a PO built from several PRs has no single header PR.
+        Map<String, String> prsByPo = new HashMap<>();
+        for (Map<String, Object> r : jdbc.queryForList(
+                "SELECT po_number, string_agg(DISTINCT pr_number, ', ' ORDER BY pr_number) AS prs FROM public.po_pr_allocations GROUP BY po_number")) {
+            prsByPo.put(String.valueOf(r.get("po_number")), String.valueOf(r.get("prs")));
+        }
+
         for (PurchaseOrder po : allOrders) {
             if ("CANCELLED".equalsIgnoreCase(po.getStatus()) || "COMPLETED".equalsIgnoreCase(po.getStatus())) continue;
 
@@ -217,6 +224,7 @@ public class GoodsReceiptNoteService {
                 pMap.put("poNumber", po.getPoNumber());
                 pMap.put("poDate", po.getPoDate());
                 pMap.put("prNumber", po.getPrNumber());
+                pMap.put("prNumbers", prsByPo.getOrDefault(po.getPoNumber(), po.getPrNumber()));
                 pMap.put("department", po.getDepartment());
                 pMap.put("requestedBy", po.getRequestedBy());
                 pMap.put("vendorCode", po.getVendorCode());
@@ -241,11 +249,14 @@ public class GoodsReceiptNoteService {
         return pendingList;
     }
 
-    public synchronized String generateNextGrnNumber() {
-        Integer maxId = jdbc.queryForObject(
-            "SELECT COALESCE(MAX(id), 0) FROM goods_receipt_notes", Integer.class);
-        int nextSeq = (maxId != null ? maxId : 0) + 1;
-        return String.format("GRN-2026-%05d", nextSeq);
+    /** Takes the next GRN number (GRN-YEAR-NNNNN, restarting each year); see DocumentNumbers. */
+    public String reserveGrnNumber() {
+        return DocumentNumbers.next(jdbc, DocumentNumbers.Doc.GRN);
+    }
+
+    /** The number the next GRN will get, shown before saving. Nothing is reserved. */
+    public String peekGrnNumber() {
+        return DocumentNumbers.peek(jdbc, DocumentNumbers.Doc.GRN);
     }
 
     @Transactional
@@ -291,8 +302,16 @@ public class GoodsReceiptNoteService {
         }
 
 
-        if (grn.getGrnNumber() == null || grn.getGrnNumber().trim().isEmpty()) {
-            grn.setGrnNumber(generateNextGrnNumber());
+        // The server owns GRN numbers: a new GRN always takes the next sequence number (a number typed or
+        // pre-fetched by the client is ignored), and a saved draft keeps the number it was stored with.
+        if (grn.getId() == null) {
+            grn.setGrnNumber(reserveGrnNumber());
+        } else {
+            List<String> stored = jdbc.queryForList("SELECT grn_number FROM goods_receipt_notes WHERE id = ?", String.class, grn.getId());
+            if (stored.isEmpty()) {
+                throw new IllegalArgumentException("GRN " + grn.getId() + " was not found.");
+            }
+            grn.setGrnNumber(stored.get(0));
         }
         if (grn.getGrnDate() == null) {
             grn.setGrnDate(LocalDate.now());
