@@ -54,7 +54,7 @@ export default function DateInput({ value, onChange, min, max, style, disabled, 
   };
 
   return (
-    <div style={{ position: "relative", width: style?.width || "100%", display: "block" }}>
+    <div style={{ position: "relative", width: style?.width || "100%", display: "block", boxSizing: "border-box", minWidth: 0, maxWidth: "100%" }}>
       <input
         type="text"
         inputMode="numeric"

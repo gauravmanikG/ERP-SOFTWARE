@@ -3,7 +3,7 @@ import DateInput from "../../../shared/components/DateInput";
 import { formatDisplayDate, formatDisplayDateTime } from "../../../shared/utils/dateFormat";
 import SearchSelect from "./SearchSelect";
 import { lookupApi, vendorRateApi } from "./api";
-import { inp, label, btn, card, errorBox, th, td, money } from "./ui";
+import { inp, label, btn, card, errorBox, th, thFor, td, money } from "./ui";
 
 const searchVendors = lookupApi.vendors;
 const searchItems = lookupApi.items;
@@ -67,40 +67,40 @@ export default function VendorRateMasterScreen({ user, flash }) {
   };
 
   return (
-    <div style={{ display: "grid", gap: 14, gridTemplateColumns: "minmax(300px, 380px) 1fr", alignItems: "start" }}>
-      <div style={card}>
+    <div style={{ display: "grid", gap: 16, gridTemplateColumns: "minmax(300px, 360px) minmax(0, 1fr)", alignItems: "start", minWidth: 0, width: "100%", boxSizing: "border-box" }}>
+      <div style={{ ...card, minWidth: 0, boxSizing: "border-box", overflow: "hidden" }}>
         <div style={{ fontSize: 14, fontWeight: 800, color: "#0f172a", marginBottom: 2 }}>Add vendor rate</div>
         <div style={{ fontSize: 12, color: "#64748b", marginBottom: 14 }}>
           Each save creates a new historical rate. Earlier rates are never changed or removed.
         </div>
 
-        <div style={{ display: "grid", gap: 12 }}>
-          <div>
+        <div style={{ display: "grid", gap: 12, minWidth: 0 }}>
+          <div style={{ minWidth: 0 }}>
             <span style={label}>Vendor</span>
             <SearchSelect placeholder="Search vendor name or code" search={searchVendors} toOption={vendorOption} value={vendor} onChange={setVendor} />
           </div>
-          <div>
+          <div style={{ minWidth: 0 }}>
             <span style={label}>Item</span>
             <SearchSelect placeholder="Search part no. or description" search={searchItems} toOption={itemOption} value={item} onChange={setItem} />
           </div>
-          <div>
+          <div style={{ minWidth: 0 }}>
             <span style={label}>Offered unit price (₹)</span>
-            <input style={inp} type="number" min="0" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="0.00" />
+            <input style={{ ...inp, width: "100%", boxSizing: "border-box" }} type="number" min="0" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="0.00" />
           </div>
-          <div>
+          <div style={{ minWidth: 0 }}>
             <span style={label}>Effective from</span>
-            <DateInput style={inp} value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} />
+            <DateInput style={{ ...inp, width: "100%", boxSizing: "border-box" }} value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} />
           </div>
 
           {applicable && (
-            <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 6, padding: "8px 10px", fontSize: 12, color: "#166534" }}>
+            <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 6, padding: "8px 10px", fontSize: 12, color: "#166534", minWidth: 0, wordBreak: "break-word" }}>
               {applicable.found
                 ? <>Rate in force on {formatDisplayDate(effectiveFrom)}: <b>{money(applicable.rate.offered_unit_price)}</b> (effective {formatDisplayDate(applicable.rate.effective_from)})</>
                 : <>No rate is effective for this vendor and item on {formatDisplayDate(effectiveFrom)}.</>}
             </div>
           )}
 
-          {formError && <div style={errorBox}>{formError}</div>}
+          {formError && <div style={{ ...errorBox, minWidth: 0, wordBreak: "break-word" }}>{formError}</div>}
 
           <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
             <button type="button" onClick={reset} style={btn(false)} disabled={saving}>Clear</button>
@@ -109,18 +109,18 @@ export default function VendorRateMasterScreen({ user, flash }) {
         </div>
       </div>
 
-      <div style={card}>
+      <div style={{ ...card, minWidth: 0, boxSizing: "border-box", overflow: "hidden" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "end", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
           <div>
             <div style={{ fontSize: 14, fontWeight: 800, color: "#0f172a" }}>Rate history</div>
             <div style={{ fontSize: 12, color: "#64748b" }}>Newest effective date first.</div>
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "end", flexWrap: "wrap" }}>
-            <div style={{ width: 220 }}>
+            <div style={{ width: 220, minWidth: 0, maxWidth: "100%" }}>
               <span style={label}>Vendor</span>
               <SearchSelect placeholder="All vendors" search={searchVendors} toOption={vendorOption} value={filterVendor} onChange={setFilterVendor} />
             </div>
-            <div style={{ width: 220 }}>
+            <div style={{ width: 220, minWidth: 0, maxWidth: "100%" }}>
               <span style={label}>Item</span>
               <SearchSelect placeholder="All items" search={searchItems} toOption={itemOption} value={filterItem} onChange={setFilterItem} />
             </div>
@@ -130,12 +130,12 @@ export default function VendorRateMasterScreen({ user, flash }) {
 
         {historyError && <div style={{ color: "#b91c1c", fontSize: 13, marginBottom: 10 }}>{historyError}</div>}
 
-        <div style={{ overflowX: "auto", border: "1px solid #e2e8f0", borderRadius: 8 }}>
+        <div style={{ overflowX: "auto", border: "1px solid #e2e8f0", borderRadius: 8, width: "100%" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
             <thead>
               <tr>
                 {["Vendor", "Item", "Unit price", "Effective from", "Entered by", "Entered at"].map((h) => (
-                  <th key={h} style={{ ...th, textAlign: h === "Unit price" ? "right" : "left" }}>{h}</th>
+                  <th key={h} style={thFor(h)}>{h}</th>
                 ))}
               </tr>
             </thead>

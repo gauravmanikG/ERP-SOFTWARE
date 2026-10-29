@@ -1,0 +1,37 @@
+package fixture;
+
+// Fixture (not compiled): a startup runner that resets and deletes data.
+// StartupSafetyGuardSelfTest expects exactly 6 violations and none from notCalledAtStartup().
+@Component
+public class UnsafeRunner implements ApplicationRunner {
+
+    private final JdbcTemplate jdbc;
+    private final DepartmentRepository repo;
+
+    @Override
+    public void run(ApplicationArguments args) {
+        resetDefaults();
+        repo.deleteAll();
+    }
+
+    private void resetDefaults() {
+        jdbc.update("UPDATE public.department_master SET process_sequence = 1 "
+                + "WHERE department_name = 'Gate'");
+        jdbc.update("""
+                INSERT INTO public.category_master (category_name, short_code) VALUES ('SPRING', 'Spring')
+                ON CONFLICT (category_name) DO UPDATE SET short_code = EXCLUDED.short_code
+                """);
+        // startup-guard: allow short
+        jdbc.update("DELETE FROM public.department_master WHERE LOWER(department_name) = 'gaurav'");
+        restoreDefaults();
+    }
+
+    private void restoreDefaults() {
+        // looks harmless, but brings back a default category the user deleted on every restart
+        jdbc.update("INSERT INTO public.category_master (category_name) VALUES ('FELT') ON CONFLICT (category_name) DO NOTHING");
+    }
+
+    public void notCalledAtStartup() {
+        jdbc.update("DELETE FROM public.anything");
+    }
+}

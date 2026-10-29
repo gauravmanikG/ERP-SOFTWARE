@@ -81,6 +81,7 @@ public class VendorQuotationService {
 
     public void autoExpireOverdueQuotations() {
         try {
+            // startup-guard: allow business rule: open quotations past valid_until become Expired; only status changes
             jdbc.update("UPDATE vendor_quotations SET status = 'Expired', updated_at = NOW() WHERE is_latest = TRUE AND valid_until < CURRENT_DATE AND status IN ('Draft', 'Submitted for Review', 'Under Evaluation')");
         } catch (Exception ignored) {}
     }
@@ -746,7 +747,7 @@ public class VendorQuotationService {
             } else {
                 // If no earlier quote exists, query item_master baseline price if present
                 List<BigDecimal> masterPrice = jdbc.query(
-                        "SELECT price FROM public.item_master WHERE sms_new_part_no = ? AND price IS NOT NULL LIMIT 1",
+                        "SELECT price FROM public.item_master WHERE sms_new_part_no = ? AND price IS NOT NULL ORDER BY id LIMIT 1",
                         (rs, rowNum) -> rs.getBigDecimal(1), r.getItemCode());
                 if (!masterPrice.isEmpty()) {
                     r.setPreviousPurchaseRate(masterPrice.get(0));

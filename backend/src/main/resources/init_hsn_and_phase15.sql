@@ -1,25 +1,7 @@
--- =============================================================================
--- HSN & SAC Tax Master and Phase 1.5 Purchasing Schema Enhancements
--- =============================================================================
-
--- 1. HSN Tax Master
-CREATE TABLE IF NOT EXISTS public.hsn_tax_master (
-    id                  BIGSERIAL PRIMARY KEY,
-    hsn_sac_code        VARCHAR(20) NOT NULL UNIQUE,
-    description         VARCHAR(255) NOT NULL,
-    type                VARCHAR(20) NOT NULL DEFAULT 'GOODS',
-    gst_rate            NUMERIC(5, 2) NOT NULL DEFAULT 18.00,
-    cgst_rate           NUMERIC(5, 2) NOT NULL DEFAULT 9.00,
-    sgst_rate           NUMERIC(5, 2) NOT NULL DEFAULT 9.00,
-    igst_rate           NUMERIC(5, 2) NOT NULL DEFAULT 18.00,
-    cess_rate           NUMERIC(5, 2) DEFAULT 0.00,
-    chapter             VARCHAR(10),
-    is_active           BOOLEAN DEFAULT TRUE,
-    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_hsn_code ON public.hsn_tax_master(hsn_sac_code);
-CREATE INDEX IF NOT EXISTS idx_hsn_type ON public.hsn_tax_master(type);
+-- startup-guard: bulk-seed-when-empty public.hsn_tax_master
+-- HSN / SAC tax codes for Silver Muller Seals.
+-- Loaded by DataInitializer ONLY when public.hsn_tax_master is empty. Data rows only: the table,
+-- columns and indexes are defined in schema.sql. Enforced by StartupSafetyGuardTest.
 
 -- Seed Manufacturing HSN / SAC codes for Silver Muller Seals
 INSERT INTO public.hsn_tax_master (hsn_sac_code, description, type, gst_rate, cgst_rate, sgst_rate, igst_rate, cess_rate, chapter)
@@ -82,37 +64,3 @@ ON CONFLICT (hsn_sac_code) DO UPDATE SET
     igst_rate = EXCLUDED.igst_rate,
     type = EXCLUDED.type,
     chapter = EXCLUDED.chapter;
-
--- 2. Enhance PR tables
-ALTER TABLE public.purchase_requisitions ADD COLUMN IF NOT EXISTS pr_type VARCHAR(50) DEFAULT 'Direct Material';
-ALTER TABLE public.purchase_requisitions ADD COLUMN IF NOT EXISTS cost_center VARCHAR(100);
-ALTER TABLE public.purchase_requisitions ADD COLUMN IF NOT EXISTS project_reference VARCHAR(100);
-ALTER TABLE public.purchase_requisitions ADD COLUMN IF NOT EXISTS cancellation_reason TEXT;
-
-ALTER TABLE public.purchase_requisition_items ADD COLUMN IF NOT EXISTS hsn_code VARCHAR(50);
-ALTER TABLE public.purchase_requisition_items ADD COLUMN IF NOT EXISTS drawing_no VARCHAR(100);
-ALTER TABLE public.purchase_requisition_items ADD COLUMN IF NOT EXISTS manufacturer_brand VARCHAR(100);
-ALTER TABLE public.purchase_requisition_items ADD COLUMN IF NOT EXISTS required_by_date VARCHAR(50);
-
--- 3. Enhance PO tables
-ALTER TABLE public.purchase_orders ADD COLUMN IF NOT EXISTS po_type VARCHAR(50) DEFAULT 'STANDARD';
-ALTER TABLE public.purchase_orders ADD COLUMN IF NOT EXISTS incoterms VARCHAR(50) DEFAULT 'FOR Destination';
-ALTER TABLE public.purchase_orders ADD COLUMN IF NOT EXISTS freight_terms VARCHAR(50) DEFAULT 'Included in Price';
-ALTER TABLE public.purchase_orders ADD COLUMN IF NOT EXISTS delivery_mode VARCHAR(50) DEFAULT 'Road Transport';
-ALTER TABLE public.purchase_orders ADD COLUMN IF NOT EXISTS credit_period INT DEFAULT 30;
-ALTER TABLE public.purchase_orders ADD COLUMN IF NOT EXISTS revision_number INT DEFAULT 0;
-ALTER TABLE public.purchase_orders ADD COLUMN IF NOT EXISTS company_gstin VARCHAR(50) DEFAULT '27ABCDE1234F1Z5';
-ALTER TABLE public.purchase_orders ADD COLUMN IF NOT EXISTS company_state_code VARCHAR(10) DEFAULT '27';
-
--- 4. PO Revisions Table
-CREATE TABLE IF NOT EXISTS public.po_revisions (
-    id                  BIGSERIAL PRIMARY KEY,
-    po_number           VARCHAR(50) NOT NULL,
-    revision_number     INT NOT NULL DEFAULT 1,
-    changed_by          VARCHAR(100) NOT NULL,
-    change_reason       TEXT NOT NULL,
-    changes_json        TEXT NOT NULL,
-    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_po_rev_num ON public.po_revisions(po_number);

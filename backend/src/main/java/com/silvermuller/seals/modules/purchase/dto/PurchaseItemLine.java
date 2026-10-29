@@ -173,16 +173,7 @@ public class PurchaseItemLine {
     public String getPrNumber() { return prNumber; }
     public void setPrNumber(String prNumber) { this.prNumber = prNumber; }
 
-    private Long clubbingBatchId;
-    private String clubbingBatchNumber;
-    private Long clubbingBatchItemId;
 
-    public Long getClubbingBatchId() { return clubbingBatchId; }
-    public void setClubbingBatchId(Long clubbingBatchId) { this.clubbingBatchId = clubbingBatchId; }
 
-    public String getClubbingBatchNumber() { return clubbingBatchNumber; }
-    public void setClubbingBatchNumber(String clubbingBatchNumber) { this.clubbingBatchNumber = clubbingBatchNumber; }
 
-    public Long getClubbingBatchItemId() { return clubbingBatchItemId; }
-    public void setClubbingBatchItemId(Long clubbingBatchItemId) { this.clubbingBatchItemId = clubbingBatchItemId; }
 }

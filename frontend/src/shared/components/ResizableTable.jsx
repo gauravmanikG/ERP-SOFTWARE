@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { getSetting, setSetting } from "../utils/settingsStore";
 
 // Excel-like column resizing for the ERP's data tables.
 //
@@ -10,18 +11,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 //     <thead><tr><th>Item<ColumnResizeHandle colKey="item" resize={resize} /></th>...</tr></thead>
 //
 // The <colgroup> is the single source of column widths, so header and body cells
-// stay aligned by construction. Widths are saved per browser in localStorage.
+// stay aligned by construction. Widths are saved in PostgreSQL (app_setting) through settingsStore.
 
 export const MIN_COL_WIDTH = 48;
 const STORAGE_PREFIX = "sms_table_widths:";
 
 const readSavedWidths = (tableId) => {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(STORAGE_PREFIX + tableId) || "null");
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
-  }
+  const parsed = getSetting(STORAGE_PREFIX + tableId, null);
+  return parsed && typeof parsed === "object" ? parsed : {};
 };
 
 const buildInitialWidths = (tableId, columns) => {
@@ -46,11 +43,7 @@ export function useResizableColumns(tableId, columns) {
 
   // Persist whenever the committed widths change.
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_PREFIX + tableId, JSON.stringify(widths));
-    } catch {
-      // Storage full or disabled: resizing still works for this session.
-    }
+    setSetting(STORAGE_PREFIX + tableId, widths);
   }, [tableId, widths]);
 
   // Stop any in-progress drag if the table unmounts mid-drag.

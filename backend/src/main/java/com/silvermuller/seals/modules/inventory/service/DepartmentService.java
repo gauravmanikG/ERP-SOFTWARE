@@ -3,18 +3,12 @@ package com.silvermuller.seals.modules.inventory.service;
 import com.silvermuller.seals.common.exception.ResourceNotFoundException;
 import com.silvermuller.seals.modules.inventory.dto.CreateDepartmentRequest;
 import com.silvermuller.seals.modules.inventory.dto.DepartmentResponse;
-import com.silvermuller.seals.modules.inventory.model.Department;
 import com.silvermuller.seals.modules.inventory.model.DepartmentMaster;
-import com.silvermuller.seals.modules.inventory.model.OpeningBalance;
 import com.silvermuller.seals.modules.inventory.repository.DepartmentMasterRepository;
-import com.silvermuller.seals.modules.inventory.repository.DepartmentRepository;
-import com.silvermuller.seals.modules.inventory.repository.InventoryTransactionRepository;
-import com.silvermuller.seals.modules.inventory.repository.OpeningBalanceRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 
@@ -22,20 +16,10 @@ import java.util.stream.Collectors;
 @Transactional(readOnly = true)
 public class DepartmentService {
 
-    private final DepartmentRepository departmentRepository;
     private final DepartmentMasterRepository departmentMasterRepository;
-    private final OpeningBalanceRepository openingBalanceRepository;
-    private final InventoryTransactionRepository transactionRepository;
 
-    public DepartmentService(
-            DepartmentRepository departmentRepository,
-            DepartmentMasterRepository departmentMasterRepository,
-            OpeningBalanceRepository openingBalanceRepository,
-            InventoryTransactionRepository transactionRepository) {
-        this.departmentRepository = departmentRepository;
+    public DepartmentService(DepartmentMasterRepository departmentMasterRepository) {
         this.departmentMasterRepository = departmentMasterRepository;
-        this.openingBalanceRepository = openingBalanceRepository;
-        this.transactionRepository = transactionRepository;
     }
 
     public List<DepartmentResponse> getAllDepartments() {
@@ -89,11 +73,6 @@ public class DepartmentService {
         dept.setNotes(req.getNotes());
 
         DepartmentMaster saved = departmentMasterRepository.save(dept);
-        if (departmentRepository.findByNameIgnoreCase(name).isEmpty()) {
-            Department live = new Department();
-            live.setName(name);
-            departmentRepository.save(live);
-        }
         return toResponse(saved);
     }
 
@@ -111,24 +90,11 @@ public class DepartmentService {
         return createDepartment(name, seq);
     }
 
-    public Department getDepartmentEntity(Long id) {
+    public DepartmentMaster getDepartmentEntity(Long id) {
         if (id == null) {
             return null;
         }
-
-        Optional<DepartmentMaster> masterOpt = departmentMasterRepository.findById(id);
-        if (masterOpt.isPresent()) {
-            String name = masterOpt.get().getDepartmentName().trim();
-            Optional<Department> byName = departmentRepository.findByNameIgnoreCase(name);
-            if (byName.isPresent()) {
-                return byName.get();
-            }
-            Department d = new Department();
-            d.setName(name);
-            return departmentRepository.save(d);
-        }
-
-        return departmentRepository.findById(id)
+        return departmentMasterRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Department not found with ID: " + id));
     }
 
@@ -143,24 +109,11 @@ public class DepartmentService {
         if (req.getProcessSequence() == null) {
             throw new IllegalArgumentException("Process sequence is required");
         }
-        String oldName = master.getDepartmentName();
         departmentMasterRepository.findByDepartmentNameIgnoreCase(trimmed).ifPresent(other -> {
             if (!other.getId().equals(id)) {
                 throw new IllegalArgumentException("A department named '" + trimmed + "' already exists");
             }
         });
-        if (!oldName.equalsIgnoreCase(trimmed)) {
-            List<OpeningBalance> obs = openingBalanceRepository.findByDepartmentNameIgnoreCase(oldName);
-            for (OpeningBalance ob : obs) {
-                ob.setDepartmentName(trimmed);
-                ob.setMainCode(ob.getItemCode() + "::" + ob.getCategoryName() + "::" + trimmed);
-            }
-            openingBalanceRepository.saveAll(obs);
-            departmentRepository.findByNameIgnoreCase(oldName).ifPresent(live -> {
-                live.setName(trimmed);
-                departmentRepository.save(live);
-            });
-        }
 
         Integer num = req.getDeptNumber() != null ? req.getDeptNumber() : master.getDeptNumber();
         String code = req.getDeptCode() != null && !req.getDeptCode().isBlank() ? req.getDeptCode().trim() : master.getDeptCode();
@@ -192,20 +145,6 @@ public class DepartmentService {
     public void deleteDepartment(Long id) {
         DepartmentMaster master = departmentMasterRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Department not found with ID: " + id));
-        Department live = departmentRepository.findByNameIgnoreCase(master.getDepartmentName()).orElse(null);
-        if (live != null) {
-            List<com.silvermuller.seals.modules.inventory.model.InventoryTransaction> txs =
-                    transactionRepository.findByFromDepartment_IdOrToDepartment_Id(live.getId(), live.getId());
-            if (!txs.isEmpty()) {
-                throw new IllegalArgumentException(
-                        "Cannot delete '" + master.getDepartmentName()
-                                + "' because inventory transactions still use it. Remove those movements first.");
-            }
-        }
-        openingBalanceRepository.deleteByDepartmentNameIgnoreCase(master.getDepartmentName());
-        if (live != null) {
-            departmentRepository.delete(live);
-        }
         departmentMasterRepository.delete(master);
     }
 }

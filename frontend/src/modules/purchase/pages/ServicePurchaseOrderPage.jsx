@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import * as XLSX from "xlsx";
 import DateInput from "../../../shared/components/DateInput";
+import SearchableSelect from "../../../shared/components/SearchableSelect";
 import { formatDisplayDate } from "../../../shared/utils/dateFormat";
+import { isNumericHeader } from "../newpo/ui";
 
 // ============================================================================
 // Service Purchase Order (Service PO)
@@ -10,6 +12,8 @@ import { formatDisplayDate } from "../../../shared/utils/dateFormat";
 
 const API_ROOT = (import.meta.env.VITE_API_URL || "http://localhost:4000") + "/api";
 const SPO = `${API_ROOT}/service-pos`;
+import { getSetting, setSetting } from "../../../shared/utils/settingsStore";
+
 const USER_KEY = "SMS_CURRENT_USER";
 const ROLES = ["CREATOR", "APPROVER", "ACCEPTOR", "FINANCE", "ADMIN"];
 
@@ -78,18 +82,13 @@ const ACTION_PATH = {
 const TODAY = () => new Date().toISOString().slice(0, 10);
 
 function loadUser() {
-  try {
-    const raw = localStorage.getItem(USER_KEY);
-    if (raw) {
-      const u = JSON.parse(raw);
-      if (u && u.name) return { name: u.name, role: ROLES.includes(u.role) ? u.role : "CREATOR" };
-    }
-  } catch (e) { /* storage unavailable: fall through */ }
+  const u = getSetting(USER_KEY, null);
+  if (u && u.name) return { name: u.name, role: ROLES.includes(u.role) ? u.role : "CREATOR" };
   return { name: "Current User", role: "CREATOR" };
 }
 
 function saveUser(u) {
-  try { localStorage.setItem(USER_KEY, JSON.stringify(u)); } catch (e) { /* ignore */ }
+  setSetting(USER_KEY, u);
 }
 
 async function api(method, path, user, body) {
@@ -298,42 +297,6 @@ function Section({ title, subtitle, children, right }) {
   );
 }
 
-function SearchableSelect({ options, value, onChange, placeholder, disabled }) {
-  const [q, setQ] = useState("");
-  const [open, setOpen] = useState(false);
-  const selected = options.find((o) => o.value === value);
-  const shown = open ? q : selected ? selected.label : "";
-  const filtered = options.filter((o) => o.label.toLowerCase().includes(q.toLowerCase())).slice(0, 80);
-  return (
-    <div style={{ position: "relative" }}>
-      <input
-        style={inp}
-        value={shown}
-        placeholder={placeholder}
-        disabled={disabled}
-        onFocus={() => { setOpen(true); setQ(""); }}
-        onChange={(e) => { setQ(e.target.value); setOpen(true); }}
-        onBlur={() => setTimeout(() => setOpen(false), 150)}
-      />
-      {open && (
-        <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 60, maxHeight: 240, overflowY: "auto", background: "#fff", border: "1px solid #cbd5e1", borderRadius: 6, boxShadow: "0 10px 24px rgba(15,23,42,0.15)" }}>
-          {filtered.length === 0 && <div style={{ padding: 8, fontSize: 12, color: "#64748b" }}>No matches</div>}
-          {filtered.map((o) => (
-            <div
-              key={o.value}
-              onMouseDown={() => { onChange(o.value); setOpen(false); }}
-              style={{ padding: "7px 10px", fontSize: 12, cursor: "pointer", background: o.value === value ? "#eff6ff" : "#fff", borderBottom: "1px solid #f1f5f9" }}
-            >
-              <div style={{ fontWeight: 600 }}>{o.label}</div>
-              {o.sub && <div style={{ fontSize: 11, color: "#64748b" }}>{o.sub}</div>}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 function Modal({ title, onClose, children, footer, width = 760, zIndex = 1000 }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.45)", zIndex, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
@@ -501,7 +464,7 @@ function CreateForm({ user, refs, reloadRefs, editing, amendMode, onSaved, onCan
             options={vendorOptions}
             value={form.vendorCode}
             placeholder="Search vendor by name, code or GSTIN"
-            onChange={(code) => setForm((f) => ({ ...f, vendorCode: code, vendorSearch: code }))}
+            onChange={(e) => setForm((f) => ({ ...f, vendorCode: e.target.value, vendorSearch: e.target.value }))}
           />
         </Field>
         <Field label="Vendor legal name">
@@ -518,7 +481,7 @@ function CreateForm({ user, refs, reloadRefs, editing, amendMode, onSaved, onCan
         </Field>
         <Field label="Requesting department" required>
           <SearchableSelect options={deptOptions} value={form.departmentId} placeholder="Select department"
-            onChange={(id) => setForm((f) => ({ ...f, departmentId: id }))} />
+            onChange={(e) => setForm((f) => ({ ...f, departmentId: e.target.value }))} />
         </Field>
         <Field label="Requester" hint="Defaults to the signed-in user">
           <input style={inp} value={form.requester} placeholder={user.name} onChange={set("requester")} />
@@ -560,10 +523,8 @@ function CreateForm({ user, refs, reloadRefs, editing, amendMode, onSaved, onCan
           <button style={btn()} onClick={() => setShowNewCategory((v) => !v)}>+ New sub-group</button>
         )}>
         <Field label="Service category" required>
-          <select style={inp} value={form.serviceCategory} onChange={set("serviceCategory")}>
-            <option value="">Select category</option>
-            {refs.categories.map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
+          <SearchableSelect value={form.serviceCategory} onChange={set("serviceCategory")} placeholder="Select category"
+            options={refs.categories.map((c) => ({ value: c, label: c }))} />
         </Field>
         {showNewCategory && (
           <Field label="New sub-group name" span={2}>
@@ -662,7 +623,7 @@ function CreateForm({ user, refs, reloadRefs, editing, amendMode, onSaved, onCan
       <Section title="5. GST, SAC and statutory" subtitle="Rates come from the Tax Master for the selected SAC. Nothing is hardcoded.">
         <Field label="SAC code" required span={2}>
           <SearchableSelect options={sacOptions} value={form.sacCode} placeholder="Search SAC code or description"
-            onChange={(code) => setForm((f) => ({ ...f, sacCode: code }))} />
+            onChange={(e) => setForm((f) => ({ ...f, sacCode: e.target.value }))} />
         </Field>
         <Field label="GST taxability / supply type">
           <select style={inp} value={form.gstTaxability} onChange={set("gstTaxability")}>
@@ -1216,7 +1177,15 @@ function Table({ headers, children }) {
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
         <thead>
           <tr style={{ background: "#f8fafc" }}>
-            {headers.map((h) => <th key={h} style={{ textAlign: "left", padding: "7px 8px", borderBottom: "1px solid #e2e8f0", color: "#334155", whiteSpace: "nowrap" }}>{h}</th>)}
+            {headers.map((h) => {
+              const label = typeof h === "string" ? h : (h && h.label) || "";
+              const align = isNumericHeader(label) ? "right" : "left";
+              return (
+                <th key={label} style={{ textAlign: align, padding: "7px 8px", borderBottom: "1px solid #e2e8f0", color: "#334155", whiteSpace: "nowrap" }}>
+                  {label}
+                </th>
+              );
+            })}
           </tr>
         </thead>
         <tbody>{children}</tbody>
@@ -1333,22 +1302,16 @@ function RegisterTab({ user, refs, refreshToken, onView, onAction, onEdit, onAme
           <input style={inp} placeholder="PO no., vendor, description, category" value={filters.q} onChange={setF("q")} />
         </Field>
         <Field label="Vendor">
-          <select style={inp} value={filters.vendorCode} onChange={setF("vendorCode")}>
-            <option value="">All vendors</option>
-            {refs.vendors.map((v) => <option key={v.supplierCode} value={v.supplierCode}>{v.supplierName}</option>)}
-          </select>
+          <SearchableSelect value={filters.vendorCode} onChange={setF("vendorCode")} emptyLabel="All vendors"
+            options={refs.vendors.map((v) => ({ value: v.supplierCode, label: v.supplierName, sub: v.supplierCode }))} />
         </Field>
         <Field label="Department">
-          <select style={inp} value={filters.department} onChange={setF("department")}>
-            <option value="">All departments</option>
-            {refs.departments.map((d) => <option key={d.id} value={d.departmentName || d.name}>{d.departmentName || d.name}</option>)}
-          </select>
+          <SearchableSelect value={filters.department} onChange={setF("department")} emptyLabel="All departments"
+            options={refs.departments.map((d) => ({ value: d.departmentName || d.name, label: d.departmentName || d.name }))} />
         </Field>
         <Field label="Category">
-          <select style={inp} value={filters.category} onChange={setF("category")}>
-            <option value="">All categories</option>
-            {refs.categories.map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
+          <SearchableSelect value={filters.category} onChange={setF("category")} emptyLabel="All categories"
+            options={refs.categories.map((c) => ({ value: c, label: c }))} />
         </Field>
         <Field label="PO status">
           <select style={inp} value={filters.status} onChange={setF("status")}>
@@ -1602,8 +1565,8 @@ export function ServicePurchaseOrderPage({ onBackToHome, onOpenSidebar, sidebarO
         </div>
       </div>
 
-      <div style={{ flex: 1, minHeight: 0, padding: 18, display: "flex", flexDirection: "column", boxSizing: "border-box" }}>
-        <div style={{ maxWidth: 1440, width: "100%", margin: "0 auto", flex: 1, minHeight: 0, display: "flex", flexDirection: "column", boxSizing: "border-box", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, padding: 16, overflowY: tab === "create" ? "auto" : "hidden" }}>
+      <div style={{ flex: 1, minHeight: 0, padding: 0, display: "flex", flexDirection: "column", boxSizing: "border-box" }}>
+        <div style={{ width: "100%", flex: 1, minHeight: 0, display: "flex", flexDirection: "column", boxSizing: "border-box", background: "#fff", border: "none", borderRadius: 0, padding: 16, overflowY: tab === "create" ? "auto" : "hidden" }}>
           <div style={{ fontSize: 12, color: "#64748b", marginBottom: 10 }}>
             Purchase › Purchase Order › <b style={{ color: "#0f172a" }}>Service PO</b>
             <span style={{ marginLeft: 12 }}>No GRN is raised for a Service PO. Services are recorded through Service Acceptance.</span>

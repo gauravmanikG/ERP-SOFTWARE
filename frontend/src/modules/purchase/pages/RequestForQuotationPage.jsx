@@ -1,5 +1,7 @@
+import { setHandoff, getHandoff, removeHandoff } from "../../../shared/utils/handoffStore";
 import { formatDisplayDate, formatDisplayDateTime } from "../../../shared/utils/dateFormat";
 import DateInput from "../../../shared/components/DateInput";
+import SearchableSelect from "../../../shared/components/SearchableSelect";
 import { useResizableColumns, ResizableColGroup, ColumnResizeHandle } from "../../../shared/components/ResizableTable";
 import React, { useState, useEffect, useMemo } from "react";
 
@@ -229,33 +231,6 @@ export function RequestForQuotationPage({ dark = false, onBackToHome, onNavigate
           if (Array.isArray(data2)) combined = data2;
         }
       }
-      try {
-        const savedOther = localStorage.getItem("SMS_OTHER_ITEM_MASTER_DATA_REAL");
-        if (savedOther) {
-          const parsed = JSON.parse(savedOther);
-          if (Array.isArray(parsed)) {
-            parsed.forEach((it) => {
-              if (it && it.item_code) {
-                const idx = combined.findIndex((c) => (c.item_code || c.itemCode) === it.item_code);
-                const itemObj = {
-                  id: it.id || it.item_code,
-                  item_code: it.item_code,
-                  item_name: it.item_name || it.description || it.item_code,
-                  category: it.category || "Raw Material",
-                  uom: it.uom || "PCS",
-                  price: Number(it.unit_price || it.est_rate) || 0,
-                  est_rate: Number(it.unit_price || it.est_rate) || 0,
-                  item_type: "OTHER"
-                };
-                if (idx !== -1) combined[idx] = { ...combined[idx], ...itemObj };
-                else combined.unshift(itemObj);
-              }
-            });
-          }
-        }
-      } catch (err) {
-        // ignore
-      }
 
       // Normalize all items
       const normalized = combined
@@ -310,19 +285,19 @@ export function RequestForQuotationPage({ dark = false, onBackToHome, onNavigate
     }
   };
 
-  // Auto-load PR from sessionStorage if navigated from PR screen
+  // Auto-load PR from handoff if navigated from PR screen
   useEffect(() => {
     try {
-      const raw = sessionStorage.getItem("SMS_SELECTED_PR_FOR_RFQ");
+      const raw = getHandoff("SMS_SELECTED_PR_FOR_RFQ");
       if (raw) {
-        sessionStorage.removeItem("SMS_SELECTED_PR_FOR_RFQ");
+        removeHandoff("SMS_SELECTED_PR_FOR_RFQ");
         const pr = JSON.parse(raw);
         if (pr) {
           handleInitCreateFromPr(pr);
         }
       }
     } catch (e) {
-      console.error("Error reading sessionStorage for RFQ:", e);
+      console.error("Error reading handoff for RFQ:", e);
     }
   }, [suppliers]);
 
@@ -767,15 +742,14 @@ export function RequestForQuotationPage({ dark = false, onBackToHome, onNavigate
         vendorName: bidVendorName,
         quotationDate: new Date().toISOString().split("T")[0],
         validUntil: selectedRfq.dueDate || new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0],
-        validityDate: selectedRfq.dueDate || new Date().toISOString().split("T")[0],
         prNumber: selectedRfq.prNumber || null,
         subtotalAmount: subtotalSum,
         taxAmount: taxSum,
         finalAmount: finalSum,
-        currency: "INR",
         paymentTerms: selectedRfq.paymentTerms || "30 Days Credit",
-        deliveryDays: Number(bidLeadDays) || 7,
-        remarks: `Logged against RFQ #${selectedRfq.rfqNumber} • ${bidRemarks}`,
+        // Saved as the quotation's delivery time and notes, the fields Vendor Quotations shows.
+        deliveryTime: `${Number(bidLeadDays) || 7} Days`,
+        notes: `Logged against RFQ #${selectedRfq.rfqNumber}${bidRemarks.trim() ? ` • ${bidRemarks.trim()}` : ""}`,
         items: computedItems
       };
 
@@ -845,13 +819,13 @@ export function RequestForQuotationPage({ dark = false, onBackToHome, onNavigate
         }))
       };
 
-      sessionStorage.setItem("SMS_SELECTED_PR_FOR_PO", JSON.stringify(prData));
-      sessionStorage.setItem("SMS_SELECTED_QUOTATION_FOR_PO", JSON.stringify(winningQuote));
+      setHandoff("SMS_SELECTED_PR_FOR_PO", JSON.stringify(prData));
+      setHandoff("SMS_SELECTED_QUOTATION_FOR_PO", JSON.stringify(winningQuote));
 
       showToast(`🏆 Awarded RFQ #${rfq.rfqNumber} to ${winningQuote.vendorName}! Navigating to PO Processing...`);
       setWorkspaceModalOpen(false);
       if (onNavigate) {
-        onNavigate("purchase-processing");
+        onNavigate("purchase-requisition");
       }
     } catch (e) {
       console.error("Award Error:", e);
@@ -942,7 +916,7 @@ export function RequestForQuotationPage({ dark = false, onBackToHome, onNavigate
         maxHeight: "calc(100vh - 68px)",
         overflow: "hidden",
         background: bg,
-        padding: "12px 20px 42px 20px",
+        padding: 0,
         boxSizing: "border-box",
         display: "flex",
         flexDirection: "column",
@@ -980,18 +954,16 @@ export function RequestForQuotationPage({ dark = false, onBackToHome, onNavigate
       {/* Main Outer Card Container */}
       <div
         style={{
-          maxWidth: 1440,
           width: "100%",
-          margin: "0 auto",
           height: "100%",
           maxHeight: "100%",
           display: "flex",
           flexDirection: "column",
           minHeight: 0,
           overflow: "hidden",
-          borderRadius: 12,
-          border: `1px solid ${borderCol}`,
-          boxShadow: "0 4px 20px rgba(0, 0, 0, 0.05)",
+          borderRadius: 0,
+          border: "none",
+          boxShadow: "none",
           background: cardBg
         }}
       >
@@ -1971,7 +1943,7 @@ export function RequestForQuotationPage({ dark = false, onBackToHome, onNavigate
                                   ₹ {Number(quote.finalAmount || (unitRate * (selectedRfq.items[0]?.requiredQty || 1) * 1.18)).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                                 </td>
                                 <td style={{ padding: "10px 12px", textAlign: "center", color: "#475569" }}>
-                                  {quote.deliveryDays || 7} Days
+                                  {quote.deliveryTime || "-"}
                                 </td>
                                 <td style={{ padding: "10px 12px", textAlign: "right" }}>
                                   <button
@@ -2198,8 +2170,9 @@ export function RequestForQuotationPage({ dark = false, onBackToHome, onNavigate
                 <label style={{ display: "block", fontSize: 11.5, fontWeight: 700, color: "#475569", marginBottom: 5 }}>
                   SELECT SUPPLIER *
                 </label>
-                <select
+                <SearchableSelect
                   value={bidVendorName}
+                  placeholder="Choose supplier"
                   onChange={(e) => {
                     const selName = e.target.value;
                     setBidVendorName(selName);
@@ -2219,29 +2192,21 @@ export function RequestForQuotationPage({ dark = false, onBackToHome, onNavigate
                       setBidVendorCode("VEND-" + Math.floor(100 + Math.random() * 900));
                     }
                   }}
-                  style={{
-                    width: "100%",
-                    boxSizing: "border-box",
-                    padding: "8px 10px",
-                    borderRadius: 6,
-                    border: "1px solid #cbd5e1",
-                    fontSize: 13,
-                    fontWeight: 600,
-                    outline: "none"
-                  }}
-                >
-                  <option value="">-- Choose Supplier --</option>
-                  {(selectedRfq.selectedVendors || []).map((v) => (
-                    <option key={v.id} value={v.name || v.supplier_name}>
-                      [Invited] {v.name || v.supplier_name} ({v.code})
-                    </option>
-                  ))}
-                  {suppliers.map((s) => (
-                    <option key={s.id} value={s.supplier_name || s.supplierName}>
-                      {s.supplier_name || s.supplierName} ({s.supplier_code || s.supplierCode})
-                    </option>
-                  ))}
-                </select>
+                  options={[
+                    ...(selectedRfq.selectedVendors || []).map((v) => ({
+                      value: v.name || v.supplier_name,
+                      label: v.name || v.supplier_name,
+                      sub: `${v.code} · invited`,
+                      group: "Invited to this RFQ"
+                    })),
+                    ...suppliers.map((s) => ({
+                      value: s.supplier_name || s.supplierName,
+                      label: s.supplier_name || s.supplierName,
+                      sub: s.supplier_code || s.supplierCode,
+                      group: "All suppliers"
+                    }))
+                  ]}
+                />
               </div>
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>

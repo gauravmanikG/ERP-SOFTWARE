@@ -1,326 +1,10 @@
 import { formatDisplayDate, formatDisplayDateTime } from "../../../shared/utils/dateFormat";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, createElement } from "react";
+import { MODULES_LIST, ModuleIcons } from "../../../shared/layout/modulesData";
 
-// Icons for the 14 ERP Modules
-const ModuleIcons = {
-  Engineering: () => (
-    <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-    </svg>
-  ),
-  Purchase: () => (
-    <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-    </svg>
-  ),
-  Gate: () => (
-    <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7h8m-8 5h8m-8 5h8M5 3v18M19 3v18" />
-    </svg>
-  ),
-  Inventory: () => (
-    <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0v10l-8 4m-8-4V7m8 4v10M4 7l8 4 8-4" />
-    </svg>
-  ),
-  Quality: () => (
-    <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-    </svg>
-  ),
-  PPC: () => (
-    <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-    </svg>
-  ),
-  Production: () => (
-    <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-    </svg>
-  ),
-  CRM: () => (
-    <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-    </svg>
-  ),
-  Sales: () => (
-    <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-    </svg>
-  ),
-  Finance: () => (
-    <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
-  ),
-  Maintenance: () => (
-    <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 00-1-1H4a2 2 0 110-4h1a1 1 0 001-1V7a1 1 0 011-1h3a1 1 0 001-1V4z" />
-    </svg>
-  ),
-  Reports: () => (
-    <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-    </svg>
-  ),
-  Help: () => (
-    <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z" />
-    </svg>
-  ),
-  Settings: () => (
-    <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-    </svg>
-  ),
-  Bell: () => (
-    <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-    </svg>
-  ),
-  ArrowRight: () => (
-    <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
-    </svg>
-  ),
-  ChevronRight: () => (
-    <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-    </svg>
-  )
-};
-
-// Module definitions with exact requested submodules
 // Keeps a flyout inside the window: its top is clamped and its height fills only the space below it.
 const fitTop = (desired, min = 72) => Math.max(min, Math.min(desired, window.innerHeight - 260));
 const fitMaxHeight = (top) => `${Math.max(240, window.innerHeight - top - 16)}px`;
-
-const MODULES_LIST = [
-  {
-    id: "engineering",
-    name: "Engineering",
-    icon: <ModuleIcons.Engineering />,
-    submodules: [
-      {
-        name: "Item Master",
-        isParent: true,
-        children: [
-          { name: "FG", targetPage: "item-master" },
-          { name: "Other", targetPage: "item-master-other" }
-        ]
-      },
-      { name: "BOM", targetPage: "moulding-bom" },
-      { name: "Routing" },
-      { name: "Operations" },
-      { name: "Work Centers" },
-      { name: "Machines" },
-      { name: "Drawings & Documents" },
-      { name: "Engineering Changes" }
-    ]
-  },
-  {
-    id: "purchase",
-    name: "Purchase",
-    icon: <ModuleIcons.Purchase />,
-    submodules: [
-      { name: "Suppliers", targetPage: "supplier-master" },
-      { name: "Purchase Requisition", targetPage: "purchase-requisition" },
-      { name: "Purchase Processing", targetPage: "purchase-processing" },
-      { name: "PO Approval", targetPage: "po-approval" },
-      {
-        name: "Purchase Orders",
-        isParent: true,
-        children: [
-          { name: "Standard PO", targetPage: "purchase-orders" },
-          { name: "Service PO", targetPage: "service-po" },
-          { name: "Capital PO", targetPage: "capital-po", ready: true }
-        ]
-      },
-      {
-        name: "New Purchase Order",
-        isParent: true,
-        children: [
-          { name: "Vendor Rate Master", targetPage: "new-po-vendor-rates", ready: true },
-          { name: "PO by PR", targetPage: "new-po-po-by-pr", ready: true },
-          { name: "Direct PO", targetPage: "new-po-direct-po", ready: true },
-          { name: "PO Register", targetPage: "new-po-po-register", ready: true },
-          { name: "PO vs PR Report", targetPage: "new-po-report-po-vs-pr", ready: true },
-          { name: "PO vs PR vs MRN/GRN Report", targetPage: "new-po-report-po-vs-pr-grn", ready: true },
-          { name: "Legacy Reconciliation", targetPage: "new-po-reconciliation", ready: true }
-        ]
-      },
-      {
-        name: "Job Work",
-        isParent: true,
-        children: [
-          { name: "Dashboard", targetPage: "job-work-dashboard", ready: true },
-          { name: "Job Workers", targetPage: "job-work-workers", ready: true },
-          { name: "Indents", targetPage: "job-work-indents", ready: true },
-          { name: "Job Work Orders", targetPage: "job-work-orders", ready: true },
-          { name: "Challans", targetPage: "job-work-challans", ready: true },
-          { name: "Receipts & Inspection", targetPage: "job-work-receipts", ready: true },
-          { name: "Worker Stock Ledger", targetPage: "job-work-ledger", ready: true },
-          { name: "Reconciliation & Scrap", targetPage: "job-work-recon", ready: true },
-          { name: "Job Work Invoices" },
-          { name: "Compliance & Reports", targetPage: "job-work-reports", ready: true }
-        ]
-      },
-      { name: "RFQ", targetPage: "rfq", ready: true },
-      { name: "Quotations", targetPage: "vendor-quotations", ready: true },
-      { name: "GRN", targetPage: "grn", ready: true },
-      { name: "Purchase Returns" },
-      { name: "Purchase Invoices" }
-    ]
-  },
-  {
-    id: "gate",
-    name: "Gate",
-    icon: <ModuleIcons.Gate />,
-    submodules: [
-      { name: "Gate Entry" },
-      { name: "Material Inward" },
-      { name: "Material Outward" },
-      { name: "Vehicle Entry" },
-      { name: "Gate Pass" },
-      { name: "Gate Exit" }
-    ]
-  },
-  {
-    id: "inventory",
-    name: "Inventory",
-    icon: <ModuleIcons.Inventory />,
-    submodules: [
-      { name: "Items", targetPage: "item-wise-cb" },
-      { name: "Warehouses", targetPage: "dept-wise-cb" },
-      { name: "Stock Receipt", targetPage: "inventory" },
-      { name: "Stock Issue", targetPage: "inventory" },
-      { name: "Stock Transfer", targetPage: "inventory" },
-      { name: "Stock Adjustment" },
-      { name: "Batch / Lot" },
-      { name: "Stock Ledger", targetPage: "dept-wise-cb" },
-      { name: "Physical Stock" },
-      { name: "Stock Reconciliation" }
-    ]
-  },
-  {
-    id: "quality",
-    name: "Quality",
-    icon: <ModuleIcons.Quality />,
-    submodules: [
-      { name: "Inspection Plans" },
-      { name: "Incoming Inspection" },
-      { name: "In-Process Inspection" },
-      { name: "Final Inspection" },
-      { name: "NCR" },
-      { name: "Rework" },
-      { name: "Rejection" },
-      { name: "CAPA" }
-    ]
-  },
-  {
-    id: "ppc",
-    name: "PPC",
-    icon: <ModuleIcons.PPC />,
-    submodules: [
-      { name: "Demand" },
-      { name: "Production Planning" },
-      { name: "MRP" },
-      { name: "Capacity Planning" },
-      { name: "Production Orders" },
-      { name: "Scheduling" },
-      { name: "Material Shortage" }
-    ]
-  },
-  {
-    id: "production",
-    name: "Production",
-    icon: <ModuleIcons.Production />,
-    submodules: [
-      { name: "Production Orders" },
-      { name: "Job Cards" },
-      { name: "Material Consumption", targetPage: "moulding-bom" },
-      { name: "WIP" },
-      { name: "SFG" },
-      { name: "FG" },
-      { name: "Scrap" },
-      { name: "Rework" },
-      { name: "Production Entry", targetPage: "moulding-bom" }
-    ]
-  },
-  {
-    id: "crm",
-    name: "CRM & Order Management",
-    icon: <ModuleIcons.CRM />,
-    submodules: [
-      { name: "Customers", targetPage: "customer-master" },
-      { name: "Leads" },
-      { name: "Enquiries" },
-      { name: "Quotations" },
-      { name: "Sales Orders" },
-      { name: "Follow-ups" },
-      { name: "Customer Complaints" }
-    ]
-  },
-  {
-    id: "sales",
-    name: "Sales & Dispatch",
-    icon: <ModuleIcons.Sales />,
-    submodules: [
-      { name: "Sales Orders" },
-      { name: "Pick List" },
-      { name: "Packing" },
-      { name: "Delivery Challan" },
-      { name: "E-Invoice" },
-      { name: "E-Way Bill" },
-      { name: "Dispatch" },
-      { name: "Sales Return" }
-    ]
-  },
-  {
-    id: "finance",
-    name: "Finance / Accounts",
-    icon: <ModuleIcons.Finance />,
-    submodules: [
-      { name: "Chart of Accounts" },
-      { name: "Journal" },
-      { name: "Receivables" },
-      { name: "Payables" },
-      { name: "Payments" },
-      { name: "Receipts" },
-      { name: "GST" },
-      { name: "Bank Reconciliation" },
-      { name: "Fixed Assets" },
-      { name: "Financial Statements" }
-    ]
-  },
-  {
-    id: "maintenance",
-    name: "Maintenance",
-    icon: <ModuleIcons.Maintenance />,
-    submodules: [
-      { name: "Machines", targetPage: "machine-master" },
-      { name: "Maintenance Requests" },
-      { name: "Preventive Maintenance" },
-      { name: "Breakdown" },
-      { name: "Work Orders" },
-      { name: "Spare Parts" },
-      { name: "Downtime" },
-      { name: "MTTR / MTBF" },
-      { name: "Maintenance Cost" }
-    ]
-  },
-  {
-    id: "settings",
-    name: "Settings",
-    icon: <ModuleIcons.Settings />,
-    submodules: [
-      { name: "Company", targetPage: "company-master-form", ready: true },
-      { name: "Departments", targetPage: "department-master", ready: true }
-    ]
-  }
-];
 
 export function SilverBrainLandingPage({
   onNavigateToPage,
@@ -328,8 +12,6 @@ export function SilverBrainLandingPage({
   hideSidebar = false
 }) {
   const [hoveredModule, setHoveredModule] = useState(null);
-  const [hoveredSubmodule, setHoveredSubmodule] = useState(null);
-  const [subDrawerTop, setSubDrawerTop] = useState(0);
   const [drawerCoords, setDrawerCoords] = useState({ top: 0, left: 240 });
   const [currentTime, setCurrentTime] = useState(new Date());
   const [notificationCount, setNotificationCount] = useState(3);
@@ -352,11 +34,7 @@ export function SilverBrainLandingPage({
 
   // Fetch unread notifications count from backend API if available
   useEffect(() => {
-    const api = import.meta.env.VITE_API_URL || (
-      typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
-        ? ""
-        : "https://silver-muller-seals-backend-deploy.onrender.com"
-    );
+    const api = import.meta.env.VITE_API_URL || "";
     fetch(`${api}/api/notifications/unread-count`)
       .then((r) => (r.ok ? r.json() : { count: 3 }))
       .then((d) => setNotificationCount(Number(d.count) || 3))
@@ -368,14 +46,12 @@ export function SilverBrainLandingPage({
     const rect = event.currentTarget.getBoundingClientRect();
     setDrawerCoords({ top: rect.top, left: rect.right });
     setHoveredModule(mod);
-    setHoveredSubmodule(null);
   };
 
   const handleMouseLeave = () => {
     cancelClose();
     closeTimerRef.current = setTimeout(() => {
       setHoveredModule(null);
-      setHoveredSubmodule(null);
     }, 250);
   };
 
@@ -383,10 +59,7 @@ export function SilverBrainLandingPage({
     let target = submod.targetPage;
     if (!target && submod.name) {
       const lower = submod.name.toLowerCase();
-      if (lower.includes("purchase order")) target = "purchase-orders";
-      else if (lower.includes("purchase requisition")) target = "purchase-requisition";
-      else if (lower.includes("purchase processing")) target = "purchase-processing";
-      else if (lower.includes("po approval")) target = "po-approval";
+      if (lower.includes("purchase requisition")) target = "purchase-requisition";
     }
 
     if (target && onNavigateToPage) {
@@ -718,8 +391,8 @@ export function SilverBrainLandingPage({
         {!hideSidebar && (
         <aside
           style={{
-            width: 250,
-            minWidth: 250,
+            width: 260,
+            minWidth: 260,
             background: "#1e293b",
             borderRight: "1px solid rgba(255,255,255,0.08)",
             display: "flex",
@@ -736,7 +409,8 @@ export function SilverBrainLandingPage({
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
-              borderBottom: "1px solid rgba(255,255,255,0.06)"
+              borderBottom: "1px solid rgba(255,255,255,0.06)",
+              flexShrink: 0
             }}
           >
             <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.12em", color: "#94a3b8", textTransform: "uppercase" }}>
@@ -752,9 +426,12 @@ export function SilverBrainLandingPage({
             style={{
               flex: 1,
               minHeight: 0,
+              display: "flex",
+              flexDirection: "column",
+              gap: "clamp(6px, 1.2vh, 11px)",
+              padding: "10px 0 14px",
               overflowY: "auto",
-              padding: "8px 0",
-              scrollbarWidth: "thin"
+              scrollbarWidth: "none"
             }}
           >
             {MODULES_LIST.map((mod, idx) => {
@@ -765,7 +442,7 @@ export function SilverBrainLandingPage({
                   onMouseEnter={(e) => handleMouseEnter(mod, e)}
                   style={{
                     position: "relative",
-                    margin: "1px 8px"
+                    margin: "0 8px"
                   }}
                 >
                   <button
@@ -782,7 +459,7 @@ export function SilverBrainLandingPage({
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "space-between",
-                      padding: "9px 12px",
+                      padding: "9.5px 12px",
                       borderRadius: 8,
                       background: isHovered
                         ? "linear-gradient(90deg, rgba(197,31,40,0.2) 0%, rgba(30,41,59,0.9) 100%)"
@@ -791,15 +468,15 @@ export function SilverBrainLandingPage({
                       border: "none",
                       borderLeft: isHovered ? "3px solid #c51f28" : "3px solid transparent",
                       cursor: "pointer",
-                      fontSize: 12.5,
+                      fontSize: 13,
                       fontWeight: isHovered ? 700 : 500,
                       textAlign: "left",
                       transition: "all 0.15s ease"
                     }}
                   >
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <span style={{ color: isHovered ? "#ef4444" : "#94a3b8", display: "flex" }}>
-                        {mod.icon}
+                    <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
+                      <span style={{ color: isHovered ? "#ef4444" : "#94a3b8", display: "flex", alignItems: "center" }}>
+                        {createElement(ModuleIcons[mod.iconKey] || ModuleIcons.Engineering)}
                       </span>
                       <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                         {mod.name}
@@ -812,7 +489,9 @@ export function SilverBrainLandingPage({
                         style={{
                           color: isHovered ? "#ef4444" : "#64748b",
                           transition: "transform 0.2s",
-                          transform: isHovered ? "translateX(2px)" : "none"
+                          transform: isHovered ? "translateX(2px)" : "none",
+                          display: "flex",
+                          alignItems: "center"
                         }}
                       >
                         <ModuleIcons.ChevronRight />
@@ -894,45 +573,60 @@ export function SilverBrainLandingPage({
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               {hoveredModule.submodules.map((sub, sIdx) => {
                 if (sub.children && sub.children.length > 0) {
-                  const isHovered = hoveredSubmodule?.name === sub.name;
+                  // Groups list their screens inline, so every screen under this module is visible at once.
                   return (
-                    <button
-                      key={sIdx}
-                      onMouseEnter={(e) => {
-                        cancelClose();
-                        const rect = e.currentTarget.getBoundingClientRect();
-                        setSubDrawerTop(rect.top);
-                        setHoveredSubmodule(sub);
-                      }}
-                      onClick={() => {
-                        handleSubmoduleClick(sub.children[0], hoveredModule.name);
-                      }}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        padding: "8px 10px",
-                        borderRadius: 6,
-                        background: isHovered ? "rgba(197,31,40,0.25)" : "rgba(255,255,255,0.03)",
-                        border: isHovered ? "1px solid rgba(197,31,40,0.5)" : "1px solid rgba(255,255,255,0.04)",
-                        color: isHovered ? "#ffffff" : "#f1f5f9",
-                        fontSize: 11.5,
-                        fontWeight: isHovered ? 700 : 500,
-                        cursor: "pointer",
-                        textAlign: "left",
-                        transition: "all 0.15s ease"
-                      }}
-                    >
-                      <span>{sub.name}</span>
-                      <span style={{ display: "flex", alignItems: "center", gap: 5, color: isHovered ? "#ef4444" : "#64748b" }}>
-                        <span style={{ fontSize: 8.5, background: "rgba(16,185,129,0.18)", color: "#34d399", padding: "1px 5px", borderRadius: 3, fontWeight: 700 }}>
-                          2 SCREENS
-                        </span>
-                        <ModuleIcons.ChevronRight />
-                      </span>
-                    </button>
+                    <div key={sIdx} style={{ display: "flex", flexDirection: "column", gap: 3, marginTop: sIdx > 0 ? 8 : 0 }}>
+                      <div style={{ fontSize: 10, fontWeight: 800, color: "#f87171", textTransform: "uppercase", letterSpacing: "0.06em", padding: "2px 10px" }}>
+                        {sub.name}
+                      </div>
+                      {sub.children.map((child, cIdx) => (
+                        <button
+                          key={cIdx}
+                          onClick={() => {
+                            if (!child.ready) return; // screen not built yet
+                            handleSubmoduleClick(child, hoveredModule.name);
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!child.ready) return;
+                            e.currentTarget.style.background = "rgba(197,31,40,0.25)";
+                            e.currentTarget.style.borderColor = "rgba(197,31,40,0.5)";
+                            e.currentTarget.style.color = "#ffffff";
+                            e.currentTarget.style.transform = "translateX(4px)";
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = "rgba(255,255,255,0.03)";
+                            e.currentTarget.style.borderColor = "rgba(255,255,255,0.04)";
+                            e.currentTarget.style.color = child.ready ? "#f1f5f9" : "#64748b";
+                            e.currentTarget.style.transform = "none";
+                          }}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            padding: "6px 10px 6px 18px",
+                            borderRadius: 6,
+                            background: "rgba(255,255,255,0.03)",
+                            border: "1px solid rgba(255,255,255,0.04)",
+                            color: child.ready ? "#f1f5f9" : "#64748b",
+                            fontSize: 11.5,
+                            fontWeight: 500,
+                            cursor: child.ready ? "pointer" : "default",
+                            textAlign: "left",
+                            transition: "all 0.15s ease"
+                          }}
+                        >
+                          <span>{child.name}</span>
+                          {child.ready && (
+                            <span style={{ fontSize: 8.5, background: "rgba(16,185,129,0.18)", color: "#34d399", padding: "1px 5px", borderRadius: 3, fontWeight: 700 }}>
+                              READY
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
                   );
                 }
+
 
                 return (
                   <button
@@ -954,7 +648,7 @@ export function SilverBrainLandingPage({
                       transition: "all 0.15s"
                     }}
                     onMouseEnter={(e) => {
-                      setHoveredSubmodule(null);
+                      if (!sub.ready) return;
                       e.currentTarget.style.background = "rgba(197,31,40,0.25)";
                       e.currentTarget.style.borderColor = "rgba(197,31,40,0.5)";
                       e.currentTarget.style.color = "#ffffff";
@@ -963,12 +657,12 @@ export function SilverBrainLandingPage({
                     onMouseLeave={(e) => {
                       e.currentTarget.style.background = "rgba(255,255,255,0.03)";
                       e.currentTarget.style.borderColor = "rgba(255,255,255,0.04)";
-                      e.currentTarget.style.color = "#f1f5f9";
+                      e.currentTarget.style.color = sub.ready ? "#f1f5f9" : "#64748b";
                       e.currentTarget.style.transform = "none";
                     }}
                   >
                     <span>{sub.name}</span>
-                    {sub.targetPage && (
+                    {sub.ready && (
                       <span
                         style={{
                           fontSize: 9,
@@ -1004,107 +698,6 @@ export function SilverBrainLandingPage({
               >
                 Go &rarr;
               </button>
-            </div>
-          </div>
-        )}
-
-        {/* ========================================================= */}
-        {/* 3RD TIER HOVER DRAWER (OPENING WHEN HOVERING ITEM MASTER)  */}
-        {/* ========================================================= */}
-        {!hideSidebar && hoveredModule && hoveredSubmodule && hoveredSubmodule.children && (
-          <div
-            onMouseEnter={() => {
-              cancelClose();
-              setHoveredSubmodule(hoveredSubmodule);
-            }}
-            onMouseLeave={handleMouseLeave}
-            style={{
-              position: "fixed",
-              top: fitTop(subDrawerTop, 74),
-              maxHeight: fitMaxHeight(fitTop(subDrawerTop, 74)),
-              overflowY: "auto",
-              left: drawerCoords.left + 272,
-              width: 230,
-              background: "#1e293b",
-              borderRadius: 12,
-              padding: "12px",
-              boxShadow: "0 14px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.12)",
-              zIndex: 350,
-              borderLeft: "3px solid #c51f28",
-              animation: "fadeIn 0.15s ease-out"
-            }}
-          >
-            {/* Header */}
-            <div style={{ paddingBottom: 8, marginBottom: 8, borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
-              <p
-                style={{
-                  fontSize: 10,
-                  fontWeight: 800,
-                  color: "#ef4444",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.1em",
-                  margin: 0
-                }}
-              >
-                {hoveredSubmodule.name} Sub-modules
-              </p>
-              <p style={{ fontSize: 11, fontWeight: 600, color: "#94a3b8", margin: "2px 0 0" }}>
-                Select target screen:
-              </p>
-            </div>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              {hoveredSubmodule.children.map((child, cIdx) => (
-                <button
-                  key={cIdx}
-                  onClick={() => {
-                    if (!child.targetPage) return; // screen not built yet
-                    setHoveredSubmodule(null);
-                    handleSubmoduleClick(child, hoveredModule.name);
-                  }}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    padding: "8px 10px",
-                    borderRadius: 6,
-                    background: "rgba(255,255,255,0.03)",
-                    border: "1px solid rgba(255,255,255,0.04)",
-                    color: "#f1f5f9",
-                    fontSize: 11.5,
-                    fontWeight: 500,
-                    cursor: "pointer",
-                    textAlign: "left",
-                    transition: "all 0.15s ease"
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = "rgba(197,31,40,0.25)";
-                    e.currentTarget.style.borderColor = "rgba(197,31,40,0.5)";
-                    e.currentTarget.style.color = "#ffffff";
-                    e.currentTarget.style.transform = "translateX(4px)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = "rgba(255,255,255,0.03)";
-                    e.currentTarget.style.borderColor = "rgba(255,255,255,0.04)";
-                    e.currentTarget.style.color = "#f1f5f9";
-                    e.currentTarget.style.transform = "none";
-                  }}
-                >
-                  <span>{child.name}</span>
-                  <span
-                    style={{
-                      fontSize: 9,
-                      background: child.targetPage ? "#10b981" : "#475569",
-                      color: "#ffffff",
-                      padding: "1px 5px",
-                      borderRadius: 3,
-                      fontWeight: 700
-                    }}
-                  >
-                    {child.targetPage ? "OPEN" : "SOON"}
-                  </span>
-                </button>
-              ))}
             </div>
           </div>
         )}

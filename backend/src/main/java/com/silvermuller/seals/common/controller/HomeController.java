@@ -15,11 +15,8 @@ public class HomeController {
             "service", "Silver Muller Seals ERP Backend API",
             "version", "1.0.0",
             "endpoints", Map.of(
-                "transactionTypes", "/api/inventory/transaction-types",
                 "departments", "/api/inventory/departments",
-                "masters", "/api/inventory/master",
-                "transactions", "/api/inventory/transactions",
-                "companies", "/api/companies"
+                "items", "/api/inventory/items"
             )
         );
     }

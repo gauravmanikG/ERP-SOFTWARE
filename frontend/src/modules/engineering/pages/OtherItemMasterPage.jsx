@@ -2,6 +2,7 @@
 
 import { useResizableColumns, ResizableColGroup, ColumnResizeHandle } from "../../../shared/components/ResizableTable";
 import { useState, useRef, useEffect, useMemo } from "react";
+import SearchableSelect from "../../../shared/components/SearchableSelect";
 import {
   Eye,
   Pencil,
@@ -171,6 +172,23 @@ export const OTHER_ITEM_GROUPS_CONFIG = [
   }
 ];
 
+// Groups & subgroups API (PostgreSQL). Throws with the server's message when a change is refused.
+const GROUPS_API = "http://localhost:4000/api/inventory/item-groups";
+
+async function groupsRequest(method, path = "", body) {
+  const res = await fetch(`${GROUPS_API}${path}`, {
+    method,
+    headers: body ? { "Content-Type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || data.message || `Request failed (${res.status})`);
+  }
+  return res.status === 204 ? null : res.json();
+}
+
+// Default groups and subgroups (starting configuration; the database holds the live list)
 export const INITIAL_GROUPS_DATA = OTHER_ITEM_GROUPS_CONFIG.map((g, idx) => ({
   id: idx + 1,
   name: g.group,
@@ -184,107 +202,6 @@ export const INITIAL_GROUPS_DATA = OTHER_ITEM_GROUPS_CONFIG.map((g, idx) => ({
   }))
 }));
 
-// Bump when the sub-group configuration changes so saved browser copies are refreshed once
-const GROUPS_DATA_VERSION = 2;
-const GROUPS_DATA_VERSION_KEY = "SMS_OTHER_ITEM_GROUPS_DATA_VERSION";
-
-// Sets each saved group's sub-groups from the configuration (matched by group name).
-// Sub-groups the user added on this screen are kept after the configured ones.
-function mergeSubgroupsFromConfig(savedGroups) {
-  return savedGroups.map((g) => {
-    const configured = INITIAL_GROUPS_DATA.find((d) => d.name === g.name);
-    if (!configured) return g;
-    const configuredNames = new Set(configured.subgroups.map((sg) => sg.name.toLowerCase()));
-    const userAdded = (Array.isArray(g.subgroups) ? g.subgroups : []).filter(
-      (sg) => !configuredNames.has(String(sg.name || "").toLowerCase())
-    );
-    return { ...g, code: g.code || configured.code, subgroups: [...configured.subgroups, ...userAdded] };
-  });
-}
-
-export const DEFAULT_PROCESS_OPTIONS = [
-  { code: "PR-1", label: "PR-1 : 1 : Metal Open Type : In-house" },
-  { code: "PR-2", label: "PR-2 : 2 : Metal Close Type : In-house" },
-  { code: "PR-3", label: "PR-3 : 5 : Half Rubber : Open" },
-  { code: "PR-4", label: "PR-4 : 6 : Half Rubber : Close" },
-  { code: "PR-5", label: "PR-5 : 7 : Full Rubber : Open" },
-  { code: "PR-7", label: "PR-7 : 8 : Full Rubber : Close" },
-  { code: "PR-8", label: "PR-8 : 9 : Cassette Seal" },
-  { code: "PR-9", label: "PR-9 : 10 : Combi Seal" },
-  { code: "PR-10", label: "PR-10 : 11 : PTFE Moulded (no inner shell)" },
-  { code: "PR-11", label: "PR-11 : 12 : PTFE Moulded (with inner shell)" },
-  { code: "PR-12", label: "PR-12 : 13 : PTFE Fitted" },
-  { code: "PR-13", label: "PR-13 : 14 : Hub Seal SKF" },
-  { code: "PR-14", label: "PR-14 : 15 : Hub Seal National" },
-  { code: "PR-15", label: "PR-15 : 3: ABS SEAL" },
-  { code: "PR-51", label: "PR-51 : 16 : PTFE Moulded (no inner shell ) Half Rubber" },
-  { code: "PR-16", label: "PR-16 : NA" }
-];
-
-export const DEFAULT_HSN_OPTIONS = [
-  // Rubber Products & Seals (Chapter 40)
-  { code: "40169320", desc: "Rubber seals, oil seals, gaskets, washers" },
-  { code: "40169330", desc: "Rubber O-rings & moulded rubber components" },
-  { code: "40169340", desc: "Gaskets, washers and other seals of vulcanised rubber" },
-  { code: "40169990", desc: "Other articles of vulcanised rubber (bellows, grommets, boots)" },
-  { code: "40021990", desc: "Synthetic rubber compound (NBR, SBR, EPDM, FKM Viton)" },
-  { code: "40051000", desc: "Compounded rubber with carbon black or silica, unvulcanised" },
-  { code: "40027000", desc: "Ethylene-propylene-non-conjugated diene rubber (EPDM)" },
-  { code: "40029990", desc: "Fluorocarbon elastomers (FKM Viton, FFKM)" },
-  { code: "40082110", desc: "Non-cellular rubber sheets for gasket cutting" },
-  { code: "4016", desc: "Vulcanised rubber articles" },
-
-  // Plastics & PTFE / Teflon (Chapter 39)
-  { code: "39269099", desc: "PTFE backup rings, guide rings, wear strips, plastic seals" },
-  { code: "39046100", desc: "Polytetrafluoroethylene (PTFE) raw resin powder" },
-  { code: "39232990", desc: "Packaging polythene bags & packing wraps for seals" },
-  { code: "3926", desc: "Plastics articles" },
-
-  // Iron, Steel, Springs & Fasteners (Chapters 72 & 73)
-  { code: "73202000", desc: "Helical & garter springs for rotary shaft oil seals" },
-  { code: "73209090", desc: "Flat springs, Belleville washers, wave springs" },
-  { code: "73182100", desc: "Spring washers and other lock washers" },
-  { code: "73181500", desc: "Screws, bolts, nuts, rivets, studs for tooling & assemblies" },
-  { code: "73269099", desc: "Deep draw outer metal shells & metal casing inserts" },
-  { code: "72283000", desc: "Alloy steel bars / rods (EN8, EN24, EN31) for tooling" },
-  { code: "72091600", desc: "Cold-rolled steel coils / sheets for stamping outer casings" },
-  { code: "72104900", desc: "Galvanized / zinc coated steel sheets for corrosion resistance" },
-  { code: "7318", desc: "Screws, bolts, nuts, washers" },
-
-  // Tooling, Moulds, Dies & Machinery Spares (Chapter 84)
-  { code: "84807100", desc: "Injection moulds for rubber or plastics" },
-  { code: "84807900", desc: "Compression moulding dies & transfer moulds for seals" },
-  { code: "84841000", desc: "Gaskets of metal sheeting combined with other material" },
-  { code: "84842000", desc: "Mechanical face seals for pumps and agitators" },
-  { code: "84821011", desc: "Ball bearings & roller bearings for CNC & hydraulic presses" },
-  { code: "84669390", desc: "Parts and accessories for machine tools / CNC chucks & collets" },
-  { code: "82073000", desc: "Press tools, punches, blanking dies for power presses" },
-  { code: "8484", desc: "Gaskets and joints of metal sheeting" },
-  { code: "8487", desc: "Machinery parts without electrical connectors" },
-  { code: "8482", desc: "Ball or roller bearings" },
-
-  // Industrial Chemicals, Lubricants & Consumables (Chapters 27, 34, 38)
-  { code: "34039900", desc: "Mould release agents, silicone sprays & anti-stick sprays" },
-  { code: "27101980", desc: "Hydraulic oils (VG 68, VG 46), spindle oils, turbine oils" },
-  { code: "27101990", desc: "Industrial lubricating greases (Lithium, synthetic high-temp)" },
-  { code: "38249990", desc: "Rubber bonding agents (Chemlok / Megum adhesive primers)" },
-  { code: "28030010", desc: "Carbon black for rubber compounding" },
-  { code: "28170010", desc: "Zinc oxide (rubber grade vulcanizing activator)" },
-  { code: "28020010", desc: "Sulphur powder (rubber vulcanization agent)" },
-
-  // Services & Subcontracting (SAC Chapter 99)
-  { code: "998821", desc: "Job work / Subcontracting (rubber moulding & trimming services)" },
-  { code: "998822", desc: "Job work (metal stamping, casing phosphating, zinc plating)" },
-  { code: "998719", desc: "Maintenance, calibration and repair of production machinery" },
-  { code: "998314", desc: "Testing, lab analysis & metallurgical inspection services" }
-];
-
-export const DEFAULT_PROCUREMENT_OPTIONS = [
-  "IN HOUSE",
-  "OUTSOURCE",
-  "BUY/INHOUSE",
-  "IMPORTED"
-];
 
 export const UOM_OPTIONS = ["PCS", "NOS", "SET", "MTR", "KGS", "KG", "LTR", "BOX", "ROLL", "DRUM"];
 export const STYLE_OPTIONS = ["1. Rubber", "2. Metal", "3. Other"];
@@ -401,8 +318,6 @@ const OTHER_ITEM_MASTER_PAGE_1_COLUMNS = [
   { key: "uom", width: 80 },
   { key: "handlesort_current_stock", width: 200 },
   { key: "rate", width: 96 },
-  { key: "supplier", width: 96 },
-  { key: "location", width: 96 },
   { key: "status", width: 82 },
   { key: "actions", width: 100 },
 ];
@@ -425,12 +340,6 @@ export function OtherItemMasterPage({ onBackToHome, onOpenSidebar, sidebarOpen, 
   // Master item dataset stored in state directly from PostgreSQL database (no localStorage)
   const [items, setItems] = useState([]);
 
-  // Purge any stale localStorage cached items
-  useEffect(() => {
-    try {
-      localStorage.removeItem("SMS_OTHER_ITEM_MASTER_DATA_REAL");
-    } catch {}
-  }, []);
 
   // Fetch all existing Non-FG/Other items directly from backend PostgreSQL database
   const fetchOtherFromApi = async () => {
@@ -438,23 +347,28 @@ export function OtherItemMasterPage({ onBackToHome, onOpenSidebar, sidebarOpen, 
       const res = await fetch("http://localhost:4000/api/inventory/items?type=OTHER");
       if (res.ok) {
         const apiItems = await res.json();
-        if (Array.isArray(apiItems)) {
+        if (Array.isArray(apiItems)) { // an empty list is applied too, so the last deleted item disappears
+          // Every stored field is kept, so opening an item for edit starts from what is saved, not from blanks.
           const list = apiItems.map((apiIt, idx) => ({
+            ...Object.fromEntries(Object.entries(apiIt).filter(([, v]) => v !== null && v !== undefined)),
             id: apiIt.id,
             sNo: idx + 1,
             item_code: apiIt.item_code || apiIt.sms_new_part_no || `ITM-${apiIt.id}`,
             item_name: apiIt.item_name || apiIt.description_size || "",
             description: apiIt.description_size || apiIt.item_name || "",
+            group: apiIt.group_name || "",
             category: apiIt.category || "Raw Material",
             sub_category: apiIt.subgroup || "",
             material_grade: apiIt.material || "",
+            height: apiIt.width || "",
             uom: apiIt.purchased_uom || apiIt.uom || "PCS",
-            current_stock: 0,
-            min_stock: 10,
-            reorder_qty: 20,
+            current_stock: Number(apiIt.opening_balance || 0),
+            min_stock: Number(apiIt.min_stock_lvl || 0),
+            reorder_qty: Number(apiIt.reorder_stock_lvl || 0),
             unit_price: Number(apiIt.price || apiIt.est_rate || 0),
+            rate: apiIt.price ?? "",
             hsn_code: apiIt.hsn_code || "",
-            status: "Active"
+            status: apiIt.status || "Active"
           }));
           setItems(list);
         }
@@ -468,93 +382,62 @@ export function OtherItemMasterPage({ onBackToHome, onOpenSidebar, sidebarOpen, 
     fetchOtherFromApi();
   }, []);
 
-  // Master lists loaded dynamically from PostgreSQL / APIs with comprehensive fallback
-  const [procurementList, setProcurementList] = useState(DEFAULT_PROCUREMENT_OPTIONS);
-  const [processList, setProcessList] = useState(DEFAULT_PROCESS_OPTIONS);
-  const [hsnList, setHsnList] = useState(DEFAULT_HSN_OPTIONS);
+  // Master lists come only from PostgreSQL, so an entry deleted in its master never shows here
+  const [procurementList, setProcurementList] = useState([]);
+  const [processList, setProcessList] = useState([]);
+  const [hsnList, setHsnList] = useState([]);
 
   useEffect(() => {
     fetch("http://localhost:4000/api/inventory/procurement-master")
-      .then((res) => (res.ok ? res.json() : []))
+      .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (Array.isArray(data) && data.length > 0) {
-          const list = data.map((d) => d.procurementType || d.procurementName).filter(Boolean);
-          if (list.length > 0) setProcurementList(Array.from(new Set(list)));
+        if (Array.isArray(data)) {
+          setProcurementList(Array.from(new Set(data.map((d) => d.procurementType || d.procurementName).filter(Boolean))));
         }
       })
       .catch((err) => console.warn("Could not fetch procurement master:", err));
 
     fetch("http://localhost:4000/api/inventory/process-master")
-      .then((res) => (res.ok ? res.json() : []))
+      .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (Array.isArray(data) && data.length > 0) {
-          const list = data.map((p) => ({
-            code: p.processCode,
-            label: `${p.processCode} : ${p.processDescription || ""}`
-          }));
-          if (list.length > 0) setProcessList(list);
+        if (Array.isArray(data)) {
+          setProcessList(data.map((p) => ({ code: p.processCode, label: `${p.processCode} : ${p.processDescription || ""}` })));
         }
       })
       .catch((err) => console.warn("Could not fetch process master:", err));
 
     fetch("http://localhost:4000/api/purchase/hsn-master")
-      .then((res) => (res.ok ? res.json() : []))
+      .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (Array.isArray(data) && data.length > 0) {
-          const list = data
-            .map((h) => ({
-              code: String(h.hsnSacCode || h.hsnCode || h.code || "").trim(),
-              desc: String(h.description || h.desc || "").trim()
-            }))
-            .filter((h) => Boolean(h.code));
-          if (list.length > 0) {
-            // Merge with default list to guarantee nothing is missing
-            const seen = new Set();
-            const merged = [];
-            list.concat(DEFAULT_HSN_OPTIONS).forEach((item) => {
-              if (!seen.has(item.code)) {
-                seen.add(item.code);
-                merged.push(item);
-              }
-            });
-            setHsnList(merged);
-          }
+        if (Array.isArray(data)) {
+          setHsnList(data
+            .map((h) => ({ code: String(h.hsnSacCode || h.hsnCode || h.code || "").trim(), desc: String(h.description || h.desc || "").trim() }))
+            .filter((h) => Boolean(h.code)));
         }
       })
       .catch((err) => console.warn("Could not fetch HSN master:", err));
   }, []);
 
-  // Master Groups & Subgroups dataset state (with localStorage persistence)
-  const [groups, setGroups] = useState(() => {
-    try {
-      const saved = localStorage.getItem("SMS_OTHER_ITEM_GROUPS_DATA_USER");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          // Older saved copies were stored without sub-groups; refill them once from the sheet configuration
-          const savedVersion = Number(localStorage.getItem(GROUPS_DATA_VERSION_KEY) || 0);
-          return savedVersion < GROUPS_DATA_VERSION ? mergeSubgroupsFromConfig(parsed) : parsed;
-        }
-      }
-    } catch {
-      // ignore
-    }
-    return INITIAL_GROUPS_DATA;
-  });
+  // Groups & subgroups are stored in PostgreSQL (item_group, item_subgroup); every change is saved on the server
+  const [groups, setGroups] = useState([]);
+
+  const reloadGroups = async () => {
+    setGroups(await groupsRequest("GET"));
+  };
+
+  useEffect(() => {
+    reloadGroups().catch((e) => console.error("Groups could not be loaded:", e));
+  }, []);
+
+  // Group list for the item form dropdowns: the database list, or the built-in configuration until it has loaded
+  const groupList = groups.length
+    ? groups.map((g) => ({ group: g.name, code: g.code, subgroups: g.subgroups || [] }))
+    : OTHER_ITEM_GROUPS_CONFIG;
 
   // Groups whose sub-group list is expanded in the Groups tab (sub-groups beyond the first few are hidden)
   const [expandedSubgroupGroups, setExpandedSubgroupGroups] = useState({});
   const SUBGROUP_PREVIEW_COUNT = 6;
 
-  // Save groups to localStorage
-  useEffect(() => {
-    try {
-      localStorage.setItem("SMS_OTHER_ITEM_GROUPS_DATA_USER", JSON.stringify(groups));
-      localStorage.setItem(GROUPS_DATA_VERSION_KEY, String(GROUPS_DATA_VERSION));
-    } catch {
-      // ignore
-    }
-  }, [groups]);
 
   // Group search term
   const [groupSearchTerm, setGroupSearchTerm] = useState("");
@@ -678,7 +561,7 @@ export function OtherItemMasterPage({ onBackToHome, onOpenSidebar, sidebarOpen, 
     setIsGroupModalOpen(true);
   };
 
-  const handleSaveGroup = (e) => {
+  const handleSaveGroup = async (e) => {
     e.preventDefault();
     const errors = {};
     if (!groupFormData.name.trim()) errors.name = "Group Name is required";
@@ -690,38 +573,38 @@ export function OtherItemMasterPage({ onBackToHome, onOpenSidebar, sidebarOpen, 
     }
 
     const formattedCode = groupFormData.code.trim().toUpperCase();
+    const payload = {
+      name: groupFormData.name.trim(),
+      code: formattedCode,
+      description: groupFormData.description.trim()
+    };
 
-    if (editingGroup) {
-      // Edit Group
-      setGroups((prev) =>
-        prev.map((g) =>
-          g.id === editingGroup.id
-            ? { ...g, name: groupFormData.name.trim(), code: formattedCode, description: groupFormData.description.trim() }
-            : g
-        )
-      );
-      showToast(`Group "${groupFormData.name}" (${formattedCode}) updated successfully.`);
-    } else {
-      // Create New Group
-      const newId = groups.length ? Math.max(...groups.map((g) => g.id)) + 1 : 1;
-      const newGroup = {
-        id: newId,
-        name: groupFormData.name.trim(),
-        code: formattedCode,
-        description: groupFormData.description.trim(),
-        subgroups: []
-      };
-      setGroups((prev) => [...prev, newGroup]);
-      showToast(`Group "${newGroup.name}" (${formattedCode}) created successfully.`);
+    try {
+      if (editingGroup) {
+        await groupsRequest("PUT", `/${editingGroup.id}`, payload);
+        showToast(`Group "${payload.name}" (${formattedCode}) updated successfully.`);
+      } else {
+        await groupsRequest("POST", "", payload);
+        showToast(`Group "${payload.name}" (${formattedCode}) created successfully.`);
+      }
+      await reloadGroups();
+    } catch (err) {
+      setGroupFormErrors({ name: err.message });
+      return;
     }
 
     setIsGroupModalOpen(false);
   };
 
-  const handleConfirmDeleteGroup = () => {
+  const handleConfirmDeleteGroup = async () => {
     if (!deleteGroupTarget) return;
-    setGroups((prev) => prev.filter((g) => g.id !== deleteGroupTarget.id));
-    showToast(`Group "${deleteGroupTarget.name}" deleted.`);
+    try {
+      await groupsRequest("DELETE", `/${deleteGroupTarget.id}`);
+      await reloadGroups();
+      showToast(`Group "${deleteGroupTarget.name}" deleted.`);
+    } catch (err) {
+      showToast(err.message);
+    }
     setDeleteGroupTarget(null);
   };
 
@@ -752,7 +635,7 @@ export function OtherItemMasterPage({ onBackToHome, onOpenSidebar, sidebarOpen, 
     setIsSubgroupModalOpen(true);
   };
 
-  const handleSaveSubgroup = (e) => {
+  const handleSaveSubgroup = async (e) => {
     e.preventDefault();
     const errors = {};
     if (!subgroupFormData.groupId) errors.groupId = "Parent Group is required";
@@ -765,65 +648,49 @@ export function OtherItemMasterPage({ onBackToHome, onOpenSidebar, sidebarOpen, 
 
     const targetGroupId = Number(subgroupFormData.groupId);
     const formattedCode = subgroupFormData.code.trim().toUpperCase();
+    const payload = {
+      name: subgroupFormData.name.trim(),
+      code: formattedCode,
+      description: editingSubgroup ? editingSubgroup.subgroup.description || "" : ""
+    };
 
-    setGroups((prev) =>
-      prev.map((g) => {
-        if (g.id !== targetGroupId) {
-          // If editing and changed group, remove from old group
-          if (editingSubgroup && editingSubgroup.group.id === g.id && editingSubgroup.group.id !== targetGroupId) {
-            return {
-              ...g,
-              subgroups: g.subgroups.filter((sg) => sg.id !== editingSubgroup.subgroup.id)
-            };
-          }
-          return g;
-        }
-
-        // Target group update
-        let updatedSubgroups = [...g.subgroups];
-        if (editingSubgroup && editingSubgroup.group.id === targetGroupId) {
-          // Update existing subgroup inside same group
-          updatedSubgroups = updatedSubgroups.map((sg) =>
-            sg.id === editingSubgroup.subgroup.id
-              ? { ...sg, name: subgroupFormData.name.trim(), code: formattedCode }
-              : sg
-          );
-        } else {
-          // Add new subgroup to target group
-          const newSgId = Math.floor(Math.random() * 90000) + 10000;
-          updatedSubgroups.push({
-            id: newSgId,
-            name: subgroupFormData.name.trim(),
-            code: formattedCode
-          });
-        }
-
-        return { ...g, subgroups: updatedSubgroups };
-      })
-    );
+    try {
+      if (editingSubgroup) {
+        await groupsRequest("PUT", `/subgroups/${editingSubgroup.subgroup.id}`, { ...payload, groupId: targetGroupId });
+      } else {
+        await groupsRequest("POST", `/${targetGroupId}/subgroups`, payload);
+      }
+      await reloadGroups();
+    } catch (err) {
+      setSubgroupFormErrors({ name: err.message });
+      return;
+    }
 
     showToast(`Sub-Group "${subgroupFormData.name}" saved successfully.`);
     setIsSubgroupModalOpen(false);
   };
 
-  const handleConfirmDeleteSubgroup = () => {
+  const handleConfirmDeleteSubgroup = async () => {
     if (!deleteSubgroupTarget) return;
     const { group, subgroup } = deleteSubgroupTarget;
-    setGroups((prev) =>
-      prev.map((g) =>
-        g.id === group.id
-          ? { ...g, subgroups: g.subgroups.filter((sg) => sg.id !== subgroup.id) }
-          : g
-      )
-    );
-    showToast(`Sub-Group "${subgroup.name}" removed from ${group.name}.`);
+    try {
+      await groupsRequest("DELETE", `/subgroups/${subgroup.id}`);
+      await reloadGroups();
+      showToast(`Sub-Group "${subgroup.name}" removed from ${group.name}.`);
+    } catch (err) {
+      showToast(err.message);
+    }
     setDeleteSubgroupTarget(null);
   };
 
-  const handleResetDefaultGroups = () => {
+  const handleResetDefaultGroups = async () => {
     if (window.confirm("Are you sure you want to reset all groups & subgroups to system defaults?")) {
-      setGroups(INITIAL_GROUPS_DATA);
-      showToast("Groups & Subgroups reset to system default configuration.");
+      try {
+        setGroups(await groupsRequest("POST", "/reset"));
+        showToast("Groups & Subgroups reset to system default configuration.");
+      } catch (err) {
+        showToast(err.message);
+      }
     }
   };
 
@@ -946,7 +813,8 @@ export function OtherItemMasterPage({ onBackToHome, onOpenSidebar, sidebarOpen, 
   const rawMaterialsCount = items.filter((i) => i.category === "Raw Material").length;
   const consumablesCount = items.filter((i) => i.category === "Consumables" || i.category === "Consumables 🧪").length;
   const packagingCount = items.filter((i) => i.category === "Packaging Material" || i.category === "Packing Materials 📦").length;
-  const minStockAlertsCount = items.filter((i) => Number(i.current_stock) <= Number(i.min_stock)).length;
+  // Only items with a stored min stock level can be below it.
+  const minStockAlertsCount = items.filter((i) => Number(i.min_stock) > 0 && Number(i.current_stock) <= Number(i.min_stock)).length;
 
   // Toggle selection
   const toggleSelectRow = (id) => {
@@ -978,7 +846,7 @@ export function OtherItemMasterPage({ onBackToHome, onOpenSidebar, sidebarOpen, 
 
   // Cascading Selection Handlers
   const handleGroupChange = (newGroupName) => {
-    const groupObj = OTHER_ITEM_GROUPS_CONFIG.find((g) => g.group === newGroupName);
+    const groupObj = groupList.find((g) => g.group === newGroupName);
     // Sub-group and item code stay blank until the user picks a sub-group
     setFormData((prev) => ({
       ...prev,
@@ -1000,7 +868,7 @@ export function OtherItemMasterPage({ onBackToHome, onOpenSidebar, sidebarOpen, 
       setFormData((prev) => ({ ...prev, subgroup: "", sub_subgroup: "", sub_group_code: "", sub_sub_group_code: "", sub_category: "", item_code: "" }));
       return;
     }
-    const groupObj = OTHER_ITEM_GROUPS_CONFIG.find((g) => g.group === formData.group) || OTHER_ITEM_GROUPS_CONFIG[0];
+    const groupObj = groupList.find((g) => g.group === formData.group) || groupList[0];
     const subObj = (groupObj.subgroups && groupObj.subgroups.find((s) => s.name === newSubName)) || { name: newSubName, code: groupObj.code };
     const newCode = generateOtherItemCode(subObj.code, groupObj.code, items);
 
@@ -1016,7 +884,7 @@ export function OtherItemMasterPage({ onBackToHome, onOpenSidebar, sidebarOpen, 
   };
 
   const handleSubSubGroupChange = (newSubSubName) => {
-    const groupObj = OTHER_ITEM_GROUPS_CONFIG.find((g) => g.group === formData.group) || OTHER_ITEM_GROUPS_CONFIG[0];
+    const groupObj = groupList.find((g) => g.group === formData.group) || groupList[0];
     const subObj = (groupObj.subgroups && groupObj.subgroups.find((s) => s.name === newSubSubName)) || { name: newSubSubName, code: groupObj.code };
 
     setFormData((prev) => ({
@@ -1058,8 +926,8 @@ export function OtherItemMasterPage({ onBackToHome, onOpenSidebar, sidebarOpen, 
     setEditingId(item.id);
     const groupName = item.group || item.category || "Raw Material";
     const foundGroup =
-      OTHER_ITEM_GROUPS_CONFIG.find((g) => g.group.toLowerCase() === groupName.toLowerCase()) ||
-      OTHER_ITEM_GROUPS_CONFIG[0];
+      groupList.find((g) => g.group.toLowerCase() === groupName.toLowerCase()) ||
+      groupList[0];
     const subName = item.subgroup || item.sub_category || (foundGroup.subgroups[0]?.name || "");
     const foundSub =
       (foundGroup.subgroups && foundGroup.subgroups.find((sg) => sg.name.toLowerCase() === subName.toLowerCase())) ||
@@ -1128,25 +996,28 @@ export function OtherItemMasterPage({ onBackToHome, onOpenSidebar, sidebarOpen, 
   // Confirm delete (persists to PostgreSQL item_master)
   const handleConfirmDelete = async () => {
     if (!deleteTarget) return;
+    const target = deleteTarget;
+    setDeleteTarget(null);
+    let message;
     try {
-      const code = deleteTarget.item_code;
-      if (code) {
-        await fetch(`http://localhost:4000/api/inventory/items/by-code/${encodeURIComponent(code)}`, {
-          method: "DELETE"
+      const res = await fetch(`http://localhost:4000/api/inventory/items/${target.id}`, { method: "DELETE" });
+      if (res.ok) {
+        setSelectedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(target.id);
+          return next;
         });
+        if (detailItem?.id === target.id) setDetailItem(null);
+        message = `Item "${target.item_code}" deleted.`;
+      } else {
+        const err = await res.json().catch(() => ({}));
+        message = err.message || `Item "${target.item_code}" could not be deleted (HTTP ${res.status}).`;
       }
     } catch (e) {
-      console.warn("Delete item error:", e);
+      message = `Item "${target.item_code}" was not deleted: the server could not be reached.`;
     }
     fetchOtherFromApi();
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      next.delete(deleteTarget.id);
-      return next;
-    });
-    if (detailItem?.id === deleteTarget.id) setDetailItem(null);
-    showToast(`Item "${deleteTarget.item_code}" deleted successfully from PostgreSQL database.`);
-    setDeleteTarget(null);
+    showToast(message);
   };
 
   // Form submit (Create or Update persists directly to PostgreSQL item_master)
@@ -1157,6 +1028,7 @@ export function OtherItemMasterPage({ onBackToHome, onOpenSidebar, sidebarOpen, 
     const desc = formData.item_description || formData.item_name;
     if (!desc || !desc.trim()) errors.item_description = "Item Description is required";
     if (!formData.group) errors.group = "Group is required";
+    if (!editingId && !formData.hsn_code) errors.hsn_code = "HSN / SAC Code is required";
 
     if (Object.keys(errors).length > 0) {
       setFormErrors(errors);
@@ -1178,7 +1050,7 @@ export function OtherItemMasterPage({ onBackToHome, onOpenSidebar, sidebarOpen, 
       unit_price: Number(formData.rate || formData.unit_price) || 0,
       price: Number(formData.rate || formData.unit_price) || 0,
       rate: Number(formData.rate || formData.unit_price) || 0,
-      mrp: Number(formData.mrp) || 0,
+      mrp: formData.mrp,
       material: formData.material,
       material_grade: formData.material,
       color: formData.color,
@@ -1208,35 +1080,27 @@ export function OtherItemMasterPage({ onBackToHome, onOpenSidebar, sidebarOpen, 
       status: formData.status || "Active"
     };
 
+    // The list only changes once the server has saved the item; a refused save keeps the form open with the reason.
+    let res;
     try {
-      const res = await fetch("http://localhost:4000/api/inventory/items", {
+      res = await fetch("http://localhost:4000/api/inventory/items", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       });
-
-      if (res.ok) {
-        const saved = await res.json();
-        window.dispatchEvent(new CustomEvent("SMS_ITEM_MASTER_UPDATED", { detail: saved || payload }));
-        fetchOtherFromApi();
-        showToast(`Item "${formData.item_code}" saved successfully to PostgreSQL database.`);
-      } else {
-        fetchOtherFromApi();
-        showToast(`Item "${formData.item_code}" saved.`);
-      }
     } catch (err) {
-      console.warn("Error calling item master api:", err);
-      // Optimistic update
-      setItems((prev) => {
-        if (editingId) {
-          return prev.map((it) => (it.id === editingId ? { ...it, ...payload } : it));
-        } else {
-          return [{ id: Date.now(), sNo: prev.length + 1, ...payload }, ...prev];
-        }
-      });
-      showToast(`Item "${formData.item_code}" saved.`);
+      setFormErrors({ item_code: "Not saved: the server could not be reached." });
+      return;
     }
-
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      setFormErrors({ item_code: err.message || `Not saved (HTTP ${res.status}).` });
+      return;
+    }
+    const saved = await res.json().catch(() => null);
+    window.dispatchEvent(new CustomEvent("SMS_ITEM_MASTER_UPDATED", { detail: saved || payload }));
+    fetchOtherFromApi();
+    showToast(`Item "${formData.item_code}" saved.`);
     setIsModalOpen(false);
   };
 
@@ -1252,11 +1116,9 @@ export function OtherItemMasterPage({ onBackToHome, onOpenSidebar, sidebarOpen, 
       "Material Grade",
       "HSN Code",
       "UOM",
-      "Current Stock",
+      "Opening Stock",
       "Min Stock",
       "Unit Price",
-      "Default Supplier",
-      "Storage Location",
       "Status"
     ];
 
@@ -1273,8 +1135,6 @@ export function OtherItemMasterPage({ onBackToHome, onOpenSidebar, sidebarOpen, 
       item.current_stock ?? 0,
       item.min_stock ?? 0,
       item.unit_price ?? 0,
-      `"${(item.default_supplier || "").replace(/"/g, '""')}"`,
-      `"${(item.storage_location || "").replace(/"/g, '""')}"`,
       `"${item.status || "Active"}"`
     ]);
 
@@ -1324,7 +1184,7 @@ export function OtherItemMasterPage({ onBackToHome, onOpenSidebar, sidebarOpen, 
         display: "flex",
         flexDirection: "column",
         background: "#0f172a",
-        padding: "12px 16px",
+        padding: 0,
         boxSizing: "border-box",
         overflow: "hidden",
         fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
@@ -1364,9 +1224,9 @@ export function OtherItemMasterPage({ onBackToHome, onOpenSidebar, sidebarOpen, 
           flexDirection: "column",
           minHeight: 0,
           overflow: "hidden",
-          borderRadius: 12,
-          border: "1px solid #e2e8f0",
-          boxShadow: "0 4px 20px rgba(0,0,0,0.06)",
+          borderRadius: 0,
+          border: "none",
+          boxShadow: "none",
           background: "#ffffff"
         }}
       >
@@ -1805,12 +1665,10 @@ export function OtherItemMasterPage({ onBackToHome, onOpenSidebar, sidebarOpen, 
                     <th style={{ padding: "10px 12px", textAlign: "left", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.05em", fontSize: 11 }}>HSN<ColumnResizeHandle colKey="hsn" resize={otherItemMasterPage1Resize} /></th>
                     <th style={{ padding: "10px 12px", textAlign: "left", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.05em", fontSize: 11 }}>UOM<ColumnResizeHandle colKey="uom" resize={otherItemMasterPage1Resize} /></th>
                     <th style={{ padding: "10px 12px", textAlign: "left", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.05em", fontSize: 11, cursor: "pointer" }} onClick={() => handleSort("current_stock")}>
-                      Stock {sortField === "current_stock" && (sortDirection === "asc" ? "↑" : "↓")}
+                      Opening Stock {sortField === "current_stock" && (sortDirection === "asc" ? "↑" : "↓")}
                       <ColumnResizeHandle colKey="handlesort_current_stock" resize={otherItemMasterPage1Resize} />
                     </th>
                     <th style={{ padding: "10px 12px", textAlign: "left", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.05em", fontSize: 11 }}>Rate (₹)<ColumnResizeHandle colKey="rate" resize={otherItemMasterPage1Resize} /></th>
-                    <th style={{ padding: "10px 12px", textAlign: "left", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.05em", fontSize: 11 }}>Supplier<ColumnResizeHandle colKey="supplier" resize={otherItemMasterPage1Resize} /></th>
-                    <th style={{ padding: "10px 12px", textAlign: "left", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.05em", fontSize: 11 }}>Location<ColumnResizeHandle colKey="location" resize={otherItemMasterPage1Resize} /></th>
                     <th style={{ padding: "10px 12px", textAlign: "left", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.05em", fontSize: 11 }}>Status<ColumnResizeHandle colKey="status" resize={otherItemMasterPage1Resize} /></th>
                     <th style={{ padding: "10px 12px", textAlign: "center", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.05em", fontSize: 11, width: 100 }}>Actions<ColumnResizeHandle colKey="actions" resize={otherItemMasterPage1Resize} /></th>
                   </tr>
@@ -1818,14 +1676,14 @@ export function OtherItemMasterPage({ onBackToHome, onOpenSidebar, sidebarOpen, 
                 <tbody>
                   {paginatedItems.length === 0 ? (
                     <tr>
-                      <td colSpan={15} style={{ textAlign: "center", padding: "40px 0", color: "#64748b", fontSize: 13 }}>
+                      <td colSpan={13} style={{ textAlign: "center", padding: "40px 0", color: "#64748b", fontSize: 13 }}>
                         No items found matching your filter criteria.
                       </td>
                     </tr>
                   ) : (
                     paginatedItems.map((item, idx) => {
                       const isSelected = selectedIds.has(item.id);
-                      const isStockLow = Number(item.current_stock) <= Number(item.min_stock);
+                      const isStockLow = Number(item.min_stock) > 0 && Number(item.current_stock) <= Number(item.min_stock);
 
                       return (
                         <tr
@@ -1865,10 +1723,6 @@ export function OtherItemMasterPage({ onBackToHome, onOpenSidebar, sidebarOpen, 
                           <td style={{ padding: "10px 12px", fontWeight: 700, color: "#0f172a" }}>
                             ₹{Number(item.unit_price || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                           </td>
-                          <td style={{ padding: "10px 12px", color: "#334155", maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis" }} title={item.default_supplier}>
-                            {item.default_supplier || "-"}
-                          </td>
-                          <td style={{ padding: "10px 12px", color: "#64748b", fontSize: 11.5 }}>{item.storage_location || "-"}</td>
                           <td style={{ padding: "10px 12px" }}>
                             <span style={{ padding: "2px 7px", borderRadius: 4, fontSize: 10.5, fontWeight: 700, background: item.status === "Active" ? "rgba(16,185,129,0.12)" : "rgba(239,68,68,0.12)", color: item.status === "Active" ? "#059669" : "#dc2626" }}>
                               {item.status || "Active"}
@@ -2508,7 +2362,7 @@ export function OtherItemMasterPage({ onBackToHome, onOpenSidebar, sidebarOpen, 
       {/* MODAL 1: ADD NEW / EDIT ITEM MASTER (SINGLE TAB WITH GROUPED ATTRIBUTES) */}
       {isModalOpen && (() => {
         const currentGroupObj =
-          OTHER_ITEM_GROUPS_CONFIG.find((g) => g.group === formData.group) || OTHER_ITEM_GROUPS_CONFIG[0];
+          groupList.find((g) => g.group === formData.group) || groupList[0];
         const currentSubgroups = currentGroupObj ? currentGroupObj.subgroups : [];
 
         const fieldInputStyle = {
@@ -2685,7 +2539,7 @@ export function OtherItemMasterPage({ onBackToHome, onOpenSidebar, sidebarOpen, 
                       style={fieldInputStyle}
                     >
                       <option value="">-- Select Group --</option>
-                      {OTHER_ITEM_GROUPS_CONFIG.map((g) => (
+                      {groupList.map((g) => (
                         <option key={g.group} value={g.group}>
                           {g.group}
                         </option>
@@ -3219,22 +3073,21 @@ export function OtherItemMasterPage({ onBackToHome, onOpenSidebar, sidebarOpen, 
                     </select>
                   </div>
                   <div>
-                    <label style={fieldLabelStyle}>HSN / SAC Code</label>
-                    <select
+                    <label style={fieldLabelStyle}>HSN / SAC Code{!editingId && " *"}</label>
+                    <SearchableSelect
                       value={formData.hsn_code}
                       onChange={(e) => handleInputChange("hsn_code", e.target.value)}
-                      style={fieldInputStyle}
-                    >
-                      <option value="">-- Select HSN / SAC Code --</option>
-                      {formData.hsn_code && !hsnList.some((h) => h.code === formData.hsn_code) && (
-                        <option value={formData.hsn_code}>{formData.hsn_code}</option>
-                      )}
-                      {hsnList.map((h) => (
-                        <option key={h.code} value={h.code}>
-                          {h.code} {h.desc ? `- ${h.desc}` : ""}
-                        </option>
-                      ))}
-                    </select>
+                      placeholder="Search HSN / SAC code or description"
+                      options={[
+                        ...(formData.hsn_code && !hsnList.some((h) => h.code === formData.hsn_code) ? [{ value: formData.hsn_code, label: formData.hsn_code }] : []),
+                        ...hsnList.map((h) => ({ value: h.code, label: h.code, sub: h.desc }))
+                      ]}
+                    />
+                    {formErrors.hsn_code && (
+                      <span style={{ fontSize: 10, color: "#ef4444", marginTop: 2, display: "block" }}>
+                        {formErrors.hsn_code}
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -3339,8 +3192,8 @@ export function OtherItemMasterPage({ onBackToHome, onOpenSidebar, sidebarOpen, 
                       type="button"
                       onClick={() => {
                         const defaultGroup =
-                          OTHER_ITEM_GROUPS_CONFIG.find((g) => g.group === "Raw Material") ||
-                          OTHER_ITEM_GROUPS_CONFIG[0];
+                          groupList.find((g) => g.group === "Raw Material") ||
+                          groupList[0];
                         const defaultSub = defaultGroup.subgroups[0];
                         const newCode = generateOtherItemCode(defaultSub.code, defaultGroup.code, items);
                         setFormData({
@@ -3419,11 +3272,9 @@ export function OtherItemMasterPage({ onBackToHome, onOpenSidebar, sidebarOpen, 
               <div><strong style={{ color: "#64748b" }}>Material Grade:</strong> <div style={{ color: "#0f172a", fontWeight: 700 }}>{detailItem.material_grade || "-"}</div></div>
               <div><strong style={{ color: "#64748b" }}>HSN Code:</strong> <div style={{ color: "#0f172a", fontWeight: 700 }}>{detailItem.hsn_code || "-"}</div></div>
               <div><strong style={{ color: "#64748b" }}>UOM:</strong> <div style={{ color: "#0f172a", fontWeight: 700 }}>{detailItem.uom}</div></div>
-              <div><strong style={{ color: "#64748b" }}>Current Stock:</strong> <div style={{ color: "#059669", fontWeight: 800 }}>{detailItem.current_stock} {detailItem.uom}</div></div>
+              <div><strong style={{ color: "#64748b" }}>Opening Stock:</strong> <div style={{ color: "#059669", fontWeight: 800 }}>{detailItem.current_stock} {detailItem.uom}</div></div>
               <div><strong style={{ color: "#64748b" }}>Min Stock Level:</strong> <div style={{ color: "#dc2626", fontWeight: 800 }}>{detailItem.min_stock} {detailItem.uom}</div></div>
               <div><strong style={{ color: "#64748b" }}>Unit Rate:</strong> <div style={{ color: "#0f172a", fontWeight: 800 }}>₹{Number(detailItem.unit_price || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</div></div>
-              <div><strong style={{ color: "#64748b" }}>Default Supplier:</strong> <div style={{ color: "#0f172a", fontWeight: 600 }}>{detailItem.default_supplier || "-"}</div></div>
-              <div><strong style={{ color: "#64748b" }}>Storage Location:</strong> <div style={{ color: "#0f172a", fontWeight: 600 }}>{detailItem.storage_location || "-"}</div></div>
               <div style={{ gridColumn: "span 2" }}><strong style={{ color: "#64748b" }}>Notes / Specifications:</strong> <div style={{ color: "#334155", background: "#f8fafc", padding: 10, borderRadius: 6, marginTop: 4, border: "1px solid #e2e8f0" }}>{detailItem.notes || "No extra technical notes specified."}</div></div>
             </div>
             <div style={{ padding: "12px 22px", background: "#f8fafc", borderTop: "1px solid #e2e8f0", display: "flex", justifyContent: "flex-end", gap: 10 }}>

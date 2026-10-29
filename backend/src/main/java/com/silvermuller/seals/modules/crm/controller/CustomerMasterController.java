@@ -13,7 +13,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @RestController
-@CrossOrigin(origins = "*")
 @RequestMapping({"/api/crm/customers", "/api/customers"})
 public class CustomerMasterController {
 

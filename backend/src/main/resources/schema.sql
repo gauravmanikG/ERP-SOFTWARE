@@ -1,169 +1,22 @@
+-- =============================================================================
+-- schema.sql: DDL ONLY (CREATE / ALTER / INDEX / VIEW). Runs on every startup.
+-- Reference data lives in seed-data.sql (insert-only). One-time data changes are
+-- registered in StartupDataMigrations. Enforced by StartupSafetyGuardTest.
+-- =============================================================================
 -- Spring Boot runs this automatically on every startup (spring.sql.init.mode=always
 -- in application.properties). Safe to re-run — everything is IF NOT EXISTS.
 -- You can also run it by hand with psql if you prefer.
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto; -- for gen_random_uuid()
 
-CREATE TABLE IF NOT EXISTS companies (
-  id                       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-
-  -- Basic Company Information
-  company_code             TEXT NOT NULL,
-  company_name             TEXT NOT NULL,
-  legal_name                TEXT DEFAULT '',
-  short_name                TEXT DEFAULT '',
-  business_type              TEXT DEFAULT 'Manufacturing',
-  industry                  TEXT DEFAULT '',
-  logo                      TEXT DEFAULT '',        -- base64 data URL of the uploaded logo
-  status                    TEXT DEFAULT 'Active',
-
-  -- Legal Information
-  pan_no                    TEXT DEFAULT '',
-  gstin                     TEXT DEFAULT '',
-  cin_llpin                 TEXT DEFAULT '',
-  tan                       TEXT DEFAULT '',
-  msme_registration         TEXT DEFAULT '',
-  factory_license_no        TEXT DEFAULT '',
-  iec                       TEXT DEFAULT '',
-  pf_establishment_code     TEXT DEFAULT '',
-  esi_code                  TEXT DEFAULT '',
-  professional_tax_no       TEXT DEFAULT '',
-  pollution_certificate_no  TEXT DEFAULT '',
-
-  -- Address Details
-  registered_office         TEXT DEFAULT '',
-  factory_address           TEXT DEFAULT '',
-  branch_address             TEXT DEFAULT '',
-  city                      TEXT DEFAULT '',
-  state                     TEXT DEFAULT '',
-  country                   TEXT DEFAULT 'India',
-  pin_code                  TEXT DEFAULT '',
-
-  created_at                TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at                TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX IF NOT EXISTS companies_search_idx
-  ON companies USING gin (to_tsvector('simple', company_name || ' ' || company_code));
-
 -- =============================================================================
 -- ERP Inventory / Transaction Management Module
+-- Consolidated: master → item_master, department → department_master
 -- =============================================================================
-
--- 1. Department Table
-CREATE TABLE IF NOT EXISTS department (
-  id   BIGSERIAL PRIMARY KEY,
-  name VARCHAR(255) NOT NULL UNIQUE
-);
-
--- Seed initial departments if empty
-INSERT INTO department (name) VALUES
-  ('Production'),
-  ('Maintenance'),
-  ('Quality Control'),
-  ('Stores'),
-  ('Administration')
-ON CONFLICT (name) DO NOTHING;
-
--- 2. Transaction Type Table
-CREATE TABLE IF NOT EXISTS transaction_type (
-  id   BIGSERIAL PRIMARY KEY,
-  type VARCHAR(50) NOT NULL UNIQUE
-);
-
--- Seed operation names as transaction types (same list as operation_master)
-INSERT INTO transaction_type (type) VALUES
-  ('Material Transfer'),
-  ('Internal Material Return'),
-  ('Rejection Tfd to Burning'),
-  ('Rejection tfd to Scrap Yard'),
-  ('Recycle Material Issue'),
-  ('Material Send for Job work'),
-  ('Customer Rejection Receipt'),
-  ('Customer Rejection Dismentle & SFG Recover'),
-  ('FG Dismantling & SFG Recovery'),
-  ('Rework')
-ON CONFLICT (type) DO NOTHING;
-
--- 3. Master Table (Material Master)
-CREATE TABLE IF NOT EXISTS master (
-  id                  BIGSERIAL PRIMARY KEY,
-  code                VARCHAR(100) NOT NULL UNIQUE,
-  description         VARCHAR(255) NOT NULL,
-  category            VARCHAR(100) NOT NULL DEFAULT 'General',
-  unit_of_measurement VARCHAR(50) NOT NULL,
-  opening_balance     NUMERIC(15, 2) NOT NULL DEFAULT 0 CHECK (opening_balance >= 0),
-  store_name          VARCHAR(100) NOT NULL
-);
-
-ALTER TABLE master ADD COLUMN IF NOT EXISTS category VARCHAR(100) NOT NULL DEFAULT 'General';
-
--- Seed initial material master data if empty
-INSERT INTO master (code, description, category, unit_of_measurement, opening_balance, store_name) VALUES
-  ('MAT-001', 'Steel Sheet',         'Raw Material', 'KG',  5000, 'Main Store'),
-  ('MAT-002', 'Stainless Steel Rod', 'Raw Material', 'KG',  2500, 'Main Store'),
-  ('MAT-003', 'Bearing 6205',        'Spare Parts',  'PCS', 150,  'Maintenance Store'),
-  ('MAT-004', 'Lubricating Oil',     'Consumables',  'LTR', 500,  'Maintenance Store'),
-  ('MAT-005', 'Welding Electrode',   'Consumables',  'KG',  300,  'Production Store')
-ON CONFLICT (code) DO UPDATE SET category = EXCLUDED.category;
-
--- 4. Inventory Transaction Table
-CREATE TABLE IF NOT EXISTS inventory_transaction (
-  id                      BIGSERIAL PRIMARY KEY,
-  transaction_number      VARCHAR(50) NOT NULL,
-  slip_number             VARCHAR(100),
-  transaction_type_id     BIGINT NOT NULL REFERENCES transaction_type(id),
-  master_id               BIGINT NOT NULL REFERENCES master(id),
-  from_department_id      BIGINT NOT NULL REFERENCES department(id),
-  to_department_id        BIGINT REFERENCES department(id),
-  quantity                NUMERIC(15, 2) NOT NULL CHECK (quantity > 0),
-  transaction_date        TIMESTAMPTZ NOT NULL DEFAULT now(),
-  remarks                 TEXT,
-  reversed_transaction_id BIGINT REFERENCES inventory_transaction(id)
-);
-
--- Migration steps for existing database instances
-ALTER TABLE inventory_transaction DROP CONSTRAINT IF EXISTS inventory_transaction_slip_number_key;
-ALTER TABLE inventory_transaction ADD COLUMN IF NOT EXISTS transaction_number VARCHAR(50);
-UPDATE inventory_transaction SET transaction_number = slip_number WHERE transaction_number IS NULL;
-ALTER TABLE inventory_transaction ALTER COLUMN slip_number DROP NOT NULL;
-ALTER TABLE inventory_transaction ADD COLUMN IF NOT EXISTS from_department_id BIGINT REFERENCES department(id);
-ALTER TABLE inventory_transaction ADD COLUMN IF NOT EXISTS to_department_id BIGINT REFERENCES department(id);
-
-CREATE INDEX IF NOT EXISTS idx_inv_tx_transaction_number ON inventory_transaction(transaction_number);
-CREATE INDEX IF NOT EXISTS idx_inv_tx_slip_number ON inventory_transaction(slip_number);
-CREATE INDEX IF NOT EXISTS idx_inv_tx_master_id ON inventory_transaction(master_id);
-CREATE INDEX IF NOT EXISTS idx_inv_tx_type_id ON inventory_transaction(transaction_type_id);
-
-CREATE INDEX IF NOT EXISTS idx_inv_tx_type_id ON inventory_transaction(transaction_type_id);
 
 -- =============================================================================
 -- SMS Inventory Module — Item Master
 -- =============================================================================
-CREATE SCHEMA IF NOT EXISTS sms_inventory;
-
-CREATE TABLE IF NOT EXISTS sms_inventory.item_master (
-  id                       BIGSERIAL PRIMARY KEY,
-  group_name               VARCHAR(255),
-  subgroup                 VARCHAR(255),
-  group_code               VARCHAR(255),
-  old_code                 VARCHAR(255),
-  main_fg_code             VARCHAR(255),
-  sms_new_part_no          VARCHAR(255),
-  description_size         TEXT,
-  fg_outsource             VARCHAR(255),
-  sfg_outsource            VARCHAR(255),
-  outsource_combo_fg_sfg   VARCHAR(255),
-  purchased_uom            VARCHAR(100),
-  consumption_uom          VARCHAR(100),
-  inner_diameter           VARCHAR(255),
-  outer_diameter           VARCHAR(255),
-  width                    VARCHAR(255),
-  thickness                VARCHAR(255),
-  created_at               TIMESTAMPTZ DEFAULT NOW(),
-  updated_at               TIMESTAMPTZ DEFAULT NOW()
-);
-
 CREATE TABLE IF NOT EXISTS public.item_master (
   id                       BIGSERIAL PRIMARY KEY,
   group_name               VARCHAR(255),
@@ -204,6 +57,7 @@ CREATE TABLE IF NOT EXISTS public.item_master (
   updated_at               TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Upgrades databases whose item_master was created before these columns existed.
 ALTER TABLE public.item_master
   ADD COLUMN IF NOT EXISTS hsn_code VARCHAR(50),
   ADD COLUMN IF NOT EXISTS segment VARCHAR(255),
@@ -229,45 +83,34 @@ ALTER TABLE public.item_master
   ADD COLUMN IF NOT EXISTS procurement_lead_time NUMERIC(10,2),
   ADD COLUMN IF NOT EXISTS total_lead_time NUMERIC(10,2);
 
-ALTER TABLE sms_inventory.item_master
-  ADD COLUMN IF NOT EXISTS hsn_code VARCHAR(50),
-  ADD COLUMN IF NOT EXISTS segment VARCHAR(255),
-  ADD COLUMN IF NOT EXISTS region VARCHAR(255),
-  ADD COLUMN IF NOT EXISTS application VARCHAR(255),
-  ADD COLUMN IF NOT EXISTS ref_no VARCHAR(255),
-  ADD COLUMN IF NOT EXISTS oem VARCHAR(255),
-  ADD COLUMN IF NOT EXISTS corteco_no VARCHAR(255),
-  ADD COLUMN IF NOT EXISTS category VARCHAR(255),
-  ADD COLUMN IF NOT EXISTS image TEXT,
-  ADD COLUMN IF NOT EXISTS material VARCHAR(255),
-  ADD COLUMN IF NOT EXISTS color VARCHAR(255),
-  ADD COLUMN IF NOT EXISTS uom VARCHAR(100),
-  ADD COLUMN IF NOT EXISTS price NUMERIC(15,2),
-  ADD COLUMN IF NOT EXISTS type VARCHAR(255),
-  ADD COLUMN IF NOT EXISTS fitting_position VARCHAR(255),
-  ADD COLUMN IF NOT EXISTS swirl_type VARCHAR(255),
-  ADD COLUMN IF NOT EXISTS file_name VARCHAR(255),
-  ADD COLUMN IF NOT EXISTS domestic_exports VARCHAR(255),
-  ADD COLUMN IF NOT EXISTS cross_reference VARCHAR(255),
-  ADD COLUMN IF NOT EXISTS drawing_image TEXT,
-  ADD COLUMN IF NOT EXISTS safety_lead_time NUMERIC(10,2),
-  ADD COLUMN IF NOT EXISTS procurement_lead_time NUMERIC(10,2),
-  ADD COLUMN IF NOT EXISTS total_lead_time NUMERIC(10,2);
+-- Item form fields that were collected on screen but had no column, so every save dropped them.
+ALTER TABLE public.item_master
+  ADD COLUMN IF NOT EXISTS sub_subgroup VARCHAR(255),
+  ADD COLUMN IF NOT EXISTS style VARCHAR(255),
+  ADD COLUMN IF NOT EXISTS drawing_no VARCHAR(255),
+  ADD COLUMN IF NOT EXISTS item_class VARCHAR(255),
+  ADD COLUMN IF NOT EXISTS procurement_type VARCHAR(255),
+  ADD COLUMN IF NOT EXISTS process_type VARCHAR(255),
+  ADD COLUMN IF NOT EXISTS status VARCHAR(30) DEFAULT 'Active',
+  ADD COLUMN IF NOT EXISTS opening_balance NUMERIC(15,3),
+  ADD COLUMN IF NOT EXISTS gross_wt NUMERIC(15,3),
+  ADD COLUMN IF NOT EXISTS net_wt NUMERIC(15,3),
+  ADD COLUMN IF NOT EXISTS rej_tolerance NUMERIC(5,2),
+  ADD COLUMN IF NOT EXISTS min_stock_lvl NUMERIC(15,3),
+  ADD COLUMN IF NOT EXISTS max_stock_lvl NUMERIC(15,3),
+  ADD COLUMN IF NOT EXISTS reorder_stock_lvl NUMERIC(15,3),
+  ADD COLUMN IF NOT EXISTS mrp NUMERIC(15,2);
+
+-- The one place that turns an item_master row into the code / name / uom other modules display and store.
+CREATE OR REPLACE VIEW public.item_master_lookup AS
+SELECT id,
+       COALESCE(NULLIF(sms_new_part_no, ''), NULLIF(main_fg_code, ''), NULLIF(old_code, ''), 'ITM-' || id) AS code,
+       COALESCE(NULLIF(description_size, ''), NULLIF(subgroup, ''), 'Item ' || id) AS description,
+       category,
+       COALESCE(NULLIF(purchased_uom, ''), NULLIF(uom, ''), 'PCS') AS unit_of_measurement
+FROM public.item_master;
 
 -- Table 2: department_master
-CREATE TABLE IF NOT EXISTS sms_inventory.department_master (
-  id               BIGSERIAL PRIMARY KEY,
-  dept_code        VARCHAR(50),
-  dept_number      INT,
-  department_name  VARCHAR(255) NOT NULL UNIQUE,
-  process_sequence NUMERIC(10, 2) NOT NULL,
-  category         VARCHAR(100),
-  status           VARCHAR(50) DEFAULT 'ACTIVE',
-  notes            TEXT,
-  created_at       TIMESTAMPTZ DEFAULT NOW(),
-  updated_at       TIMESTAMPTZ DEFAULT NOW()
-);
-
 CREATE TABLE IF NOT EXISTS public.department_master (
   id               BIGSERIAL PRIMARY KEY,
   dept_code        VARCHAR(50),
@@ -287,93 +130,7 @@ ALTER TABLE public.department_master ADD COLUMN IF NOT EXISTS category VARCHAR(1
 ALTER TABLE public.department_master ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'ACTIVE';
 ALTER TABLE public.department_master ADD COLUMN IF NOT EXISTS notes TEXT;
 
--- Remove 'Gaurav' department and its references from everywhere
-DELETE FROM inventory_transaction WHERE from_department_id IN (SELECT id FROM department WHERE LOWER(name) = 'gaurav') OR to_department_id IN (SELECT id FROM department WHERE LOWER(name) = 'gaurav');
-DELETE FROM department WHERE LOWER(name) = 'gaurav';
-DELETE FROM public.department_master WHERE LOWER(department_name) = 'gaurav';
-DELETE FROM opening_balance WHERE LOWER(department_name) = 'gaurav';
-
-INSERT INTO department (name) VALUES
-  ('Store'),
-  ('Power Press Die Making'),
-  ('Power Press Rubber Die Making'),
-  ('Power Press Circle Cutting'),
-  ('LASER'),
-  ('CNC'),
-  ('Moulding'),
-  ('Finishing'),
-  ('Tambling'),
-  ('Sand'),
-  ('Burning'),
-  ('T/Room'),
-  ('Packing'),
-  ('FG STORE'),
-  ('Dispatch'),
-  ('Rejection Store'),
-  ('Rework-Burning'),
-  ('Gate')
-ON CONFLICT (name) DO NOTHING;
-
-INSERT INTO sms_inventory.department_master (dept_code, dept_number, department_name, process_sequence, category, status) VALUES
-  ('DPT-001', 1, 'Store', 1.0, 'Material Store', 'ACTIVE'),
-  ('DPT-002', 2, 'Power Press Die Making', 2.0, 'Process', 'ACTIVE'),
-  ('DPT-003', 3, 'Power Press Rubber Die Making', 3.0, 'Process', 'ACTIVE'),
-  ('DPT-004', 4, 'Power Press Circle Cutting', 4.0, 'Process', 'ACTIVE'),
-  ('DPT-005', 5, 'LASER', 5.0, 'Process', 'ACTIVE'),
-  ('DPT-006', 6, 'CNC', 6.0, 'Process', 'ACTIVE'),
-  ('DPT-007', 7, 'Moulding', 7.0, 'Process', 'ACTIVE'),
-  ('DPT-008', 8, 'Finishing', 8.0, 'Process', 'ACTIVE'),
-  ('DPT-009', 9, 'Tambling', 9.0, 'Process', 'ACTIVE'),
-  ('DPT-010', 10, 'Sand', 10.0, 'Process', 'ACTIVE'),
-  ('DPT-011', 11, 'Burning', 11.0, 'Process', 'ACTIVE'),
-  ('DPT-012', 12, 'T/Room', 12.0, 'Process', 'ACTIVE'),
-  ('DPT-013', 13, 'Packing', 13.0, 'Process', 'ACTIVE'),
-  ('DPT-014', 14, 'FG STORE', 14.0, 'Finished Goods Store', 'ACTIVE'),
-  ('DPT-015', 15, 'Dispatch', 15.0, 'Outward', 'ACTIVE'),
-  ('DPT-016', 16, 'Rejection Store', 16.0, 'Rejection', 'ACTIVE'),
-  ('DPT-017', 17, 'Rework-Burning', 17.0, 'Rework', 'ACTIVE'),
-  ('DPT-018', 18, 'Gate', 18.0, 'Movement/Control', 'ACTIVE')
-ON CONFLICT (department_name) DO UPDATE SET 
-  dept_code = EXCLUDED.dept_code,
-  dept_number = EXCLUDED.dept_number,
-  process_sequence = EXCLUDED.process_sequence,
-  category = EXCLUDED.category,
-  status = EXCLUDED.status;
-
-INSERT INTO public.department_master (dept_code, dept_number, department_name, process_sequence, category, status) VALUES
-  ('DPT-001', 1, 'Store', 1.0, 'Material Store', 'ACTIVE'),
-  ('DPT-002', 2, 'Power Press Die Making', 2.0, 'Process', 'ACTIVE'),
-  ('DPT-003', 3, 'Power Press Rubber Die Making', 3.0, 'Process', 'ACTIVE'),
-  ('DPT-004', 4, 'Power Press Circle Cutting', 4.0, 'Process', 'ACTIVE'),
-  ('DPT-005', 5, 'LASER', 5.0, 'Process', 'ACTIVE'),
-  ('DPT-006', 6, 'CNC', 6.0, 'Process', 'ACTIVE'),
-  ('DPT-007', 7, 'Moulding', 7.0, 'Process', 'ACTIVE'),
-  ('DPT-008', 8, 'Finishing', 8.0, 'Process', 'ACTIVE'),
-  ('DPT-009', 9, 'Tambling', 9.0, 'Process', 'ACTIVE'),
-  ('DPT-010', 10, 'Sand', 10.0, 'Process', 'ACTIVE'),
-  ('DPT-011', 11, 'Burning', 11.0, 'Process', 'ACTIVE'),
-  ('DPT-012', 12, 'T/Room', 12.0, 'Process', 'ACTIVE'),
-  ('DPT-013', 13, 'Packing', 13.0, 'Process', 'ACTIVE'),
-  ('DPT-014', 14, 'FG STORE', 14.0, 'Finished Goods Store', 'ACTIVE'),
-  ('DPT-015', 15, 'Dispatch', 15.0, 'Outward', 'ACTIVE'),
-  ('DPT-016', 16, 'Rejection Store', 16.0, 'Rejection', 'ACTIVE'),
-  ('DPT-017', 17, 'Rework-Burning', 17.0, 'Rework', 'ACTIVE'),
-  ('DPT-018', 18, 'Gate', 18.0, 'Movement/Control', 'ACTIVE')
-ON CONFLICT (department_name) DO UPDATE SET 
-  dept_code = EXCLUDED.dept_code,
-  dept_number = EXCLUDED.dept_number,
-  process_sequence = EXCLUDED.process_sequence,
-  category = EXCLUDED.category,
-  status = EXCLUDED.status;
-
 -- Table 3: operation_master
-CREATE TABLE IF NOT EXISTS sms_inventory.operation_master (
-  id             BIGSERIAL PRIMARY KEY,
-  operation_name VARCHAR(255) NOT NULL UNIQUE,
-  created_at     TIMESTAMPTZ DEFAULT NOW(),
-  updated_at     TIMESTAMPTZ DEFAULT NOW()
-);
-
 CREATE TABLE IF NOT EXISTS public.operation_master (
   id             BIGSERIAL PRIMARY KEY,
   operation_name VARCHAR(255) NOT NULL UNIQUE,
@@ -381,45 +138,7 @@ CREATE TABLE IF NOT EXISTS public.operation_master (
   updated_at     TIMESTAMPTZ DEFAULT NOW()
 );
 
-INSERT INTO sms_inventory.operation_master (operation_name) VALUES
-  ('Material Transfer'),
-  ('Internal Material Return'),
-  ('Rejection Tfd to Burning'),
-  ('Rejection tfd to Scrap Yard'),
-  ('Recycle Material Issue'),
-  ('Material Send for Job work'),
-  ('Customer Rejection Receipt'),
-  ('Customer Rejection Dismentle & SFG Recover'),
-  ('FG Dismantling & SFG Recovery'),
-  ('Rework'),
-  ('BOM Moulding Receipt')
-ON CONFLICT (operation_name) DO NOTHING;
-
-INSERT INTO public.operation_master (operation_name) VALUES
-  ('Material Transfer'),
-  ('Internal Material Return'),
-  ('Rejection Tfd to Burning'),
-  ('Rejection tfd to Scrap Yard'),
-  ('Recycle Material Issue'),
-  ('Material Send for Job work'),
-  ('Customer Rejection Receipt'),
-  ('Customer Rejection Dismentle & SFG Recover'),
-  ('FG Dismantling & SFG Recovery'),
-  ('Rework'),
-  ('BOM Moulding Receipt')
-ON CONFLICT (operation_name) DO NOTHING;
-
 -- Table 4: category_master
-CREATE TABLE IF NOT EXISTS sms_inventory.category_master (
-  id               BIGSERIAL PRIMARY KEY,
-  category_name    VARCHAR(255) NOT NULL UNIQUE,
-  bom_consumption VARCHAR(255) DEFAULT '',
-  category_code    VARCHAR(100) DEFAULT '',
-  short_code       VARCHAR(100) DEFAULT '',
-  created_at       TIMESTAMPTZ DEFAULT NOW(),
-  updated_at       TIMESTAMPTZ DEFAULT NOW()
-);
-
 CREATE TABLE IF NOT EXISTS public.category_master (
   id               BIGSERIAL PRIMARY KEY,
   category_name    VARCHAR(255) NOT NULL UNIQUE,
@@ -429,62 +148,6 @@ CREATE TABLE IF NOT EXISTS public.category_master (
   created_at       TIMESTAMPTZ DEFAULT NOW(),
   updated_at       TIMESTAMPTZ DEFAULT NOW()
 );
-
-INSERT INTO sms_inventory.category_master (category_name, bom_consumption, category_code, short_code) VALUES
-  ('OUTER METAL SHELL',   '',                   'B01', 'OTSHL'),
-  ('INNER METAL SHELL',   '',                   'B02', 'INSHL'),
-  ('SPRING',              '',                   'B03', 'Spring'),
-  ('MIDDLE METAL SHELL',  '',                   'B04', 'MDLSHL'),
-  ('OUTER MOULDED',       'OUTER METAL SHELL', 'M01', 'OMLD'),
-  ('INNER MOULDED',       'INNER METAL SHELL', 'M02', 'IMLD'),
-  ('MIDDLE MOULDED',      'MIDDLE METAL SHELL', 'M04', 'OTHER'),
-  ('FELT',                '',                   'B05', 'FELT'),
-  ('PTFE',                '',                   'B06', 'PTFE'),
-  ('TPU/PU',              '',                   'B07', 'TPU/PU'),
-  ('Brass Washer',        '',                   'B08', 'Brass Washer'),
-  ('Silver Washer',       '',                   'B09', 'Silver Washer'),
-  ('Big Washer',          '',                   'B10', 'Big Washer'),
-  ('Gasket',              '',                   'B11', 'Gasket'),
-  ('O-Ring',              '',                   'B12', 'O-Ring'),
-  ('O-RING-A',            '',                   '',    ''),
-  ('O-RING-B',            '',                   '',    ''),
-  ('O-RING-C',            '',                   '',    ''),
-  ('O-RING-D',            '',                   '',    ''),
-  ('FG',                  '',                   '',    '')
-ON CONFLICT (category_name) DO UPDATE SET
-  bom_consumption = EXCLUDED.bom_consumption,
-  category_code   = EXCLUDED.category_code,
-  short_code      = EXCLUDED.short_code;
-
-INSERT INTO public.category_master (category_name, bom_consumption, category_code, short_code) VALUES
-  ('OUTER METAL SHELL',   '',                   'B01', 'OTSHL'),
-  ('INNER METAL SHELL',   '',                   'B02', 'INSHL'),
-  ('SPRING',              '',                   'B03', 'Spring'),
-  ('MIDDLE METAL SHELL',  '',                   'B04', 'MDLSHL'),
-  ('OUTER MOULDED',       'OUTER METAL SHELL', 'M01', 'OMLD'),
-  ('INNER MOULDED',       'INNER METAL SHELL', 'M02', 'IMLD'),
-  ('MIDDLE MOULDED',      'MIDDLE METAL SHELL', 'M04', 'OTHER'),
-  ('FELT',                '',                   'B05', 'FELT'),
-  ('PTFE',                '',                   'B06', 'PTFE'),
-  ('TPU/PU',              '',                   'B07', 'TPU/PU'),
-  ('Brass Washer',        '',                   'B08', 'Brass Washer'),
-  ('Silver Washer',       '',                   'B09', 'Silver Washer'),
-  ('Big Washer',          '',                   'B10', 'Big Washer'),
-  ('Gasket',              '',                   'B11', 'Gasket'),
-  ('O-Ring',              '',                   'B12', 'O-Ring'),
-  ('O-RING-A',            '',                   '',    ''),
-  ('O-RING-B',            '',                   '',    ''),
-  ('O-RING-C',            '',                   '',    ''),
-  ('O-RING-D',            '',                   '',    ''),
-  ('FG',                  '',                   '',    ''),
-  ('Spare Parts',         '',                   '',    ''),
-  ('Consumables',         '',                   '',    ''),
-  ('Raw Material',        '',                   '',    ''),
-  ('Bought-Out Parts 🛠',  '',                   '',    '')
-ON CONFLICT (category_name) DO UPDATE SET
-  bom_consumption = EXCLUDED.bom_consumption,
-  category_code   = EXCLUDED.category_code,
-  short_code      = EXCLUDED.short_code;
 
 -- =============================================================================
 -- Supplier / Vendor Master Schema (Book 3 & Book 5 matched attributes)
@@ -525,31 +188,65 @@ CREATE INDEX IF NOT EXISTS idx_supplier_gstin ON public.supplier_master(gstin);
 CREATE INDEX IF NOT EXISTS idx_supplier_state ON public.supplier_master(state);
 
 -- =============================================================================
+-- Supplier Items Mapping Table
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS public.supplier_item (
+    id BIGSERIAL PRIMARY KEY,
+    supplier_id BIGINT NOT NULL,
+    item_id BIGINT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(50) NOT NULL DEFAULT 'SYSTEM',
+    FOREIGN KEY (supplier_id) REFERENCES public.supplier_master(id) ON DELETE CASCADE,
+    FOREIGN KEY (item_id) REFERENCES public.item_master(id) ON DELETE CASCADE,
+    CONSTRAINT unique_supplier_item UNIQUE(supplier_id, item_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_supplier_item_supplier ON public.supplier_item(supplier_id);
+CREATE INDEX IF NOT EXISTS idx_supplier_item_item ON public.supplier_item(item_id);
+
+-- =============================================================================
 -- Customer Master Schema (Book 3 & Book 5 matched attributes)
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS public.customer_master (
     id BIGSERIAL PRIMARY KEY,
-    customer_id VARCHAR(50) NOT NULL UNIQUE,
+    customer_id VARCHAR(50) NOT NULL,
     customer_code VARCHAR(50) NOT NULL UNIQUE,
     customer_name VARCHAR(255) NOT NULL,
+    customer_alias VARCHAR(150),
     company_id VARCHAR(50) NOT NULL DEFAULT 'COMP-001',
     customer_type VARCHAR(50) DEFAULT 'OEM',
+    domestic_export VARCHAR(50),
     gstin VARCHAR(50),
     pan VARCHAR(30),
     udyam_no VARCHAR(50),
     msme_category VARCHAR(50) DEFAULT 'NOT_MSME',
     gst_registration_type VARCHAR(50) NOT NULL DEFAULT 'REGISTERED',
-    contact_person VARCHAR(255),
-    email VARCHAR(255),
-    phone VARCHAR(50),
+    check_by_accounts BOOLEAN DEFAULT FALSE,
+    check_by_sales BOOLEAN DEFAULT TRUE,
+    billing_source VARCHAR(100),
+    supplier_code_sms VARCHAR(100),
+    contact_person TEXT,
+    sales_person VARCHAR(255),
+    phone VARCHAR(255),
+    sales_contact VARCHAR(150),
+    email TEXT,
+    sales_email TEXT,
+    mode_of_payment_reminder VARCHAR(100),
+    accounts_contact_details TEXT,
     payment_terms_id VARCHAR(50) DEFAULT 'PT-30',
-    credit_limit NUMERIC(15,2) DEFAULT 500000.00,
+    credit_days INTEGER DEFAULT 30,
+    credit_limit NUMERIC(15, 2) DEFAULT 500000.00,
     currency VARCHAR(10) DEFAULT 'INR',
+    scm VARCHAR(255),
     status VARCHAR(30) NOT NULL DEFAULT 'ACTIVE',
+    bill_to_address TEXT,
+    ship_to_address TEXT,
+    customer_address TEXT,
     address TEXT,
     city VARCHAR(100),
     state VARCHAR(100),
     state_code VARCHAR(10),
+    country VARCHAR(100) DEFAULT 'India',
     pincode VARCHAR(20),
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     created_by VARCHAR(50) NOT NULL DEFAULT 'SYSTEM',
@@ -585,6 +282,11 @@ CREATE INDEX IF NOT EXISTS idx_machine_master_no ON public.machine_master(machin
 CREATE INDEX IF NOT EXISTS idx_machine_master_dept ON public.machine_master(department);
 CREATE INDEX IF NOT EXISTS idx_machine_master_status ON public.machine_master(status);
 CREATE INDEX IF NOT EXISTS idx_customer_state ON public.customer_master(state);
+
+-- Columns used by the CustomerMaster entity (previously added only by Hibernate ddl-auto=update).
+ALTER TABLE public.customer_master ADD COLUMN IF NOT EXISTS customer_category VARCHAR(50);
+ALTER TABLE public.customer_master ADD COLUMN IF NOT EXISTS customer_group VARCHAR(50);
+ALTER TABLE public.customer_master ADD COLUMN IF NOT EXISTS market_type VARCHAR(50);
 
 -- =============================================================================
 -- Purchase Module — Vendor Quotation Management
@@ -737,47 +439,6 @@ CREATE INDEX IF NOT EXISTS idx_pr_items_prnum ON public.purchase_requisition_ite
 CREATE INDEX IF NOT EXISTS idx_pr_items_code ON public.purchase_requisition_items(item_code);
 
 -- =============================================================================
--- Purchase Module — Purchase Proposals (PO Processing / Approval)
--- =============================================================================
-
-CREATE TABLE IF NOT EXISTS public.purchase_proposals (
-    id                      VARCHAR(100) PRIMARY KEY,
-    proposal_number         VARCHAR(50) NOT NULL UNIQUE,
-    pr_number               VARCHAR(50),
-    pr_date                 VARCHAR(50),
-    department              VARCHAR(100),
-    requested_by            VARCHAR(100),
-    required_by_date        VARCHAR(50),
-    priority                VARCHAR(50),
-    purpose                 TEXT,
-    remarks                 TEXT,
-    status                  VARCHAR(50) NOT NULL DEFAULT 'DRAFT',
-    source_quotation_number VARCHAR(50),
-    source_quotation_id     BIGINT,
-    grand_gross             NUMERIC(15, 2) DEFAULT 0.00,
-    grand_discount          NUMERIC(15, 2) DEFAULT 0.00,
-    grand_taxable           NUMERIC(15, 2) DEFAULT 0.00,
-    grand_tax               NUMERIC(15, 2) DEFAULT 0.00,
-    grand_delivery          NUMERIC(15, 2) DEFAULT 0.00,
-    grand_other_charges     NUMERIC(15, 2) DEFAULT 0.00,
-    grand_round_off         NUMERIC(15, 2) DEFAULT 0.00,
-    grand_total             NUMERIC(15, 2) DEFAULT 0.00,
-    created_by              VARCHAR(100),
-    created_at              VARCHAR(100),
-    approved_by             VARCHAR(100),
-    approved_at             VARCHAR(100),
-    rejection_reason        TEXT,
-    changes_requested_by    VARCHAR(100),
-    changes_comments        TEXT,
-    details_json            TEXT,
-    updated_at              TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_prop_num ON public.purchase_proposals(proposal_number);
-CREATE INDEX IF NOT EXISTS idx_prop_pr ON public.purchase_proposals(pr_number);
-CREATE INDEX IF NOT EXISTS idx_prop_status ON public.purchase_proposals(status);
-
--- =============================================================================
 -- Purchase Module — Purchase Orders (PO Register)
 -- =============================================================================
 
@@ -785,7 +446,6 @@ CREATE TABLE IF NOT EXISTS public.purchase_orders (
     id                      VARCHAR(100) PRIMARY KEY,
     po_number               VARCHAR(50) NOT NULL UNIQUE,
     po_date                 VARCHAR(50) NOT NULL,
-    proposal_number         VARCHAR(50),
     pr_number               VARCHAR(50),
     pr_date                 VARCHAR(50),
     department              VARCHAR(100),
@@ -950,71 +610,6 @@ CREATE INDEX IF NOT EXISTS idx_rfqi_pr ON public.rfq_items(pr_number);
 CREATE INDEX IF NOT EXISTS idx_rfqi_item ON public.rfq_items(item_code);
 
 -- =============================================================================
--- Purchase Module — PR Clubbing & Consolidation Module
--- =============================================================================
-
-CREATE TABLE IF NOT EXISTS public.pr_clubbing_batches (
-    id                  BIGSERIAL PRIMARY KEY,
-    batch_number        VARCHAR(50) NOT NULL UNIQUE,
-    batch_name          VARCHAR(255) NOT NULL,
-    status              VARCHAR(50) NOT NULL DEFAULT 'DRAFT',
-    total_items_count   INT DEFAULT 0,
-    total_clubbed_qty   NUMERIC(15, 2) DEFAULT 0,
-    purchased_qty       NUMERIC(15, 2) DEFAULT 0,
-    remaining_qty       NUMERIC(15, 2) DEFAULT 0,
-    notes               TEXT,
-    created_by          VARCHAR(100) DEFAULT 'Purchase Officer',
-    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS idx_club_batch_num ON public.pr_clubbing_batches(batch_number);
-CREATE INDEX IF NOT EXISTS idx_club_batch_status ON public.pr_clubbing_batches(status);
-
-CREATE TABLE IF NOT EXISTS public.pr_clubbing_batch_items (
-    id                  BIGSERIAL PRIMARY KEY,
-    batch_id            BIGINT NOT NULL REFERENCES public.pr_clubbing_batches(id) ON DELETE CASCADE,
-    batch_number        VARCHAR(50) NOT NULL,
-    item_code           VARCHAR(100) NOT NULL,
-    item_name           VARCHAR(255),
-    description         TEXT,
-    category            VARCHAR(100),
-    uom                 VARCHAR(50) NOT NULL DEFAULT 'PCS',
-    total_clubbed_qty   NUMERIC(15, 2) NOT NULL DEFAULT 0,
-    purchased_qty       NUMERIC(15, 2) NOT NULL DEFAULT 0,
-    remaining_qty       NUMERIC(15, 2) NOT NULL DEFAULT 0,
-    est_rate            NUMERIC(15, 2) DEFAULT 0,
-    status              VARCHAR(50) NOT NULL DEFAULT 'PENDING',
-    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS idx_club_items_batchid ON public.pr_clubbing_batch_items(batch_id);
-CREATE INDEX IF NOT EXISTS idx_club_items_code ON public.pr_clubbing_batch_items(item_code);
-
-CREATE TABLE IF NOT EXISTS public.pr_clubbing_allocations (
-    id                  BIGSERIAL PRIMARY KEY,
-    batch_id            BIGINT NOT NULL REFERENCES public.pr_clubbing_batches(id) ON DELETE CASCADE,
-    batch_item_id       BIGINT NOT NULL REFERENCES public.pr_clubbing_batch_items(id) ON DELETE CASCADE,
-    pr_id               BIGINT NOT NULL,
-    pr_number           VARCHAR(50) NOT NULL,
-    pr_item_id          BIGINT NOT NULL REFERENCES public.purchase_requisition_items(id) ON DELETE CASCADE,
-    item_code           VARCHAR(100) NOT NULL,
-    allocated_qty       NUMERIC(15, 2) NOT NULL DEFAULT 0,
-    purchased_qty       NUMERIC(15, 2) NOT NULL DEFAULT 0,
-    remaining_qty       NUMERIC(15, 2) NOT NULL DEFAULT 0,
-    po_id               VARCHAR(100),
-    po_number           VARCHAR(100),
-    status              VARCHAR(50) NOT NULL DEFAULT 'ALLOCATED',
-    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS idx_club_alloc_batchitem ON public.pr_clubbing_allocations(batch_item_id);
-CREATE INDEX IF NOT EXISTS idx_club_alloc_pritem ON public.pr_clubbing_allocations(pr_item_id);
-CREATE INDEX IF NOT EXISTS idx_club_alloc_prnum ON public.pr_clubbing_allocations(pr_number);
-
-ALTER TABLE public.purchase_orders ADD COLUMN IF NOT EXISTS clubbing_batch_number VARCHAR(50);
-ALTER TABLE public.purchase_orders ADD COLUMN IF NOT EXISTS clubbing_batch_id BIGINT;
-
--- =============================================================================
 -- HSN & SAC Tax Master and Phase 1.5 Purchasing Schema Enhancements
 -- =============================================================================
 
@@ -1035,49 +630,6 @@ CREATE TABLE IF NOT EXISTS public.hsn_tax_master (
 
 CREATE INDEX IF NOT EXISTS idx_hsn_code ON public.hsn_tax_master(hsn_sac_code);
 CREATE INDEX IF NOT EXISTS idx_hsn_type ON public.hsn_tax_master(type);
-
-INSERT INTO public.hsn_tax_master (hsn_sac_code, description, type, gst_rate, cgst_rate, sgst_rate, igst_rate, cess_rate, chapter)
-VALUES 
-    ('40169320', 'Rubber seals, oil seals, gaskets, washers', 'GOODS', 18.00, 9.00, 9.00, 18.00, 0.00, '40'),
-    ('40169330', 'Rubber O-rings & moulded rubber components', 'GOODS', 18.00, 9.00, 9.00, 18.00, 0.00, '40'),
-    ('40169340', 'Gaskets, washers and other seals of vulcanised rubber', 'GOODS', 18.00, 9.00, 9.00, 18.00, 0.00, '40'),
-    ('40169990', 'Other articles of vulcanised rubber (bellows, grommets, boots)', 'GOODS', 18.00, 9.00, 9.00, 18.00, 0.00, '40'),
-    ('40021990', 'Synthetic rubber compound (NBR, SBR, EPDM, FKM Viton)', 'GOODS', 18.00, 9.00, 9.00, 18.00, 0.00, '40'),
-    ('40051000', 'Compounded rubber with carbon black or silica, unvulcanised', 'GOODS', 18.00, 9.00, 9.00, 18.00, 0.00, '40'),
-    ('40027000', 'Ethylene-propylene-non-conjugated diene rubber (EPDM)', 'GOODS', 18.00, 9.00, 9.00, 18.00, 0.00, '40'),
-    ('40029990', 'Fluorocarbon elastomers (FKM Viton, FFKM)', 'GOODS', 18.00, 9.00, 9.00, 18.00, 0.00, '40'),
-    ('40082110', 'Non-cellular rubber sheets for gasket cutting', 'GOODS', 18.00, 9.00, 9.00, 18.00, 0.00, '40'),
-    ('39269099', 'PTFE backup rings, guide rings, wear strips, plastic seals', 'GOODS', 18.00, 9.00, 9.00, 18.00, 0.00, '39'),
-    ('39046100', 'Polytetrafluoroethylene (PTFE) raw resin powder', 'GOODS', 18.00, 9.00, 9.00, 18.00, 0.00, '39'),
-    ('39232990', 'Packaging polythene bags & packing wraps for seals', 'GOODS', 18.00, 9.00, 9.00, 18.00, 0.00, '39'),
-    ('73202000', 'Helical & garter springs for rotary shaft oil seals', 'GOODS', 18.00, 9.00, 9.00, 18.00, 0.00, '73'),
-    ('73209090', 'Flat springs, Belleville washers, wave springs', 'GOODS', 18.00, 9.00, 9.00, 18.00, 0.00, '73'),
-    ('73182100', 'Spring washers and other lock washers', 'GOODS', 18.00, 9.00, 9.00, 18.00, 0.00, '73'),
-    ('73181500', 'Screws, bolts, nuts, rivets, studs for tooling & assemblies', 'GOODS', 18.00, 9.00, 9.00, 18.00, 0.00, '73'),
-    ('73269099', 'Deep draw outer metal shells & metal casing inserts', 'GOODS', 18.00, 9.00, 9.00, 18.00, 0.00, '73'),
-    ('72283000', 'Alloy steel bars / rods (EN8, EN24, EN31) for tooling', 'GOODS', 18.00, 9.00, 9.00, 18.00, 0.00, '72'),
-    ('72091600', 'Cold-rolled steel coils / sheets for stamping outer casings', 'GOODS', 18.00, 9.00, 9.00, 18.00, 0.00, '72'),
-    ('72104900', 'Galvanized / zinc coated steel sheets for corrosion resistance', 'GOODS', 18.00, 9.00, 9.00, 18.00, 0.00, '72'),
-    ('84807100', 'Injection moulds for rubber or plastics', 'GOODS', 18.00, 9.00, 9.00, 18.00, 0.00, '84'),
-    ('84807900', 'Compression moulding dies & transfer moulds for seals', 'GOODS', 18.00, 9.00, 9.00, 18.00, 0.00, '84'),
-    ('84841000', 'Gaskets of metal sheeting combined with other material', 'GOODS', 18.00, 9.00, 9.00, 18.00, 0.00, '84'),
-    ('84842000', 'Mechanical face seals for pumps and agitators', 'GOODS', 18.00, 9.00, 9.00, 18.00, 0.00, '84'),
-    ('84821011', 'Ball bearings & roller bearings for CNC & hydraulic presses', 'GOODS', 18.00, 9.00, 9.00, 18.00, 0.00, '84'),
-    ('84669390', 'Parts and accessories for machine tools / CNC chucks & collets', 'GOODS', 18.00, 9.00, 9.00, 18.00, 0.00, '84'),
-    ('82073000', 'Press tools, punches, blanking dies for power presses', 'GOODS', 18.00, 9.00, 9.00, 18.00, 0.00, '82'),
-    ('34039900', 'Mould release agents, silicone sprays & anti-stick sprays', 'GOODS', 18.00, 9.00, 9.00, 18.00, 0.00, '34'),
-    ('27101980', 'Hydraulic oils (VG 68, VG 46), spindle oils, turbine oils', 'GOODS', 18.00, 9.00, 9.00, 18.00, 0.00, '27'),
-    ('27101990', 'Industrial lubricating greases (Lithium, synthetic high-temp)', 'GOODS', 18.00, 9.00, 9.00, 18.00, 0.00, '27'),
-    ('38249990', 'Rubber bonding agents (Chemlok / Megum adhesive primers)', 'GOODS', 18.00, 9.00, 9.00, 18.00, 0.00, '38'),
-    ('28030010', 'Carbon black for rubber compounding', 'GOODS', 18.00, 9.00, 9.00, 18.00, 0.00, '28'),
-    ('28170010', 'Zinc oxide (rubber grade vulcanizing activator)', 'GOODS', 18.00, 9.00, 9.00, 18.00, 0.00, '28'),
-    ('28020010', 'Sulphur powder (rubber vulcanization agent)', 'GOODS', 5.00, 2.50, 2.50, 5.00, 0.00, '28'),
-    ('998821', 'Job work / Subcontracting (rubber moulding & trimming services)', 'SERVICE', 12.00, 6.00, 6.00, 12.00, 0.00, '99'),
-    ('998822', 'Job work (metal stamping, casing phosphating, zinc plating)', 'SERVICE', 12.00, 6.00, 6.00, 12.00, 0.00, '99'),
-    ('998719', 'Maintenance, calibration and repair of production machinery', 'SERVICE', 18.00, 9.00, 9.00, 18.00, 0.00, '99'),
-    ('998314', 'Testing, lab analysis & metallurgical inspection services', 'SERVICE', 18.00, 9.00, 9.00, 18.00, 0.00, '99'),
-    ('996511', 'Road freight transportation (GTA / Goods Transport Agency)', 'SERVICE', 5.00, 2.50, 2.50, 5.00, 0.00, '99')
-ON CONFLICT (hsn_sac_code) DO NOTHING;
 
 ALTER TABLE public.purchase_requisitions ADD COLUMN IF NOT EXISTS pr_type VARCHAR(50) DEFAULT 'Direct Material';
 ALTER TABLE public.purchase_requisitions ADD COLUMN IF NOT EXISTS cost_center VARCHAR(100);
@@ -1181,31 +733,6 @@ CREATE TABLE IF NOT EXISTS public.procurement_master (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS sms_inventory.procurement_master (
-    id BIGSERIAL PRIMARY KEY,
-    procurement_type VARCHAR(100) NOT NULL UNIQUE,
-    procurement_name VARCHAR(100),
-    status VARCHAR(20) DEFAULT 'ACTIVE',
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-INSERT INTO public.procurement_master (procurement_type, procurement_name) VALUES
-    ('IN HOUSE', 'IN HOUSE'),
-    ('OUTSOURCE', 'OUTSOURCE'),
-    ('BUY/INHOUSE', 'BUY/INHOUSE'),
-    ('IMPORTED', 'IMPORTED')
-ON CONFLICT (procurement_type) DO UPDATE 
-SET procurement_name = EXCLUDED.procurement_name;
-
-INSERT INTO sms_inventory.procurement_master (procurement_type, procurement_name) VALUES
-    ('IN HOUSE', 'IN HOUSE'),
-    ('OUTSOURCE', 'OUTSOURCE'),
-    ('BUY/INHOUSE', 'BUY/INHOUSE'),
-    ('IMPORTED', 'IMPORTED')
-ON CONFLICT (procurement_type) DO UPDATE 
-SET procurement_name = EXCLUDED.procurement_name;
-
 -- 2. Process Master Table
 CREATE TABLE IF NOT EXISTS public.process_master (
     id BIGSERIAL PRIMARY KEY,
@@ -1215,55 +742,6 @@ CREATE TABLE IF NOT EXISTS public.process_master (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
-
-CREATE TABLE IF NOT EXISTS sms_inventory.process_master (
-    id BIGSERIAL PRIMARY KEY,
-    process_code VARCHAR(50) NOT NULL UNIQUE,
-    process_description VARCHAR(255) NOT NULL,
-    status VARCHAR(20) DEFAULT 'ACTIVE',
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-INSERT INTO public.process_master (process_code, process_description) VALUES
-    ('PR-1', '1 : Metal Open Type : In-house'),
-    ('PR-2', '2 : Metal Close Type : In-house'),
-    ('PR-3', '5 : Half Rubber : Open'),
-    ('PR-4', '6 : Half Rubber : Close'),
-    ('PR-5', '7 : Full Rubber : Open'),
-    ('PR-7', '8 : Full Rubber : Close'),
-    ('PR-8', '9 : Cassette Seal'),
-    ('PR-9', '10 : Combi Seal'),
-    ('PR-10', '11 : PTFE Moulded (no inner shell)'),
-    ('PR-11', '12 : PTFE Moulded (with inner shell)'),
-    ('PR-12', '13 : PTFE Fitted'),
-    ('PR-13', '14 : Hub Seal SKF'),
-    ('PR-14', '15 : Hub Seal National'),
-    ('PR-15', '3: ABS SEAL'),
-    ('PR-51', '16 : PTFE Moulded (no inner shell ) Half Rubber'),
-    ('PR-16', 'NA')
-ON CONFLICT (process_code) DO UPDATE 
-SET process_description = EXCLUDED.process_description;
-
-INSERT INTO sms_inventory.process_master (process_code, process_description) VALUES
-    ('PR-1', '1 : Metal Open Type : In-house'),
-    ('PR-2', '2 : Metal Close Type : In-house'),
-    ('PR-3', '5 : Half Rubber : Open'),
-    ('PR-4', '6 : Half Rubber : Close'),
-    ('PR-5', '7 : Full Rubber : Open'),
-    ('PR-7', '8 : Full Rubber : Close'),
-    ('PR-8', '9 : Cassette Seal'),
-    ('PR-9', '10 : Combi Seal'),
-    ('PR-10', '11 : PTFE Moulded (no inner shell)'),
-    ('PR-11', '12 : PTFE Moulded (with inner shell)'),
-    ('PR-12', '13 : PTFE Fitted'),
-    ('PR-13', '14 : Hub Seal SKF'),
-    ('PR-14', '15 : Hub Seal National'),
-    ('PR-15', '3: ABS SEAL'),
-    ('PR-51', '16 : PTFE Moulded (no inner shell ) Half Rubber'),
-    ('PR-16', 'NA')
-ON CONFLICT (process_code) DO UPDATE 
-SET process_description = EXCLUDED.process_description;
 
 
 
@@ -1287,16 +765,6 @@ CREATE TABLE IF NOT EXISTS public.service_po_categories (
   created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CONSTRAINT uq_service_po_category UNIQUE (parent_group, name)
 );
-
-INSERT INTO public.service_po_categories (parent_group, name, sort_order) VALUES
-  ('Service', 'Machine Maintenance', 1),
-  ('Service', 'Quality Services', 2),
-  ('Service', 'Transportation', 3),
-  ('Service', 'Facility Services', 4),
-  ('Service', 'IT Services', 5),
-  ('Service', 'Professional Services', 6),
-  ('Service', 'Utilities', 7)
-ON CONFLICT (parent_group, name) DO NOTHING;
 
 CREATE SEQUENCE IF NOT EXISTS public.service_po_number_seq START 1;
 
@@ -1436,7 +904,7 @@ CREATE TABLE IF NOT EXISTS public.service_po_schedules (
   CONSTRAINT ck_spo_schedule_amt CHECK (planned_amount >= 0)
 );
 
--- Service Acceptance / Service Entry Sheet. Never touches stock or inventory_transaction.
+-- Service Acceptance / Service Entry Sheet. Never touches stock.
 CREATE TABLE IF NOT EXISTS public.service_po_acceptances (
   id                    BIGSERIAL PRIMARY KEY,
   acceptance_number     VARCHAR(30) NOT NULL UNIQUE,
@@ -1544,15 +1012,6 @@ CREATE TABLE IF NOT EXISTS public.capital_po_asset_categories (
   CONSTRAINT uq_capex_category UNIQUE (parent_group, name),
   CONSTRAINT ck_capex_treatment CHECK (treatment IN ('FIXED_ASSET', 'INVENTORY'))
 );
-
-INSERT INTO public.capital_po_asset_categories (parent_group, name, sort_order) VALUES
-  ('Assets', 'Plant & Machinery', 1),
-  ('Assets', 'Moulds & Dies', 2),
-  ('Assets', 'Electrical Equipment', 3),
-  ('Assets', 'IT Equipment', 4),
-  ('Assets', 'Low Valued Assets', 5),
-  ('Assets', 'Low Valued - Lab Equipment', 6)
-ON CONFLICT (parent_group, name) DO NOTHING;
 
 CREATE SEQUENCE IF NOT EXISTS public.capital_po_number_seq START 1;
 CREATE SEQUENCE IF NOT EXISTS public.capital_receipt_number_seq START 1;
@@ -1826,31 +1285,12 @@ CREATE TABLE IF NOT EXISTS public.capital_po_attachments (
 );
 CREATE INDEX IF NOT EXISTS idx_capex_att_po ON public.capital_po_attachments(capital_po_id);
 
--- =============================================================================
--- JOB WORK (subcontracting) — Phase 1
--- Company stock moves through the existing inventory engine (inventory_transaction).
--- Virtual locations: "External Job Work" (material with outside workers) and "Quality Hold"
--- (received material awaiting inspection). Existing Store, Rejection Store and Rework-Burning
--- departments receive inspected material. The job-worker-wise ledger below sits on top.
--- =============================================================================
-
-INSERT INTO public.department_master (dept_code, dept_number, department_name, process_sequence, category, status, notes)
-SELECT 'JW-EXT', NULL, 'External Job Work', 0, 'JOB WORK', 'ACTIVE', 'Virtual location: material held by external job workers'
-WHERE NOT EXISTS (SELECT 1 FROM public.department_master WHERE department_name = 'External Job Work');
-
-INSERT INTO public.department_master (dept_code, dept_number, department_name, process_sequence, category, status, notes)
-SELECT 'QH-HOLD', NULL, 'Quality Hold', 0, 'QUALITY', 'ACTIVE', 'Virtual location: received job work material awaiting inspection'
-WHERE NOT EXISTS (SELECT 1 FROM public.department_master WHERE department_name = 'Quality Hold');
-
 CREATE TABLE IF NOT EXISTS public.job_work_operations (
   id              BIGSERIAL PRIMARY KEY,
   operation_name  VARCHAR(100) NOT NULL UNIQUE,
   status          VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-INSERT INTO public.job_work_operations (operation_name) VALUES
-  ('CNC'), ('Machining'), ('Grinding'), ('Moulding'), ('Coating'), ('Heat Treatment'), ('Finishing'), ('Turning'), ('Plating'), ('Other')
-ON CONFLICT (operation_name) DO NOTHING;
 
 CREATE SEQUENCE IF NOT EXISTS public.job_work_number_seq START 1;
 
@@ -1911,7 +1351,7 @@ CREATE TABLE IF NOT EXISTS public.job_work_indents (
   indent_date           DATE NOT NULL,
   requesting_department_id BIGINT NOT NULL REFERENCES public.department_master(id),
   requester             VARCHAR(150) NOT NULL,
-  source_department_id  BIGINT NOT NULL REFERENCES public.department_master(id),
+  source_department_id  BIGINT REFERENCES public.department_master(id),
   status                VARCHAR(20) NOT NULL DEFAULT 'DRAFT',
   reason                TEXT NOT NULL,
   required_dispatch_date DATE,
@@ -1933,7 +1373,7 @@ CREATE TABLE IF NOT EXISTS public.job_work_indent_lines (
   id                    BIGSERIAL PRIMARY KEY,
   indent_id             BIGINT NOT NULL REFERENCES public.job_work_indents(id) ON DELETE CASCADE,
   line_no               INT NOT NULL,
-  master_id             BIGINT NOT NULL REFERENCES public.master(id),
+  item_master_id        BIGINT NOT NULL REFERENCES public.item_master(id),
   item_code             VARCHAR(255) NOT NULL,
   item_name             VARCHAR(500),
   category              VARCHAR(255) NOT NULL,
@@ -1981,7 +1421,7 @@ CREATE TABLE IF NOT EXISTS public.job_work_order_lines (
   id                    BIGSERIAL PRIMARY KEY,
   jwo_id                BIGINT NOT NULL REFERENCES public.job_work_orders(id) ON DELETE CASCADE,
   line_no               INT NOT NULL,
-  master_id             BIGINT NOT NULL REFERENCES public.master(id),
+  item_master_id        BIGINT NOT NULL REFERENCES public.item_master(id),
   item_code             VARCHAR(255) NOT NULL,
   item_name             VARCHAR(500),
   category              VARCHAR(255) NOT NULL,
@@ -2000,12 +1440,16 @@ CREATE TABLE IF NOT EXISTS public.job_work_order_lines (
   rejected_qty          NUMERIC(15,2) NOT NULL DEFAULT 0,
   rework_qty            NUMERIC(15,2) NOT NULL DEFAULT 0,
   rework_redispatched_qty NUMERIC(15,2) NOT NULL DEFAULT 0,
+  written_off_qty       NUMERIC(15,2) NOT NULL DEFAULT 0,  -- written off after an approved shortage or process-loss adjustment
   scrap_qty             NUMERIC(15,2) NOT NULL DEFAULT 0,
   remarks               TEXT,
   CONSTRAINT uq_jwo_line UNIQUE (jwo_id, line_no),
   CONSTRAINT ck_jwo_line_qty CHECK (input_qty > 0 AND expected_output_qty >= 0 AND rate >= 0),
   CONSTRAINT ck_jwo_line_dispatch CHECK (dispatched_qty >= 0 AND dispatched_qty <= input_qty),
-  CONSTRAINT ck_jwo_line_received CHECK (received_qty >= 0 AND unused_returned_qty >= 0 AND received_qty + unused_returned_qty <= dispatched_qty),
+  -- Re-dispatched rework goes out again, so what a worker may return includes re-dispatched rework. Older databases
+  -- get this definition from migration 2026-10-29-09.
+  CONSTRAINT ck_jwo_line_received CHECK (received_qty >= 0 AND unused_returned_qty >= 0 AND written_off_qty >= 0
+                                         AND received_qty + unused_returned_qty + written_off_qty <= dispatched_qty + rework_redispatched_qty),
   CONSTRAINT ck_jwo_line_inspected CHECK (accepted_qty + rejected_qty + rework_qty + scrap_qty <= received_qty + 0.001)
 );
 
@@ -2036,12 +1480,10 @@ CREATE TABLE IF NOT EXISTS public.job_work_challan_lines (
   id                    BIGSERIAL PRIMARY KEY,
   challan_id            BIGINT NOT NULL REFERENCES public.job_work_challans(id) ON DELETE CASCADE,
   jwo_line_id           BIGINT NOT NULL REFERENCES public.job_work_order_lines(id),
-  master_id             BIGINT NOT NULL REFERENCES public.master(id),
+  item_master_id        BIGINT NOT NULL REFERENCES public.item_master(id),
   category              VARCHAR(255) NOT NULL,
   batch_no              VARCHAR(100),
   qty                   NUMERIC(15,2) NOT NULL,
-  inventory_transaction_id BIGINT REFERENCES public.inventory_transaction(id),
-  reversal_transaction_id  BIGINT REFERENCES public.inventory_transaction(id),
   CONSTRAINT ck_jwc_line_qty CHECK (qty > 0)
 );
 
@@ -2064,7 +1506,7 @@ CREATE TABLE IF NOT EXISTS public.job_work_receipt_lines (
   id                    BIGSERIAL PRIMARY KEY,
   receipt_id            BIGINT NOT NULL REFERENCES public.job_work_receipts(id) ON DELETE CASCADE,
   jwo_line_id           BIGINT NOT NULL REFERENCES public.job_work_order_lines(id),
-  master_id             BIGINT NOT NULL REFERENCES public.master(id),
+  item_master_id        BIGINT NOT NULL REFERENCES public.item_master(id),
   category              VARCHAR(255) NOT NULL,
   qty_received          NUMERIC(15,2) NOT NULL,
   unused_returned_qty   NUMERIC(15,2) NOT NULL DEFAULT 0,
@@ -2077,8 +1519,8 @@ CREATE TABLE IF NOT EXISTS public.job_work_receipt_lines (
   inspection_remarks    TEXT,
   inspected_by          VARCHAR(150),
   inspected_at          TIMESTAMPTZ,
-  receive_transaction_id   BIGINT REFERENCES public.inventory_transaction(id),
-  unused_transaction_id    BIGINT REFERENCES public.inventory_transaction(id),
+  receive_transaction_id   BIGINT,   -- legacy: the inventory transaction table was removed
+  unused_transaction_id    BIGINT,   -- legacy: the inventory transaction table was removed
   CONSTRAINT ck_jwr_line_qty CHECK (qty_received >= 0 AND unused_returned_qty >= 0),
   CONSTRAINT ck_jwr_line_status CHECK (inspection_status IN ('PENDING','INSPECTED')),
   CONSTRAINT ck_jwr_line_disposition CHECK (
@@ -2092,7 +1534,7 @@ CREATE TABLE IF NOT EXISTS public.job_work_stock_ledger (
   job_worker_id         BIGINT NOT NULL REFERENCES public.job_workers(id),
   jwo_id                BIGINT NOT NULL REFERENCES public.job_work_orders(id),
   jwo_line_id           BIGINT NOT NULL REFERENCES public.job_work_order_lines(id),
-  master_id             BIGINT NOT NULL REFERENCES public.master(id),
+  item_master_id        BIGINT NOT NULL REFERENCES public.item_master(id),
   category              VARCHAR(255) NOT NULL,
   movement_type         VARCHAR(30) NOT NULL,   -- SENT / RECEIVED / RETURNED_UNUSED / REVERSED_SENT
   qty                   NUMERIC(15,2) NOT NULL, -- signed: + material with worker, - material back
@@ -2100,13 +1542,12 @@ CREATE TABLE IF NOT EXISTS public.job_work_stock_ledger (
   reference_no          VARCHAR(50) NOT NULL,
   challan_id            BIGINT REFERENCES public.job_work_challans(id),
   receipt_id            BIGINT REFERENCES public.job_work_receipts(id),
-  inventory_transaction_id BIGINT REFERENCES public.inventory_transaction(id),
   created_by            VARCHAR(150) NOT NULL,
   created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CONSTRAINT ck_jwl_nonzero CHECK (qty <> 0),
   CONSTRAINT ck_jwl_balance CHECK (balance_after >= 0)
 );
-CREATE INDEX IF NOT EXISTS idx_jwl_worker_item ON public.job_work_stock_ledger(job_worker_id, master_id, category);
+CREATE INDEX IF NOT EXISTS idx_jwl_worker_item ON public.job_work_stock_ledger(job_worker_id, item_master_id, category);
 
 -- Approval and status history for indents, orders, challans, receipts and workers.
 CREATE TABLE IF NOT EXISTS public.job_work_history (
@@ -2139,25 +1580,8 @@ CREATE TABLE IF NOT EXISTS public.job_work_attachments (
 -- Job work: a challan dispatched from the Rework store re-sends rejected/rework material.
 ALTER TABLE public.job_work_challans ADD COLUMN IF NOT EXISTS rework_dispatch BOOLEAN NOT NULL DEFAULT FALSE;
 
--- Job work: re-dispatched rework goes out again, so what a worker may return includes re-dispatched rework.
-ALTER TABLE public.job_work_order_lines DROP CONSTRAINT IF EXISTS ck_jwo_line_received;
-ALTER TABLE public.job_work_order_lines ADD CONSTRAINT ck_jwo_line_received
-  CHECK (received_qty >= 0 AND unused_returned_qty >= 0 AND received_qty + unused_returned_qty <= dispatched_qty + rework_redispatched_qty);
-
--- =============================================================================
--- JOB WORK — Phase 2: reconciliation, scrap disposal, write-offs, permissible loss
--- =============================================================================
-
-INSERT INTO public.department_master (dept_code, dept_number, department_name, process_sequence, category, status, notes)
-SELECT 'SCRAP-YD', NULL, 'Scrap Yard', 0, 'SCRAP', 'ACTIVE', 'Location for disposed scrap (after approval)'
-WHERE NOT EXISTS (SELECT 1 FROM public.department_master WHERE department_name = 'Scrap Yard');
-
 -- Quantity of an order line written off after an approved shortage or process-loss adjustment.
 ALTER TABLE public.job_work_order_lines ADD COLUMN IF NOT EXISTS written_off_qty NUMERIC(15,2) NOT NULL DEFAULT 0;
-ALTER TABLE public.job_work_order_lines DROP CONSTRAINT IF EXISTS ck_jwo_line_received;
-ALTER TABLE public.job_work_order_lines ADD CONSTRAINT ck_jwo_line_received
-  CHECK (received_qty >= 0 AND unused_returned_qty >= 0 AND written_off_qty >= 0
-         AND received_qty + unused_returned_qty + written_off_qty <= dispatched_qty + rework_redispatched_qty);
 
 -- Permissible process loss, as a percentage of dispatched quantity, per operation (and optional category).
 CREATE TABLE IF NOT EXISTS public.job_work_loss_policy (
@@ -2180,7 +1604,7 @@ CREATE TABLE IF NOT EXISTS public.job_work_adjustments (
   jwo_id                BIGINT NOT NULL REFERENCES public.job_work_orders(id),
   jwo_line_id           BIGINT NOT NULL REFERENCES public.job_work_order_lines(id),
   job_worker_id         BIGINT NOT NULL REFERENCES public.job_workers(id),
-  master_id             BIGINT NOT NULL REFERENCES public.master(id),
+  item_master_id        BIGINT NOT NULL REFERENCES public.item_master(id),
   category              VARCHAR(255) NOT NULL,
   adjustment_type       VARCHAR(30) NOT NULL,
   qty                   NUMERIC(15,2) NOT NULL,
@@ -2192,7 +1616,7 @@ CREATE TABLE IF NOT EXISTS public.job_work_adjustments (
   decided_by            VARCHAR(150),
   decided_at            TIMESTAMPTZ,
   decision_comments     TEXT,
-  inventory_transaction_id BIGINT REFERENCES public.inventory_transaction(id),
+  inventory_transaction_id BIGINT,   -- legacy: the inventory transaction table was removed
   CONSTRAINT ck_jw_adj_type CHECK (adjustment_type IN ('SCRAP_DISPOSAL','SHORTAGE','PROCESS_LOSS')),
   CONSTRAINT ck_jw_adj_status CHECK (status IN ('PENDING','APPROVED','REJECTED')),
   CONSTRAINT ck_jw_adj_qty CHECK (qty > 0)
@@ -2263,3 +1687,139 @@ ALTER TABLE public.grn_item_allocations ADD COLUMN IF NOT EXISTS accepted_qty NU
 -- NULL on older rows, which are classified by their allocation records instead (see ProcurementReportService).
 ALTER TABLE public.purchase_orders ADD COLUMN IF NOT EXISTS po_origin VARCHAR(20);
 ALTER TABLE public.purchase_orders ADD COLUMN IF NOT EXISTS expected_delivery DATE;
+
+-- Printed PO header: invoice-to and ship-to blocks, voucher number, and the customer reference.
+ALTER TABLE public.purchase_orders ADD COLUMN IF NOT EXISTS invoice_to TEXT;
+ALTER TABLE public.purchase_orders ADD COLUMN IF NOT EXISTS ship_to TEXT;
+ALTER TABLE public.purchase_orders ADD COLUMN IF NOT EXISTS voucher_no VARCHAR(50);
+ALTER TABLE public.purchase_orders ADD COLUMN IF NOT EXISTS reference_no VARCHAR(100);
+ALTER TABLE public.purchase_orders ADD COLUMN IF NOT EXISTS reference_date DATE;
+
+-- Direct PO only: why the items were bought without a PR instead of through PO by PR. Required when the PO is created.
+ALTER TABLE public.purchase_orders ADD COLUMN IF NOT EXISTS direct_po_reason TEXT;
+
+-- =============================================================================
+-- Sourcing: clubbed demand -> vendor-wise draft POs -> PO by PR
+-- =============================================================================
+-- Quantity of the PR line reserved in open vendor drafts. Kept in step with po_draft_allocations under the PR
+-- line's row lock, exactly like ordered_qty. Ready for sourcing = req_qty - ordered_qty - drafted_qty.
+ALTER TABLE public.purchase_requisition_items ADD COLUMN IF NOT EXISTS drafted_qty NUMERIC(15,2) NOT NULL DEFAULT 0;
+
+-- Document number counters: one row per document type (PR, PO, GRN, DRAFT) and calendar year. Numbers are
+-- PREFIX-YEAR-NNNNN and restart at 1 each year (see DocumentNumbers).
+CREATE TABLE IF NOT EXISTS public.document_number_counters (
+  doc_type    VARCHAR(20) NOT NULL,
+  year        INT         NOT NULL,
+  last_value  BIGINT      NOT NULL,
+  PRIMARY KEY (doc_type, year)
+);
+
+-- One vendor draft. At most one OPEN draft per vendor, so every item given to a vendor lands in the same draft.
+CREATE TABLE IF NOT EXISTS public.po_drafts (
+  id            BIGSERIAL PRIMARY KEY,
+  draft_number  VARCHAR(30)  NOT NULL UNIQUE,
+  vendor_code   VARCHAR(50)  NOT NULL REFERENCES public.supplier_master(supplier_code),
+  status        VARCHAR(20)  NOT NULL DEFAULT 'OPEN',
+  created_by    VARCHAR(150) NOT NULL,
+  created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  updated_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  closed_at     TIMESTAMPTZ,
+  CONSTRAINT ck_po_drafts_status CHECK (status IN ('OPEN', 'CLOSED'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_po_drafts_open_vendor ON public.po_drafts(vendor_code) WHERE status = 'OPEN';
+
+-- One PR line's quantity inside a draft. Rows are never deleted: open = reserved - converted - released.
+CREATE TABLE IF NOT EXISTS public.po_draft_allocations (
+  id             BIGSERIAL PRIMARY KEY,
+  draft_id       BIGINT        NOT NULL REFERENCES public.po_drafts(id),
+  pr_item_id     BIGINT        NOT NULL REFERENCES public.purchase_requisition_items(id),
+  pr_number      VARCHAR(50)   NOT NULL,
+  item_code      VARCHAR(100)  NOT NULL,
+  uom            VARCHAR(50)   NOT NULL,
+  reserved_qty   NUMERIC(15,2) NOT NULL,
+  converted_qty  NUMERIC(15,2) NOT NULL DEFAULT 0,
+  released_qty   NUMERIC(15,2) NOT NULL DEFAULT 0,
+  created_by     VARCHAR(150)  NOT NULL,
+  created_at     TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+  updated_at     TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+  CONSTRAINT ck_pda_reserved CHECK (reserved_qty > 0),
+  CONSTRAINT ck_pda_split CHECK (converted_qty >= 0 AND released_qty >= 0 AND converted_qty + released_qty <= reserved_qty),
+  CONSTRAINT uq_pda_draft_line UNIQUE (draft_id, pr_item_id)
+);
+CREATE INDEX IF NOT EXISTS idx_pda_pr_item ON public.po_draft_allocations(pr_item_id);
+
+-- The draft line a PO allocation was converted from (NULL for POs raised directly through PO by PR).
+ALTER TABLE public.po_pr_allocations ADD COLUMN IF NOT EXISTS draft_allocation_id BIGINT REFERENCES public.po_draft_allocations(id);
+
+-- Audit trail for PR approval decisions and draft actions (assign, release, convert). Insert-only.
+CREATE TABLE IF NOT EXISTS public.procurement_audit_log (
+  id            BIGSERIAL PRIMARY KEY,
+  entity_type   VARCHAR(30)  NOT NULL,
+  entity_ref    VARCHAR(60)  NOT NULL,
+  action        VARCHAR(40)  NOT NULL,
+  actor         VARCHAR(150) NOT NULL,
+  details_json  TEXT,
+  created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_proc_audit_ref ON public.procurement_audit_log(entity_ref);
+
+-- =============================================================================
+-- Item master groups and subgroups (Other Item Master > Groups & Subgroups)
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS public.item_group (
+  id                  BIGSERIAL PRIMARY KEY,
+  name                VARCHAR(150) NOT NULL UNIQUE,
+  code                VARCHAR(30),
+  description         TEXT,
+  sort_order          INT NOT NULL DEFAULT 0,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.item_subgroup (
+  id                  BIGSERIAL PRIMARY KEY,
+  group_id            BIGINT NOT NULL REFERENCES public.item_group(id) ON DELETE CASCADE,
+  name                VARCHAR(150) NOT NULL,
+  code                VARCHAR(30),
+  description         TEXT,
+  sort_order          INT NOT NULL DEFAULT 0,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT uk_item_subgroup_name UNIQUE (group_id, name)
+);
+
+-- =============================================================================
+-- Application settings (theme, table column widths, current user). Stored in PostgreSQL, not in the browser.
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS public.app_setting (
+  setting_key         VARCHAR(200) PRIMARY KEY,
+  setting_value       JSONB NOT NULL,
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- =============================================================================
+-- Registry of one-time data migrations (StartupDataMigrations). A row here means the
+-- migration has been applied to this database and must never run again.
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS public.app_data_migration (
+  migration_id        VARCHAR(150) PRIMARY KEY,
+  description         TEXT NOT NULL,
+  checksum            VARCHAR(64) NOT NULL,
+  rows_affected       INT NOT NULL,
+  applied_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- =============================================================================
+-- Registry of user-managed defaults that have been seeded into this database (seed-data.sql,
+-- DataInitializer bulk files, ItemGroupService). A key here means "already seeded once": if the
+-- user later deletes that row it is NOT seeded again. System rows are not tracked here; they are
+-- restored when missing (see docs/startup-data-rules.md).
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS public.app_seed_registry (
+  seed_key            VARCHAR(300) PRIMARY KEY,
+  policy              VARCHAR(10) NOT NULL,
+  first_seeded_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Databases created before the master -> item_master consolidation are brought in line by data migrations
+-- 2026-10-25-06 and -07 (StartupDataMigrations): job-work columns re-pointed to item_master, old tables dropped.

@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import * as XLSX from "xlsx";
 import DateInput from "../../../shared/components/DateInput";
+import SearchableSelect from "../../../shared/components/SearchableSelect";
 import { formatDisplayDate } from "../../../shared/utils/dateFormat";
+import { isNumericHeader } from "../newpo/ui";
 
 // ============================================================================
 // Capital Purchase Order (CAPEX). Uses capital_* tables and asset_master on the backend.
@@ -10,6 +12,8 @@ import { formatDisplayDate } from "../../../shared/utils/dateFormat";
 
 const API_ROOT = (import.meta.env.VITE_API_URL || "http://localhost:4000") + "/api";
 const CPO = `${API_ROOT}/capital-pos`;
+import { getSetting, setSetting } from "../../../shared/utils/settingsStore";
+
 const USER_KEY = "SMS_CURRENT_USER";
 const ROLES = ["CREATOR", "APPROVER", "RECEIVER", "ASSET_MANAGER", "ADMIN"];
 const CONDITIONS = ["GOOD", "DAMAGED", "PARTIAL"];
@@ -68,17 +72,12 @@ const money = (v) => {
 };
 
 function loadUser() {
-  try {
-    const raw = localStorage.getItem(USER_KEY);
-    if (raw) {
-      const u = JSON.parse(raw);
-      if (u && u.name) return { name: u.name, role: ROLES.includes(u.role) ? u.role : "CREATOR" };
-    }
-  } catch (e) { /* storage unavailable */ }
+  const u = getSetting(USER_KEY, null);
+  if (u && u.name) return { name: u.name, role: ROLES.includes(u.role) ? u.role : "CREATOR" };
   return { name: "Current User", role: "CREATOR" };
 }
 function saveUser(u) {
-  try { localStorage.setItem(USER_KEY, JSON.stringify(u)); } catch (e) { /* ignore */ }
+  setSetting(USER_KEY, u);
 }
 
 async function api(method, path, user, body) {
@@ -281,7 +280,19 @@ function Table({ headers, children, minWidth }) {
   return (
     <div style={{ overflowX: "auto", border: "1px solid #e2e8f0", borderRadius: 8 }}>
       <table style={{ width: "100%", minWidth, borderCollapse: "collapse", fontSize: 12 }}>
-        <thead><tr style={{ background: "#f8fafc" }}>{headers.map((h) => <th key={h} style={{ textAlign: "left", padding: "7px 8px", borderBottom: "1px solid #e2e8f0", color: "#334155", whiteSpace: "nowrap" }}>{h}</th>)}</tr></thead>
+        <thead>
+          <tr style={{ background: "#f8fafc" }}>
+            {headers.map((h) => {
+              const label = typeof h === "string" ? h : (h && h.label) || "";
+              const align = isNumericHeader(label) ? "right" : "left";
+              return (
+                <th key={label} style={{ textAlign: align, padding: "7px 8px", borderBottom: "1px solid #e2e8f0", color: "#334155", whiteSpace: "nowrap" }}>
+                  {label}
+                </th>
+              );
+            })}
+          </tr>
+        </thead>
         <tbody>{children}</tbody>
       </table>
     </div>
@@ -398,10 +409,7 @@ function CreateForm({ user, refs, editing, amendMode, onSaved, onCancel, flash }
         </Field>
         <Field label="PO date"><DateInput value={h.poDate} onChange={setHeader("poDate")} max={TODAY()} style={inp} /></Field>
         <Field label="Vendor / supplier" required span={2}>
-          <select style={inp} value={h.vendorCode} onChange={(e) => setH((x) => ({ ...x, vendorCode: e.target.value }))}>
-            <option value="">Select vendor</option>
-            {vendorOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
+          <SearchableSelect value={h.vendorCode} onChange={(e) => setH((x) => ({ ...x, vendorCode: e.target.value }))} placeholder="Select vendor" options={vendorOptions} />
         </Field>
         <Field label="Vendor GSTIN"><input style={{ ...inp, background: "#f8fafc" }} disabled value={vendor ? vendor.gstin || "" : ""} /></Field>
         <Field label="Vendor state"><input style={{ ...inp, background: "#f8fafc" }} disabled value={vendor ? `${vendor.state || ""} ${vendor.stateCode ? `(${vendor.stateCode})` : ""}` : ""} /></Field>
@@ -409,19 +417,15 @@ function CreateForm({ user, refs, editing, amendMode, onSaved, onCancel, flash }
         <Field label="Company state code" required hint="2 digits, e.g. 06"><input style={inp} maxLength={2} value={h.companyStateCode} onChange={setHeader("companyStateCode")} /></Field>
         <Field label="Place of supply state code" hint="Blank = company state"><input style={inp} maxLength={2} value={h.placeOfSupplyStateCode} onChange={setHeader("placeOfSupplyStateCode")} /></Field>
         <Field label="Department" required>
-          <select style={inp} value={h.departmentId} onChange={setHeader("departmentId")}>
-            <option value="">Select department</option>
-            {refs.departments.map((d) => <option key={d.id} value={d.id}>{d.departmentName || d.name}</option>)}
-          </select>
+          <SearchableSelect value={h.departmentId} onChange={setHeader("departmentId")} placeholder="Select department"
+            options={refs.departments.map((d) => ({ value: d.id, label: d.departmentName || d.name }))} />
         </Field>
         <Field label="Requester" hint="Defaults to the signed-in user"><input style={inp} value={h.requester} placeholder={user.name} onChange={setHeader("requester")} /></Field>
         <Field label="Plant / location" required><input style={inp} value={h.plantLocation} onChange={setHeader("plantLocation")} /></Field>
         <Field label="Delivery address" span={2}><input style={inp} value={h.deliveryAddress} onChange={setHeader("deliveryAddress")} /></Field>
         <Field label="Related Capital PR" hint={refs.policy.allowDirectCreation ? "Optional: leave blank for direct creation (permitted by policy)" : "Required by company policy"}>
-          <select style={inp} value={h.prNumber} onChange={(e) => setH((x) => ({ ...x, prNumber: e.target.value }))}>
-            <option value="">No PR (direct)</option>
-            {refs.eligiblePrs.map((p) => <option key={p.prNumber} value={p.prNumber}>{p.prNumber} · {p.department}</option>)}
-          </select>
+          <SearchableSelect value={h.prNumber} onChange={(e) => setH((x) => ({ ...x, prNumber: e.target.value }))} emptyLabel="No PR (direct)"
+            options={refs.eligiblePrs.map((p) => ({ value: p.prNumber, label: p.prNumber, sub: p.department }))} />
         </Field>
         <Field label="Quotation / RFQ reference"><input style={inp} value={h.quotationReference} onChange={setHeader("quotationReference")} /></Field>
         <Field label="Contract / agreement reference"><input style={inp} value={h.contractReference} onChange={setHeader("contractReference")} /></Field>
@@ -448,17 +452,13 @@ function CreateForm({ user, refs, editing, amendMode, onSaved, onCancel, flash }
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10 }}>
                   <Field label="Asset category" required>
-                    <select style={inp} value={l.assetCategory} onChange={setLine(i, "assetCategory")}>
-                      <option value="">Select category</option>
-                      {refs.categories.map((c) => <option key={c.name} value={c.name}>{c.name}{c.treatment === "INVENTORY" ? " (inventory)" : ""}</option>)}
-                    </select>
+                    <SearchableSelect value={l.assetCategory} onChange={setLine(i, "assetCategory")} placeholder="Select category"
+                      options={refs.categories.map((c) => ({ value: c.name, label: c.name, sub: c.treatment === "INVENTORY" ? "inventory" : "" }))} />
                   </Field>
                   <Field label="Asset name / title" required><input style={inp} value={l.assetName} onChange={setLine(i, "assetName")} /></Field>
                   <Field label="HSN code" required hint="Goods HSN from Tax Master">
-                    <select style={inp} value={l.hsnCode} onChange={setLine(i, "hsnCode")}>
-                      <option value="">Select HSN</option>
-                      {refs.hsnGoods.map((x) => <option key={x.code} value={x.code}>{x.code} — {x.description} ({Number(x.gstRate).toFixed(0)}%)</option>)}
-                    </select>
+                    <SearchableSelect value={l.hsnCode} onChange={setLine(i, "hsnCode")} placeholder="Search HSN code or description"
+                      options={refs.hsnGoods.map((x) => ({ value: x.code, label: x.code, sub: `${x.description} (${Number(x.gstRate).toFixed(0)}%)` }))} />
                   </Field>
                   <Field label="Detailed description" required span={2}><textarea style={{ ...inp, minHeight: 50 }} value={l.assetDescription} onChange={setLine(i, "assetDescription")} /></Field>
                   <Field label="Technical specifications" span={1}><textarea style={{ ...inp, minHeight: 50 }} value={l.technicalSpecs} onChange={setLine(i, "technicalSpecs")} /></Field>
@@ -495,10 +495,7 @@ function CreateForm({ user, refs, editing, amendMode, onSaved, onCancel, flash }
                   </Field>
                   <Field label="Useful life (years)"><input type="number" min="0" style={inp} value={l.usefulLifeYears} onChange={setLine(i, "usefulLifeYears")} /></Field>
                   <Field label="Linked PR item" hint={h.prNumber ? "From the selected PR" : "Select a PR in the header first"}>
-                    <select style={inp} value={l.prItemId} onChange={setLine(i, "prItemId")} disabled={!h.prNumber}>
-                      <option value="">Not linked</option>
-                      {prItemOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </select>
+                    <SearchableSelect value={l.prItemId} onChange={setLine(i, "prItemId")} disabled={!h.prNumber} emptyLabel="Not linked" options={prItemOptions} />
                   </Field>
                   <Field label="Responsible team"><input style={inp} value={l.responsibleTeam} onChange={setLine(i, "responsibleTeam")} /></Field>
                   <Field label="Line remarks" span={2}><input style={inp} value={l.remarks} onChange={setLine(i, "remarks")} /></Field>
@@ -513,10 +510,8 @@ function CreateForm({ user, refs, editing, amendMode, onSaved, onCancel, flash }
         <Field label="Shipping / installation charges"><input type="number" min="0" step="0.01" style={inp} value={h.shippingInstallationCharges} onChange={setHeader("shippingInstallationCharges")} /></Field>
         <Field label="Freight and other charges"><input type="number" min="0" step="0.01" style={inp} value={h.freightOtherCharges} onChange={setHeader("freightOtherCharges")} /></Field>
         <Field label="SAC for charges" hint="Required when charges are entered">
-          <select style={inp} value={h.chargesSacCode} onChange={setHeader("chargesSacCode")}>
-            <option value="">Select SAC</option>
-            {refs.sacCodes.map((s) => <option key={s.code} value={s.code}>{s.code} — {s.description} ({Number(s.gstRate).toFixed(0)}%)</option>)}
-          </select>
+          <SearchableSelect value={h.chargesSacCode} onChange={setHeader("chargesSacCode")} placeholder="Search SAC code or description"
+            options={refs.sacCodes.map((s) => ({ value: s.code, label: s.code, sub: `${s.description} (${Number(s.gstRate).toFixed(0)}%)` }))} />
         </Field>
         <Field label="Totals (server)" span={3}><TotalsPanel preview={preview} canPreview={canPreview} /></Field>
       </Section>
@@ -747,10 +742,8 @@ function ActionDialog({ state, user, onClose, onDone }) {
       {action === "REGISTER_ASSET" && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
           <Field label="Received line to register" required span={2}>
-            <select style={inp} value={reg.receiptLineId} onChange={(e) => setReg({ ...reg, receiptLineId: e.target.value })}>
-              <option value="">Select receipt line</option>
-              {receivedLines.map((x) => <option key={x.receiptLineId} value={x.receiptLineId}>{x.receiptNumber} · line {x.lineNo} {x.assetName} · {x.qtyReceived} unit(s)</option>)}
-            </select>
+            <SearchableSelect value={reg.receiptLineId} onChange={(e) => setReg({ ...reg, receiptLineId: e.target.value })} placeholder="Select receipt line"
+              options={receivedLines.map((x) => ({ value: x.receiptLineId, label: `${x.receiptNumber} · line ${x.lineNo} ${x.assetName}`, sub: `${x.qtyReceived} unit(s)` }))} />
           </Field>
           <Field label="Serial numbers" hint="One per unit, comma separated (optional)" span={2}><input style={inp} value={reg.serialNumbers} onChange={(e) => setReg({ ...reg, serialNumbers: e.target.value })} /></Field>
           <div style={{ gridColumn: "1 / -1", fontSize: 11, color: "#64748b" }}>
@@ -1094,13 +1087,16 @@ function RegisterTab({ user, refs, refreshToken, onView, onAction, onEdit, onAme
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10, marginBottom: 10 }}>
         <Field label="PO number"><input style={inp} value={filters.poNumber} onChange={setF("poNumber")} placeholder="CPO-…" /></Field>
         <Field label="Vendor">
-          <select style={inp} value={filters.vendor} onChange={setF("vendor")}><option value="">All vendors</option>{refs.vendors.map((v) => <option key={v.supplierCode} value={v.supplierCode}>{v.supplierName}</option>)}</select>
+          <SearchableSelect value={filters.vendor} onChange={setF("vendor")} emptyLabel="All vendors"
+            options={refs.vendors.map((v) => ({ value: v.supplierCode, label: v.supplierName, sub: v.supplierCode }))} />
         </Field>
         <Field label="Asset category">
-          <select style={inp} value={filters.assetCategory} onChange={setF("assetCategory")}><option value="">All categories</option>{refs.categories.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}</select>
+          <SearchableSelect value={filters.assetCategory} onChange={setF("assetCategory")} emptyLabel="All categories"
+            options={refs.categories.map((c) => ({ value: c.name, label: c.name }))} />
         </Field>
         <Field label="Department">
-          <select style={inp} value={filters.department} onChange={setF("department")}><option value="">All departments</option>{refs.departments.map((d) => <option key={d.id} value={d.departmentName || d.name}>{d.departmentName || d.name}</option>)}</select>
+          <SearchableSelect value={filters.department} onChange={setF("department")} emptyLabel="All departments"
+            options={refs.departments.map((d) => ({ value: d.departmentName || d.name, label: d.departmentName || d.name }))} />
         </Field>
         <Field label="Plant / location"><input style={inp} value={filters.plant} onChange={setF("plant")} /></Field>
         <Field label="Approval status"><select style={inp} value={filters.status} onChange={setF("status")}><option value="">All</option>{statusOpts(STATUS_STYLE)}</select></Field>
@@ -1294,8 +1290,8 @@ export function CapitalPurchaseOrderPage({ onBackToHome, onOpenSidebar, sidebarO
         </div>
       </div>
 
-      <div style={{ flex: 1, minHeight: 0, padding: 18, display: "flex", flexDirection: "column", boxSizing: "border-box" }}>
-        <div style={{ maxWidth: 1440, width: "100%", margin: "0 auto", flex: 1, minHeight: 0, display: "flex", flexDirection: "column", boxSizing: "border-box", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, padding: 16, overflowY: tab === "create" ? "auto" : "hidden" }}>
+      <div style={{ flex: 1, minHeight: 0, padding: 0, display: "flex", flexDirection: "column", boxSizing: "border-box" }}>
+        <div style={{ width: "100%", flex: 1, minHeight: 0, display: "flex", flexDirection: "column", boxSizing: "border-box", background: "#fff", border: "none", borderRadius: 0, padding: 16, overflowY: tab === "create" ? "auto" : "hidden" }}>
           <div style={{ fontSize: 12, color: "#64748b", marginBottom: 10 }}>
             Purchase › Purchase Order › <b style={{ color: "#0f172a" }}>Capital PO</b>
             <span style={{ marginLeft: 12 }}>Physical receipt, installation, commissioning and asset registration are recorded separately from approval.</span>

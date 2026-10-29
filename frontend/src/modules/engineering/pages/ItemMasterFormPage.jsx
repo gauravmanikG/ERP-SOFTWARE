@@ -1,7 +1,7 @@
 import { useResizableColumns, ResizableColGroup, ColumnResizeHandle } from "../../../shared/components/ResizableTable";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { Eye, Pencil, Trash2, Search, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
-import { REAL_ITEM_MASTER_DATA } from "../data/realItemMasterData";
+import SearchableSelect from "../../../shared/components/SearchableSelect";
 
 // Master lists extracted directly from the reference sheet
 const GROUP_OPTIONS = [
@@ -40,41 +40,6 @@ const SUBSUBGROUP_OPTIONS = [
 const PRODUCT_OPTIONS = GROUP_OPTIONS;
 const SEGMENT_OPTIONS = SUBGROUP_OPTIONS;
 const REGION_OPTIONS = SUBSUBGROUP_OPTIONS;
-
-const DEFAULT_PROCUREMENT_OPTIONS = [
-  "IN HOUSE",
-  "OUTSOURCE",
-  "BUY/INHOUSE",
-  "IMPORTED"
-];
-
-const DEFAULT_PROCESS_OPTIONS = [
-  { code: "PR-1", label: "PR-1 : 1 : Metal Open Type : In-house" },
-  { code: "PR-2", label: "PR-2 : 2 : Metal Close Type : In-house" },
-  { code: "PR-3", label: "PR-3 : 5 : Half Rubber : Open" },
-  { code: "PR-4", label: "PR-4 : 6 : Half Rubber : Close" },
-  { code: "PR-5", label: "PR-5 : 7 : Full Rubber : Open" },
-  { code: "PR-7", label: "PR-7 : 8 : Full Rubber : Close" },
-  { code: "PR-8", label: "PR-8 : 9 : Cassette Seal" },
-  { code: "PR-9", label: "PR-9 : 10 : Combi Seal" },
-  { code: "PR-10", label: "PR-10 : 11 : PTFE Moulded (no inner shell)" },
-  { code: "PR-11", label: "PR-11 : 12 : PTFE Moulded (with inner shell)" },
-  { code: "PR-12", label: "PR-12 : 13 : PTFE Fitted" },
-  { code: "PR-13", label: "PR-13 : 14 : Hub Seal SKF" },
-  { code: "PR-14", label: "PR-14 : 15 : Hub Seal National" },
-  { code: "PR-15", label: "PR-15 : 3: ABS SEAL" },
-  { code: "PR-51", label: "PR-51 : 16 : PTFE Moulded (no inner shell ) Half Rubber" },
-  { code: "PR-16", label: "PR-16 : NA" }
-];
-
-const DEFAULT_HSN_OPTIONS = [
-  { code: "8484", desc: "Gaskets and joints of metal sheeting" },
-  { code: "8487", desc: "Machinery parts without electrical connectors" },
-  { code: "4016", desc: "Vulcanised rubber articles" },
-  { code: "3926", desc: "Plastics articles" },
-  { code: "7318", desc: "Screws, bolts, nuts, washers" },
-  { code: "8482", desc: "Ball or roller bearings" }
-];
 
 const INITIAL_ITEM_FORM = {
   // Core Classification (Row 1)
@@ -160,6 +125,9 @@ const INITIAL_ITEM_FORM = {
   safety_lead_time: "",
   procurement_lead_time: ""
 };
+
+// Stored fields without the empty ones, so a form input never receives null.
+const withoutNulls = (row) => Object.fromEntries(Object.entries(row).filter(([, v]) => v !== null && v !== undefined));
 
 // Helper functions to extract digits for group, subgroup, subsubgroup and generate part number
 function getGroupDigit(groupStr) {
@@ -250,7 +218,6 @@ function getNextIncrementalSuffix(savedItems = [], baseOffset = 0) {
   return String(nextVal).padStart(5, "0");
 }
 
-const DEFAULT_SAVED_ITEMS = REAL_ITEM_MASTER_DATA;
 
 const STORAGE_KEY = "sms_engineering_item_master_v3";
 
@@ -289,8 +256,6 @@ export function ItemMasterFormPage({
   const [quickSearch, setQuickSearch] = useState("");
 
   // Pagination State (for fast, responsive browsing of all 1,582 records)
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(50);
 
   // Table selection & column filter state
   const [selectedIds, setSelectedIds] = useState(new Set());
@@ -308,7 +273,7 @@ export function ItemMasterFormPage({
   });
 
   // Master dataset stored in state directly from PostgreSQL database (no localStorage)
-  const [savedItems, setSavedItems] = useState(REAL_ITEM_MASTER_DATA);
+  const [savedItems, setSavedItems] = useState([]);
 
   // Uniqueness check for item description (case-insensitive)
   const isDuplicateDescription = useMemo(() => {
@@ -321,25 +286,17 @@ export function ItemMasterFormPage({
     });
   }, [formData?.description_size, savedItems, editingId]);
 
-  // Purge any old localStorage cached items to ensure pure PostgreSQL truth
-  useEffect(() => {
-    try {
-      localStorage.removeItem(STORAGE_KEY);
-      localStorage.removeItem("sms_engineering_item_master");
-      localStorage.removeItem("sms_engineering_item_master_v2");
-    } catch (e) {}
-  }, []);
 
   // Fetch all FG items directly from backend PostgreSQL item_master table
   const fetchDbItems = () => {
     fetch("http://localhost:4000/api/inventory/items?type=FG")
-      .then((res) => (res.ok ? res.json() : []))
+      .then((res) => (res.ok ? res.json() : null))
       .then((dbItems) => {
-        if (Array.isArray(dbItems) && dbItems.length > 0) {
+        if (Array.isArray(dbItems)) {
           const mapped = dbItems.map((it) => {
             const code = it.sms_new_part_no || it.item_code || "";
             return {
-              ...it,
+              ...withoutNulls(it),
               id: it.id,
               sms_new_part_no: code,
               sms_old_part_no: it.old_code || "",
@@ -350,7 +307,7 @@ export function ItemMasterFormPage({
               group: it.group_name || "FG",
               group_name: it.group_name || "FG",
               subgroup: it.subgroup || "",
-              product: it.group_name || it.subgroup || "FG",
+              product: it.subgroup || "",
               segment: it.segment || "",
               region: it.region || "",
               sub_subgroup: it.region || "",
@@ -412,46 +369,35 @@ export function ItemMasterFormPage({
     fontSize: 11
   };
 
-  // Master lists loaded dynamically from PostgreSQL / APIs
-  const [procurementList, setProcurementList] = useState(DEFAULT_PROCUREMENT_OPTIONS);
-  const [processList, setProcessList] = useState(DEFAULT_PROCESS_OPTIONS);
-  const [hsnList, setHsnList] = useState(DEFAULT_HSN_OPTIONS);
+  // Master lists come only from PostgreSQL, so an entry deleted in its master never shows here
+  const [procurementList, setProcurementList] = useState([]);
+  const [processList, setProcessList] = useState([]);
+  const [hsnList, setHsnList] = useState([]);
 
   useEffect(() => {
     fetch("http://localhost:4000/api/inventory/procurement-master")
-      .then((res) => (res.ok ? res.json() : []))
+      .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (Array.isArray(data) && data.length > 0) {
-          const list = data.map((d) => d.procurementType || d.procurementName).filter(Boolean);
-          if (list.length > 0) setProcurementList(Array.from(new Set(list)));
+        if (Array.isArray(data)) {
+          setProcurementList(Array.from(new Set(data.map((d) => d.procurementType || d.procurementName).filter(Boolean))));
         }
       })
       .catch((err) => console.warn("Could not fetch procurement master:", err));
 
     fetch("http://localhost:4000/api/inventory/process-master")
-      .then((res) => (res.ok ? res.json() : []))
+      .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (Array.isArray(data) && data.length > 0) {
-          const list = data.map((p) => ({
-            code: p.processCode,
-            label: `${p.processCode} : ${p.processDescription || ""}`
-          }));
-          if (list.length > 0) setProcessList(list);
+        if (Array.isArray(data)) {
+          setProcessList(data.map((p) => ({ code: p.processCode, label: `${p.processCode} : ${p.processDescription || ""}` })));
         }
       })
       .catch((err) => console.warn("Could not fetch process master:", err));
 
     fetch("http://localhost:4000/api/purchase/hsn-master")
-      .then((res) => (res.ok ? res.json() : []))
+      .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (Array.isArray(data) && data.length > 0) {
-          const list = data
-            .map((h) => ({
-              code: h.hsnSacCode || h.hsnCode,
-              desc: h.description || ""
-            }))
-            .filter((h) => Boolean(h.code));
-          if (list.length > 0) setHsnList(list);
+        if (Array.isArray(data)) {
+          setHsnList(data.map((h) => ({ code: h.hsnSacCode || h.hsnCode, desc: h.description || "" })).filter((h) => Boolean(h.code)));
         }
       })
       .catch((err) => console.warn("Could not fetch HSN master:", err));
@@ -486,11 +432,12 @@ export function ItemMasterFormPage({
       consumption_uom: item.consumption_uom || item.purchased_uom || "",
       price: item.price || item.rate || "",
       rate: item.rate || item.price || "",
-      group: item.group || item.product || item.product_group || "",
-      subgroup: item.subgroup || item.segment || "",
+      // The Group dropdown lists products; the stored product is in subgroup (group_name is always FG).
+      group: item.product || item.product_group || "",
+      subgroup: item.segment || "",
       sub_subgroup: item.sub_subgroup || item.region || "",
       product: item.product || item.group || item.product_group || "",
-      segment: item.segment || item.subgroup || "",
+      segment: item.segment || "",
       region: item.region || item.sub_subgroup || ""
     });
     if (detailItem) setDetailItem(null);
@@ -503,26 +450,28 @@ export function ItemMasterFormPage({
   };
 
   // Execute Delete
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!deleteTarget) return;
-    const deletedPartNo = deleteTarget.sms_new_part_no || "Item";
-    if (deletedPartNo) {
-      fetch(`http://localhost:4000/api/inventory/items/by-code/${encodeURIComponent(deletedPartNo)}`, {
-        method: "DELETE"
-      })
-        .then(() => {
-          window.dispatchEvent(new CustomEvent("SMS_ITEM_MASTER_UPDATED"));
-          fetchDbItems();
-        })
-        .catch(console.warn);
-    }
-    setSavedItems((prev) => prev.filter((item) => item.id !== deleteTarget.id));
-    if (detailItem?.id === deleteTarget.id) {
-      setDetailItem(null);
-    }
+    const target = deleteTarget;
+    const deletedPartNo = target.sms_new_part_no || "Item";
     setDeleteTarget(null);
-    setToastMessage(`Item "${deletedPartNo}" deleted successfully from PostgreSQL database!`);
-    setTimeout(() => setToastMessage(null), 4000);
+    let message;
+    try {
+      const res = await fetch(`http://localhost:4000/api/inventory/items/${target.id}`, { method: "DELETE" });
+      if (res.ok) {
+        if (detailItem?.id === target.id) setDetailItem(null);
+        window.dispatchEvent(new CustomEvent("SMS_ITEM_MASTER_UPDATED"));
+        message = `Item "${deletedPartNo}" deleted.`;
+      } else {
+        const err = await res.json().catch(() => ({}));
+        message = err.message || `Item "${deletedPartNo}" could not be deleted (HTTP ${res.status}).`;
+      }
+    } catch (e) {
+      message = `Item "${deletedPartNo}" was not deleted: the server could not be reached.`;
+    }
+    fetchDbItems();
+    setToastMessage(message);
+    setTimeout(() => setToastMessage(null), 5000);
   };
 
   const handleInputChange = (field, value) => {
@@ -645,7 +594,7 @@ export function ItemMasterFormPage({
   };
 
   // Save Item (handles both Create and Update)
-  const handleSaveItem = (e) => {
+  const handleSaveItem = async (e) => {
     e.preventDefault();
     if (!formData.sms_new_part_no.trim()) {
       alert("Please enter the Item Code (SMS Part No.) - Required");
@@ -655,6 +604,11 @@ export function ItemMasterFormPage({
     const desc = (formData.description_size || "").trim().toLowerCase();
     if (!desc) {
       alert("Please enter the Item Description - Required");
+      return;
+    }
+
+    if (editingId === null && !formData.hsn_code) {
+      alert("Please select the HSN / SAC Code - Required");
       return;
     }
 
@@ -677,7 +631,7 @@ export function ItemMasterFormPage({
       description_size: formData.description_size || "",
       item_description: formData.description_size || "",
       group_name: "FG",
-      category: "FG",
+      category: (formData.category || "").trim() || "FG",
       item_type: "FG",
       subgroup: formData.product || "FG",
       uom: formData.purchased_uom || "PCS",
@@ -712,49 +666,47 @@ export function ItemMasterFormPage({
       max_stock_lvl: formData.max_stock_lvl || "",
       reorder_stock_lvl: formData.reorder_stock_lvl || "",
       rej_tolerance: formData.rej_tolerance || "",
+      domestic_exports: formData.domestic_exports || "",
+      application: formData.application || "",
+      ref_no: formData.ref_no || "",
+      oem: formData.oem || "",
+      corteco_no: formData.corteco_no || "",
+      cross_reference: formData.cross_reference || "",
+      fitting_position: formData.fitting_position || "",
+      swirl_type: formData.swirl_type || "",
+      file_name: formData.file_name || "",
+      fg_outsource: formData.fg_outsource || "",
+      sfg_outsource: formData.sfg_outsource || "",
+      outsource_combo_fg_sfg: formData.outsource_combo_fg_sfg || "",
       image: formData.image || null,
       id: editingId || null
     };
 
-    fetch("http://localhost:4000/api/inventory/items", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((saved) => {
-        window.dispatchEvent(new CustomEvent("SMS_ITEM_MASTER_UPDATED", { detail: saved || payload }));
-        fetchDbItems();
-      })
-      .catch((err) => console.warn("Could not sync FG item to backend:", err));
-
-    if (editingId) {
-      // Update existing item
-      setSavedItems((prev) =>
-        prev.map((item) => (item.id === editingId ? { ...formData, ...payload, id: editingId } : item))
-      );
-      setIsModalOpen(false);
-      setEditingId(null);
-      setToastMessage(`Item "${formData.sms_new_part_no}" updated successfully in PostgreSQL database!`);
-      setTimeout(() => setToastMessage(null), 4000);
-    } else {
-      // Create new item
-      const newItem = {
-        ...formData,
-        ...payload,
-        id: Date.now()
-      };
-      setSavedItems((prev) => [newItem, ...prev]);
-      setIsModalOpen(false);
-      setToastMessage(`Item "${newItem.sms_new_part_no}" created successfully in PostgreSQL database!`);
-      setTimeout(() => setToastMessage(null), 4000);
+    // The list only changes once the server has saved the item; a refused save keeps the form open with the reason.
+    let res;
+    try {
+      res = await fetch("http://localhost:4000/api/inventory/items", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+    } catch (err) {
+      alert("The item was not saved: the server could not be reached.");
+      return;
     }
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      alert(err.message || `The item was not saved (HTTP ${res.status}).`);
+      return;
+    }
+    const saved = await res.json().catch(() => null);
+    window.dispatchEvent(new CustomEvent("SMS_ITEM_MASTER_UPDATED", { detail: saved || payload }));
+    fetchDbItems();
+    setIsModalOpen(false);
+    setEditingId(null);
+    setToastMessage(`Item "${formData.sms_new_part_no}" ${editingId ? "updated" : "created"}.`);
+    setTimeout(() => setToastMessage(null), 4000);
   };
-
-  // Reset page when search or filters change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, selectedCategoryFilter, colFilters]);
 
   // Comprehensive filtering matching top search, category pills, and per-column filters
   const filteredItems = useMemo(() => {
@@ -813,15 +765,17 @@ export function ItemMasterFormPage({
     });
   }, [savedItems, searchTerm, selectedCategoryFilter, colFilters]);
 
-  // Pagination calculation
+  const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(15);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedCategoryFilter, colFilters, rowsPerPage]);
+
   const totalRecords = filteredItems.length;
-  const isAllPages = pageSize === "ALL";
-  const numPageSize = isAllPages ? totalRecords : Number(pageSize);
-  const totalPages = isAllPages ? 1 : Math.ceil(totalRecords / numPageSize) || 1;
-  const clampedPage = Math.min(Math.max(currentPage, 1), totalPages);
-  const startIndex = isAllPages ? 0 : (clampedPage - 1) * numPageSize;
-  const endIndex = isAllPages ? totalRecords : Math.min(startIndex + numPageSize, totalRecords);
-  const paginatedItems = isAllPages ? filteredItems : filteredItems.slice(startIndex, endIndex);
+  const totalPages = Math.max(1, Math.ceil(totalRecords / rowsPerPage));
+  const startIndex = (currentPage - 1) * rowsPerPage;
+  const paginatedItems = filteredItems.slice(startIndex, startIndex + rowsPerPage);
 
   // Calculate live summary metrics
   const totalCount = savedItems.length;
@@ -937,11 +891,11 @@ export function ItemMasterFormPage({
   return (
     <div
       style={{
-        height: "calc(100vh - 68px)",
-        maxHeight: "calc(100vh - 68px)",
+        height: "calc(100vh - 102px)",
+        maxHeight: "calc(100vh - 102px)",
         overflow: "hidden",
         background: bg,
-        padding: "12px 20px 42px 20px",
+        padding: 0,
         boxSizing: "border-box",
         display: "flex",
         flexDirection: "column",
@@ -950,18 +904,16 @@ export function ItemMasterFormPage({
     >
       <div
         style={{
-          maxWidth: 1440,
           width: "100%",
-          margin: "0 auto",
           height: "100%",
           maxHeight: "100%",
           display: "flex",
           flexDirection: "column",
           minHeight: 0,
           overflow: "hidden",
-          borderRadius: 12,
-          border: "1px solid #e2e8f0",
-          boxShadow: "0 4px 20px rgba(0,0,0,0.06)",
+          borderRadius: 0,
+          border: "none",
+          boxShadow: "none",
           background: "#ffffff"
         }}
       >
@@ -1620,117 +1572,31 @@ export function ItemMasterFormPage({
             color: "#475569"
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-            <span>
-              Showing{" "}
-              <strong>
-                {totalRecords === 0 ? 0 : (startIndex + 1).toLocaleString()} &ndash;{" "}
-                {endIndex.toLocaleString()}
-              </strong>{" "}
-              of <strong>{totalRecords.toLocaleString()}</strong> items
-            </span>
-
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ fontSize: 11, color: "#64748b" }}>Rows per page:</span>
-              <select
-                value={pageSize}
-                onChange={(e) => {
-                  setPageSize(e.target.value === "ALL" ? "ALL" : Number(e.target.value));
-                  setCurrentPage(1);
-                }}
-                style={{
-                  padding: "3px 8px",
-                  borderRadius: 6,
-                  border: "1px solid #cbd5e1",
-                  fontSize: 11.5,
-                  fontWeight: 600,
-                  outline: "none",
-                  cursor: "pointer",
-                  background: "#ffffff"
-                }}
-              >
-                <option value={25}>25</option>
-                <option value={50}>50</option>
-                <option value={100}>100</option>
-                <option value={250}>250</option>
-                <option value="ALL">All (1,582)</option>
-              </select>
-            </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12, color: "#64748b" }}>
+            <span>Showing {totalRecords > 0 ? startIndex + 1 : 0} to {Math.min(startIndex + rowsPerPage, totalRecords)} of {totalRecords} entries</span>
+            <select value={rowsPerPage} onChange={(e) => setRowsPerPage(Number(e.target.value))} style={{ padding: "4px 8px", borderRadius: 4, border: "1px solid #cbd5e1", fontSize: 12 }}>
+              <option value={10}>10 per page</option>
+              <option value={15}>15 per page</option>
+              <option value={25}>25 per page</option>
+              <option value={50}>50 per page</option>
+            </select>
           </div>
 
-          {!isAllPages && totalPages > 1 && (
-            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              <button
-                type="button"
-                onClick={() => setCurrentPage(1)}
-                disabled={clampedPage <= 1}
-                title="First Page"
-                style={{
-                  padding: "4px 8px",
-                  borderRadius: 6,
-                  border: "1px solid #cbd5e1",
-                  background: clampedPage <= 1 ? "#f8fafc" : "#ffffff",
-                  color: clampedPage <= 1 ? "#94a3b8" : "#1e293b",
-                  cursor: clampedPage <= 1 ? "not-allowed" : "pointer"
-                }}
-              >
-                <ChevronsLeft size={14} />
-              </button>
-              <button
-                type="button"
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={clampedPage <= 1}
-                title="Previous Page"
-                style={{
-                  padding: "4px 8px",
-                  borderRadius: 6,
-                  border: "1px solid #cbd5e1",
-                  background: clampedPage <= 1 ? "#f8fafc" : "#ffffff",
-                  color: clampedPage <= 1 ? "#94a3b8" : "#1e293b",
-                  cursor: clampedPage <= 1 ? "not-allowed" : "pointer"
-                }}
-              >
-                <ChevronLeft size={14} />
-              </button>
-
-              <span style={{ margin: "0 8px", fontWeight: 700, fontSize: 12 }}>
-                Page {clampedPage} of {totalPages}
-              </span>
-
-              <button
-                type="button"
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                disabled={clampedPage >= totalPages}
-                title="Next Page"
-                style={{
-                  padding: "4px 8px",
-                  borderRadius: 6,
-                  border: "1px solid #cbd5e1",
-                  background: clampedPage >= totalPages ? "#f8fafc" : "#ffffff",
-                  color: clampedPage >= totalPages ? "#94a3b8" : "#1e293b",
-                  cursor: clampedPage >= totalPages ? "not-allowed" : "pointer"
-                }}
-              >
-                <ChevronRight size={14} />
-              </button>
-              <button
-                type="button"
-                onClick={() => setCurrentPage(totalPages)}
-                disabled={clampedPage >= totalPages}
-                title="Last Page"
-                style={{
-                  padding: "4px 8px",
-                  borderRadius: 6,
-                  border: "1px solid #cbd5e1",
-                  background: clampedPage >= totalPages ? "#f8fafc" : "#ffffff",
-                  color: clampedPage >= totalPages ? "#94a3b8" : "#1e293b",
-                  cursor: clampedPage >= totalPages ? "not-allowed" : "pointer"
-                }}
-              >
-                <ChevronsRight size={14} />
-              </button>
-            </div>
-          )}
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <button onClick={() => setCurrentPage(1)} disabled={currentPage === 1} style={{ background: "#ffffff", border: "1px solid #cbd5e1", borderRadius: 6, padding: "5px 8px", cursor: currentPage === 1 ? "not-allowed" : "pointer", opacity: currentPage === 1 ? 0.4 : 1, display: "flex", alignItems: "center" }}>
+              <ChevronsLeft size={14} />
+            </button>
+            <button onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1} style={{ background: "#ffffff", border: "1px solid #cbd5e1", borderRadius: 6, padding: "5px 8px", cursor: currentPage === 1 ? "not-allowed" : "pointer", opacity: currentPage === 1 ? 0.4 : 1, display: "flex", alignItems: "center" }}>
+              <ChevronLeft size={14} />
+            </button>
+            <span style={{ fontSize: 12, fontWeight: 700, color: "#0f172a", margin: "0 8px" }}>Page {currentPage} of {totalPages}</span>
+            <button onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} style={{ background: "#ffffff", border: "1px solid #cbd5e1", borderRadius: 6, padding: "5px 8px", cursor: currentPage === totalPages ? "not-allowed" : "pointer", opacity: currentPage === totalPages ? 0.4 : 1, display: "flex", alignItems: "center" }}>
+              <ChevronRight size={14} />
+            </button>
+            <button onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages} style={{ background: "#ffffff", border: "1px solid #cbd5e1", borderRadius: 6, padding: "5px 8px", cursor: currentPage === totalPages ? "not-allowed" : "pointer", opacity: currentPage === totalPages ? 0.4 : 1, display: "flex", alignItems: "center" }}>
+              <ChevronsRight size={14} />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1760,14 +1626,6 @@ export function ItemMasterFormPage({
           <span>{totalRecords.toLocaleString()} records</span>
           <span style={{ margin: "0 6px", color: "#64748b" }}>|</span>
           <span>{selectedIds.size} selected</span>
-          {!isAllPages && (
-            <>
-              <span style={{ margin: "0 6px", color: "#64748b" }}>|</span>
-              <span style={{ color: "#94a3b8", fontWeight: 500 }}>
-                Page {clampedPage} of {totalPages}
-              </span>
-            </>
-          )}
         </div>
         <div style={{ color: "#94a3b8", fontSize: 11, fontWeight: 500 }}>
           Compression Moulding Line &middot; Active in Production Catalog
@@ -2632,20 +2490,17 @@ export function ItemMasterFormPage({
                     </div>
                     <div>
                       <label style={{ fontSize: 10, fontWeight: 700, color: textSecondary, textTransform: "uppercase", display: "block", marginBottom: 2 }}>
-                        HSN / SAC Code
+                        HSN / SAC Code{editingId === null && " *"}
                       </label>
-                      <select
+                      <SearchableSelect
                         value={formData.hsn_code}
                         onChange={(e) => handleInputChange("hsn_code", e.target.value)}
-                        style={fieldInputStyle}
-                      >
-                        <option value="">-- Select HSN --</option>
-                        {hsnList.map((h, idx) => (
-                          <option key={idx} value={h.code}>
-                            {h.code} {h.desc ? `- ${h.desc.substring(0, 24)}...` : ""}
-                          </option>
-                        ))}
-                      </select>
+                        placeholder="Search HSN code or description"
+                        options={[
+                          ...(formData.hsn_code && !hsnList.some((h) => h.code === formData.hsn_code) ? [{ value: formData.hsn_code, label: formData.hsn_code }] : []),
+                          ...hsnList.map((h) => ({ value: h.code, label: h.code, sub: h.desc }))
+                        ]}
+                      />
                     </div>
                   </div>
 

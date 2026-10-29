@@ -1,5 +1,6 @@
 import { useResizableColumns, ResizableColGroup, ColumnResizeHandle } from "../../../shared/components/ResizableTable";
 import { useState, useRef, useEffect, useMemo } from "react";
+import SearchableSelect from "../../../shared/components/SearchableSelect";
 import { Eye, Pencil, Trash2, Search, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Plus, RefreshCw, Download, Printer, Building2, ShieldCheck, Layers, Boxes } from "lucide-react";
 
 const INITIAL_DEPARTMENT_FORM = {
@@ -89,11 +90,7 @@ export function DepartmentMasterPage({
 
   // Determine API base URL
   const getApiUrl = () => {
-    if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
-    if (typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")) {
-      return "http://localhost:4000";
-    }
-    return "https://silver-muller-seals-backend-deploy.onrender.com";
+    return import.meta.env.VITE_API_URL || "http://localhost:4000";
   };
 
   // Fetch Departments from API on component mount
@@ -177,8 +174,7 @@ export function DepartmentMasterPage({
         setToastMessage(errJson.message || `Failed to delete department "${deletedName}"`);
       }
     } catch (e) {
-      setDepartments((prev) => prev.filter((item) => item.id !== deleteTarget.id));
-      setToastMessage(`Department "${deletedName}" deleted locally.`);
+      setToastMessage(`Department "${deletedName}" was not deleted: the server could not be reached.`);
     } finally {
       setDeleteTarget(null);
       setTimeout(() => setToastMessage(null), 4000);
@@ -223,38 +219,26 @@ export function DepartmentMasterPage({
         body: JSON.stringify(payload)
       });
 
-      if (res.ok) {
-        const savedData = await res.json();
-        if (isEdit) {
-          setDepartments((prev) => prev.map((item) => (item.id === editingId ? savedData : item)));
-          setToastMessage(`Department "${savedData.departmentName || savedData.name}" updated successfully!`);
-        } else {
-          setDepartments((prev) => [...prev, savedData]);
-          setToastMessage(`Department "${savedData.departmentName || savedData.name}" created successfully!`);
-        }
-      } else {
+      // A refused save keeps the form open and shows the server's reason; nothing is added to the list.
+      if (!res.ok) {
         const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.message || "Failed to save department on server.");
+        alert(errJson.message || errJson.error || `The department was not saved (HTTP ${res.status}).`);
+        return;
       }
-    } catch (err) {
-      console.error("Save department failed:", err);
-      // Fallback local update
-      const localObj = {
-        ...formData,
-        id: editingId || Date.now(),
-        deptNumber: formData.deptNumber ? Number(formData.deptNumber) : departments.length + 1,
-        processSequence: Number(formData.processSequence)
-      };
-      if (editingId) {
-        setDepartments((prev) => prev.map((item) => (item.id === editingId ? localObj : item)));
+      const savedData = await res.json();
+      if (isEdit) {
+        setDepartments((prev) => prev.map((item) => (item.id === editingId ? savedData : item)));
+        setToastMessage(`Department "${savedData.departmentName || savedData.name}" updated successfully!`);
       } else {
-        setDepartments((prev) => [...prev, localObj]);
+        setDepartments((prev) => [...prev, savedData]);
+        setToastMessage(`Department "${savedData.departmentName || savedData.name}" created successfully!`);
       }
-      setToastMessage(`Saved to local state: ${err.message}`);
-    } finally {
       setIsModalOpen(false);
       setEditingId(null);
       setTimeout(() => setToastMessage(null), 4000);
+    } catch (err) {
+      console.error("Save department failed:", err);
+      alert("The department was not saved: the server could not be reached.");
     }
   };
 
@@ -452,7 +436,7 @@ export function DepartmentMasterPage({
         maxHeight: "calc(100vh - 68px)",
         overflow: "hidden",
         background: bg,
-        padding: "12px 20px 42px 20px",
+        padding: 0,
         boxSizing: "border-box",
         display: "flex",
         flexDirection: "column",
@@ -461,18 +445,16 @@ export function DepartmentMasterPage({
     >
       <div
         style={{
-          maxWidth: 1440,
           width: "100%",
-          margin: "0 auto",
           height: "100%",
           maxHeight: "100%",
           display: "flex",
           flexDirection: "column",
           minHeight: 0,
           overflow: "hidden",
-          borderRadius: 12,
-          border: "1px solid #e2e8f0",
-          boxShadow: "0 4px 20px rgba(0,0,0,0.06)",
+          borderRadius: 0,
+          border: "none",
+          boxShadow: "none",
           background: "#ffffff"
         }}
       >
@@ -1300,25 +1282,12 @@ export function DepartmentMasterPage({
                   <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 5 }}>
                     Category / Group
                   </label>
-                  <select
+                  <SearchableSelect
                     value={formData.category}
                     onChange={(e) => handleInputChange("category", e.target.value)}
-                    style={{
-                      width: "100%",
-                      padding: "8px 12px",
-                      borderRadius: 6,
-                      border: "1px solid #cbd5e1",
-                      fontSize: 13,
-                      boxSizing: "border-box",
-                      background: "#ffffff"
-                    }}
-                  >
-                    {CATEGORY_OPTIONS.map((cat) => (
-                      <option key={cat} value={cat}>
-                        {cat}
-                      </option>
-                    ))}
-                  </select>
+                    placeholder="Search category"
+                    options={CATEGORY_OPTIONS.map((cat) => ({ value: cat, label: cat }))}
+                  />
                 </div>
               </div>
 

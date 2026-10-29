@@ -1,3 +1,5 @@
+import { setHandoff, getHandoff, removeHandoff } from "../../../shared/utils/handoffStore";
+import SearchableSelect from "../../../shared/components/SearchableSelect";
 import { formatDisplayDate, formatDisplayDateTime } from "../../../shared/utils/dateFormat";
 import DateInput from "../../../shared/components/DateInput";
 import { useResizableColumns, ResizableColGroup, ColumnResizeHandle } from "../../../shared/components/ResizableTable";
@@ -98,6 +100,17 @@ const VENDOR_QUOTATIONS_PAGE_6_COLUMNS = [
   { key: "criteria", width: 180 },
   { key: "lowest_price", width: 180 },
 ];
+
+// Non-FG items first, then FG, so the searchable list shows its two groups in order.
+const catalogOptions = (items) => [...items.filter((c) => c.item_type !== "FG"), ...items.filter((c) => c.item_type === "FG")].map((c) => {
+  const code = c.item_code || c.sms_new_part_no;
+  return {
+    value: code,
+    label: code,
+    sub: [c.item_description || c.description_size || c.item_name, c.item_type !== "FG" && c.category && `[${c.category}]`].filter(Boolean).join(" "),
+    group: c.item_type === "FG" ? "Finished Goods (FG - Oil Seals)" : "Non-FG / Raw Materials, Bought-Out & Other Items"
+  };
+});
 
 export function VendorQuotationsPage({ onBackToHome, onOpenSidebar, sidebarOpen, onNavigate }) {
   const vendorQuotationsPage6Resize = useResizableColumns("vendor-quotations-page-6", VENDOR_QUOTATIONS_PAGE_6_COLUMNS);
@@ -307,28 +320,19 @@ export function VendorQuotationsPage({ onBackToHome, onOpenSidebar, sidebarOpen,
     }
   };
 
-  // Helper to load approved PRs from backend / localStorage for RFQ Picker
+  // Helper to load approved PRs from the backend for RFQ Picker
   const getApprovedPrsForPicker = () => {
     if (backendPrs.length > 0) {
       const valid = backendPrs.filter((p) => p.status === "Approved" || p.status === "Partially Ordered");
       if (valid.length > 0) return valid;
     }
-    try {
-      const raw = localStorage.getItem("SMS_PURCHASE_REQUISITION_DATA_REAL_V2");
-      if (raw) {
-        const list = JSON.parse(raw);
-        if (Array.isArray(list) && list.length > 0) {
-          return list.filter((p) => p.status === "Approved" || p.status === "Partially Ordered");
-        }
-      }
-    } catch {}
     return (INITIAL_PR_DATA || []).filter((p) => p.status === "Approved" || p.status === "Partially Ordered");
   };
 
   // Pre-load PR into Quotation Form / Navigate to RFQ
   const loadPrIntoRfqForm = (pr) => {
     try {
-      sessionStorage.setItem("SMS_SELECTED_PR_FOR_RFQ", JSON.stringify(pr));
+      setHandoff("SMS_SELECTED_PR_FOR_RFQ", JSON.stringify(pr));
     } catch (e) {
       console.error(e);
     }
@@ -416,31 +420,31 @@ export function VendorQuotationsPage({ onBackToHome, onOpenSidebar, sidebarOpen,
   // Connection 1: Check if navigated from PR or RFQ screen
   useEffect(() => {
     try {
-      const rawRfq = sessionStorage.getItem("SMS_SELECTED_RFQ_FOR_QUOTATION");
+      const rawRfq = getHandoff("SMS_SELECTED_RFQ_FOR_QUOTATION");
       if (rawRfq) {
-        sessionStorage.removeItem("SMS_SELECTED_RFQ_FOR_QUOTATION");
+        removeHandoff("SMS_SELECTED_RFQ_FOR_QUOTATION");
         const rfq = JSON.parse(rawRfq);
         if (rfq) {
           loadRfqIntoQuoteForm(rfq);
         }
       }
 
-      const raw = sessionStorage.getItem("SMS_SELECTED_PR_FOR_RFQ");
+      const raw = getHandoff("SMS_SELECTED_PR_FOR_RFQ");
       if (raw) {
-        sessionStorage.removeItem("SMS_SELECTED_PR_FOR_RFQ");
+        removeHandoff("SMS_SELECTED_PR_FOR_RFQ");
         const pr = JSON.parse(raw);
         if (pr) {
           loadPrIntoRfqForm(pr);
         }
       }
 
-      const selectedQuoteNum = sessionStorage.getItem("SMS_SELECTED_QUOTATION_NUMBER");
+      const selectedQuoteNum = getHandoff("SMS_SELECTED_QUOTATION_NUMBER");
       if (selectedQuoteNum) {
-        sessionStorage.removeItem("SMS_SELECTED_QUOTATION_NUMBER");
+        removeHandoff("SMS_SELECTED_QUOTATION_NUMBER");
         setSearchTerm(selectedQuoteNum);
       }
     } catch (err) {
-      console.warn("Error reading sessionStorage in VendorQuotationsPage:", err);
+      console.warn("Error reading handoff in VendorQuotationsPage:", err);
     }
   }, []);
 
@@ -520,28 +524,6 @@ export function VendorQuotationsPage({ onBackToHome, onOpenSidebar, sidebarOpen,
       }
 
       let combined = Array.isArray(data) ? [...data] : [];
-      try {
-        const savedOther = localStorage.getItem("SMS_OTHER_ITEM_MASTER_DATA_REAL");
-        if (savedOther) {
-          const parsed = JSON.parse(savedOther);
-          if (Array.isArray(parsed)) {
-            parsed.forEach((it) => {
-              if (it && it.item_code && !combined.some((c) => (c.item_code || c.sms_new_part_no) === it.item_code)) {
-                combined.unshift({
-                  id: it.id || Date.now(),
-                  item_code: it.item_code,
-                  sms_new_part_no: it.item_code,
-                  item_description: it.item_name || it.description || it.item_code,
-                  uom: it.uom || "PCS",
-                  price: it.price || it.est_rate || 0,
-                  category: it.category || "Other",
-                  item_type: "OTHER"
-                });
-              }
-            });
-          }
-        }
-      } catch (e) {}
 
       if (combined.length > 0) {
         setCatalogItems(combined);
@@ -2066,7 +2048,7 @@ export function VendorQuotationsPage({ onBackToHome, onOpenSidebar, sidebarOpen,
                               <span
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  sessionStorage.setItem("SMS_SELECTED_PR_NUMBER", q.prNumber);
+                                  setHandoff("SMS_SELECTED_PR_NUMBER", q.prNumber);
                                   if (onNavigate) onNavigate("purchase-requisition");
                                 }}
                                 style={{
@@ -2473,29 +2455,13 @@ export function VendorQuotationsPage({ onBackToHome, onOpenSidebar, sidebarOpen,
                   <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#475569", marginBottom: 3 }}>
                     Item Code / Description:
                   </label>
-                  <select
+                  <SearchableSelect
                     value={compareItemCode}
                     onChange={(e) => setCompareItemCode(e.target.value)}
-                    style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12, minWidth: 260 }}
-                  >
-                    <option value="">-- Select Item to Compare --</option>
-                    {catalogItems.some(c => c.item_type !== "FG") && (
-                      <optgroup label="📦 Non-FG / Raw Materials, Bought-Out & Other Items">
-                        {catalogItems.filter(c => c.item_type !== "FG").map((c) => (
-                          <option key={`cmp-oth-${c.id || c.item_code}`} value={c.item_code || c.sms_new_part_no}>
-                            {c.item_code || c.sms_new_part_no} — {c.item_description || c.description_size || c.item_name} [{c.category || 'Other'}]
-                          </option>
-                        ))}
-                      </optgroup>
-                    )}
-                    <optgroup label="⚙️ Finished Goods (FG - Oil Seals)">
-                      {catalogItems.filter(c => c.item_type === "FG").map((c) => (
-                        <option key={`cmp-fg-${c.id || c.item_code}`} value={c.item_code || c.sms_new_part_no}>
-                          {c.item_code || c.sms_new_part_no} — {c.item_description || c.description_size || c.item_name}
-                        </option>
-                      ))}
-                    </optgroup>
-                  </select>
+                    placeholder="Select item to compare"
+                    options={catalogOptions(catalogItems)}
+                    style={{ minWidth: 260 }}
+                  />
                 </div>
 
                 <div>
@@ -2799,29 +2765,13 @@ export function VendorQuotationsPage({ onBackToHome, onOpenSidebar, sidebarOpen,
               <div style={{ background: "#ffffff", borderRadius: 8, border: "1px solid #e2e8f0", padding: "12px 18px", display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
                 <div>
                   <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#475569", marginBottom: 3 }}>Select Item:</label>
-                  <select
+                  <SearchableSelect
                     value={historyItemCode}
                     onChange={(e) => setHistoryItemCode(e.target.value)}
-                    style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12, minWidth: 260 }}
-                  >
-                    <option value="">-- Select Item for History --</option>
-                    {catalogItems.some(c => c.item_type !== "FG") && (
-                      <optgroup label="📦 Non-FG / Raw Materials, Bought-Out & Other Items">
-                        {catalogItems.filter(c => c.item_type !== "FG").map((c) => (
-                          <option key={`hist-oth-${c.id || c.item_code}`} value={c.item_code || c.sms_new_part_no}>
-                            {c.item_code || c.sms_new_part_no} — {c.item_description || c.description_size || c.item_name} [{c.category || 'Other'}]
-                          </option>
-                        ))}
-                      </optgroup>
-                    )}
-                    <optgroup label="⚙️ Finished Goods (FG - Oil Seals)">
-                      {catalogItems.filter(c => c.item_type === "FG").map((c) => (
-                        <option key={`hist-fg-${c.id || c.item_code}`} value={c.item_code || c.sms_new_part_no}>
-                          {c.item_code || c.sms_new_part_no} — {c.item_description || c.description_size || c.item_name}
-                        </option>
-                      ))}
-                    </optgroup>
-                  </select>
+                    placeholder="Select item for history"
+                    options={catalogOptions(catalogItems)}
+                    style={{ minWidth: 260 }}
+                  />
                 </div>
 
                 <div>
@@ -3132,18 +3082,12 @@ export function VendorQuotationsPage({ onBackToHome, onOpenSidebar, sidebarOpen,
                     <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#475569", marginBottom: 4 }}>
                       Select Existing Vendor: <span style={{ color: "red" }}>*</span>
                     </label>
-                    <select
+                    <SearchableSelect
                       value={formData.vendorCode}
                       onChange={(e) => handleVendorSelect(e.target.value)}
-                      style={{ width: "100%", padding: "7px 10px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 }}
-                    >
-                      <option value="">-- Choose Vendor from Master --</option>
-                      {vendorsList.map((v) => (
-                        <option key={v.id} value={v.supplier_code || v.supplierCode}>
-                          {(v.supplier_code || v.supplierCode)} — {(v.supplier_name || v.supplierName)}
-                        </option>
-                      ))}
-                    </select>
+                      placeholder="Choose vendor from master"
+                      options={vendorsList.map((v) => ({ value: v.supplier_code || v.supplierCode, label: v.supplier_code || v.supplierCode, sub: v.supplier_name || v.supplierName }))}
+                    />
                   </div>
 
                   <div>
@@ -3304,32 +3248,17 @@ export function VendorQuotationsPage({ onBackToHome, onOpenSidebar, sidebarOpen,
                       {formData.items.map((row, idx) => (
                         <tr key={idx} style={{ borderBottom: "1px solid #e2e8f0" }}>
                           <td style={{ padding: "6px 8px" }}>
-                            <select
+                            <SearchableSelect
                               value={row.itemCode}
                               onChange={(e) => handleItemSelect(idx, e.target.value)}
-                              style={{ width: "100%", padding: "4px", fontSize: 11, border: "1px solid #cbd5e1", borderRadius: 4 }}
-                            >
-                              <option value="">-- Select Item Code --</option>
-                              {row.itemCode && !catalogItems.some((c) => (c.item_code || c.sms_new_part_no) === row.itemCode) && (
-                                <option value={row.itemCode}>{row.itemCode} • {row.itemDescription || row.itemCode}</option>
-                              )}
-                              {catalogItems.some(c => c.item_type !== "FG") && (
-                                <optgroup label="📦 Non-FG / Raw Materials, Bought-Out & Other Items">
-                                  {catalogItems.filter(c => c.item_type !== "FG").map((c) => (
-                                    <option key={`oth-${c.id || c.item_code}`} value={c.item_code || c.sms_new_part_no}>
-                                      {c.item_code || c.sms_new_part_no} • {c.item_description || c.description_size || c.item_name} [{c.category || 'Other'}]
-                                    </option>
-                                  ))}
-                                </optgroup>
-                              )}
-                              <optgroup label="⚙️ Finished Goods (FG - Oil Seals)">
-                                {catalogItems.filter(c => c.item_type === "FG").map((c) => (
-                                  <option key={`fg-${c.id || c.item_code}`} value={c.item_code || c.sms_new_part_no}>
-                                    {c.item_code || c.sms_new_part_no} • {c.item_description || c.description_size || c.item_name}
-                                  </option>
-                                ))}
-                              </optgroup>
-                            </select>
+                              placeholder="Select item code"
+                              options={[
+                                ...(row.itemCode && !catalogItems.some((c) => (c.item_code || c.sms_new_part_no) === row.itemCode)
+                                  ? [{ value: row.itemCode, label: row.itemCode, sub: row.itemDescription || row.itemCode }]
+                                  : []),
+                                ...catalogOptions(catalogItems)
+                              ]}
+                            />
                           </td>
                           <td style={{ padding: "6px 8px" }}>
                             <input
@@ -3622,7 +3551,7 @@ export function VendorQuotationsPage({ onBackToHome, onOpenSidebar, sidebarOpen,
                   </div>
                   <button
                     onClick={() => {
-                      sessionStorage.setItem("SMS_SELECTED_PR_NUMBER", activeQuotationDetail.prNumber);
+                      setHandoff("SMS_SELECTED_PR_NUMBER", activeQuotationDetail.prNumber);
                       setIsDetailsModalOpen(false);
                       if (onNavigate) onNavigate("purchase-requisition");
                     }}
@@ -3872,13 +3801,13 @@ export function VendorQuotationsPage({ onBackToHome, onOpenSidebar, sidebarOpen,
                           alert("Quotation has expired and cannot be used for purchase processing.");
                           return;
                         }
-                        sessionStorage.setItem("SMS_SELECTED_QUOTATION_FOR_PO", JSON.stringify(activeQuotationDetail));
+                        setHandoff("SMS_SELECTED_QUOTATION_FOR_PO", JSON.stringify(activeQuotationDetail));
                         if (activeQuotationDetail.prNumber) {
-                          sessionStorage.setItem("SMS_SELECTED_PR_NUMBER", activeQuotationDetail.prNumber);
+                          setHandoff("SMS_SELECTED_PR_NUMBER", activeQuotationDetail.prNumber);
                         }
                         setIsDetailsModalOpen(false);
                         showToast(`Selected Quotation #${activeQuotationDetail.quotationNumber}. Opening Purchase Processing...`);
-                        if (onNavigate) onNavigate("purchase-processing");
+                        if (onNavigate) onNavigate("purchase-requisition");
                       }}
                       style={{
                         background: "#059669",

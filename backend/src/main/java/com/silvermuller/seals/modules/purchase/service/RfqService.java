@@ -172,11 +172,14 @@ public class RfqService {
         } else {
             jdbc.update(
                 "UPDATE rfq_headers SET " +
-                "rfq_date = ?, due_date = ?, title = ?, status = ?, selected_vendors_json = ?, " +
-                "delivery_location = ?, payment_terms = ?, terms_conditions = ?, remarks = ?, updated_at = NOW() " +
-                "WHERE id = ?",
+                "rfq_date = ?, due_date = ?, pr_number = ?, pr_date = ?, department = ?, title = ?, status = ?, " +
+                "selected_vendors_json = ?, delivery_location = ?, payment_terms = ?, terms_conditions = ?, remarks = ?, " +
+                "updated_at = NOW() WHERE id = ?",
                 Date.valueOf(rfq.getRfqDate()),
                 Date.valueOf(rfq.getDueDate()),
+                rfq.getPrNumber(),
+                rfq.getPrDate(),
+                rfq.getDepartment(),
                 rfq.getTitle(),
                 rfq.getStatus(),
                 rfq.getSelectedVendorsJson(),

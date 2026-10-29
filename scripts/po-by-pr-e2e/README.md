@@ -7,11 +7,14 @@ Windows / Git Bash, PostgreSQL 18 on port 5434, Google Chrome installed, Node 22
 
 1. `reset-test-env.sh` drops `sms_seals_test`, copies `sms_seals` into it with `pg_dump`, and starts the
    backend on port 4100 against the copy (`start-test-backend.ps1`).
-2. `node e2e-po-by-pr.cjs` — API checks (rates, eligibility, orders, refusals, concurrency, GRN, guards).
-3. Run `reset-test-env.sh` again, then `node pr-guard-check.cjs` — PR edit and delete guards.
-4. Build the UI against the copy and serve it on port 5174:
+2. Run any check script with `node <script>.cjs`. Run `reset-test-env.sh` before each one, so every check
+   starts from the same data:
+   - `pr-guard-check.cjs`: PR edit and delete guards.
+   - `numbering-restart.cjs`: PO numbering across a restart.
+   - `ui-prs-po-grn.cjs`, `ui-select-flow.cjs`, `ui-multi-item.cjs`, `ui-direct-po.cjs`, `ui-register-reports.cjs`:
+     headless Chrome checks of the screens. They need the UI served on port 5174 (step 3).
+3. For the UI checks, build the UI against the copy and serve it on port 5174:
    `VITE_API_URL=http://localhost:4100 npx vite build --outDir <tmp>` then `npx vite preview --outDir <tmp> --port 5174`.
-   Run `reset-test-env.sh` again, then `node ui-po-by-pr.cjs` — headless Chrome checks.
 
 Java integration tests (`backend/src/test/.../PoByPrIntegrationTest.java`) run only when
 `SMS_TEST_DATABASE_URL` is set, for example:

@@ -20,7 +20,10 @@ public final class JobWorkDtos {
             Integer creditDays,
             String status,
             String blockedReason,
-            String reason
+            String reason,
+            String gstin,
+            String pan,
+            String registeredAddress
     ) {}
 
     public record RateContractRequest(

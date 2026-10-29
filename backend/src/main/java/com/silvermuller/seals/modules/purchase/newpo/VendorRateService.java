@@ -53,7 +53,7 @@ public class VendorRateService {
     }
 
     /**
-     * Item Master lookup for vendor rates: every item, FG and other, matched on part number, description or old code.
+     * Item Master lookup: every item, FG and other, matched on part number, description, old code, main FG code or HSN code.
      * item_type tells the two groups apart (FG when group_name or category is FG, OTHER otherwise).
      */
     public List<Map<String, Object>> itemLookup(String q) {
@@ -62,9 +62,9 @@ public class VendorRateService {
                 "SELECT id, sms_new_part_no, description_size, uom, hsn_code, " +
                 "CASE WHEN UPPER(COALESCE(group_name, '')) = 'FG' OR UPPER(COALESCE(category, '')) = 'FG' THEN 'FG' ELSE 'OTHER' END AS item_type " +
                 "FROM public.item_master " +
-                "WHERE sms_new_part_no ILIKE ? OR description_size ILIKE ? OR old_code ILIKE ? OR main_fg_code ILIKE ? " +
+                "WHERE sms_new_part_no ILIKE ? OR description_size ILIKE ? OR old_code ILIKE ? OR main_fg_code ILIKE ? OR hsn_code ILIKE ? " +
                 "ORDER BY sms_new_part_no NULLS LAST, id LIMIT 500",
-                like, like, like, like);
+                like, like, like, like, like);
     }
 
     // ------------------------------------------------------------------ rates

@@ -14,7 +14,6 @@ import java.util.Map;
 
 /** HTTP layer for PO by PR. All rules and quantity checks live in {@link PoByPrService}. */
 @RestController
-@CrossOrigin(origins = "*")
 @RequestMapping("/api/new-po/pr")
 public class PoByPrController {
 
@@ -38,9 +37,15 @@ public class PoByPrController {
         return service.eligibleLinesForPr(prNumber, vendorCode, poDate);
     }
 
+    @GetMapping("/next-po-number")
+    public Map<String, Object> nextPoNumber() {
+        return service.nextPoNumber();
+    }
+
     @GetMapping("/eligible-items")
-    public List<Map<String, Object>> eligibleItems(@RequestParam(required = false) String q) {
-        return service.eligibleItems(q);
+    public List<Map<String, Object>> eligibleItems(@RequestParam(required = false) String q,
+                                                   @RequestParam(required = false) String exclude) {
+        return service.eligibleItems(q, exclude);
     }
 
     @GetMapping("/eligible-lines")

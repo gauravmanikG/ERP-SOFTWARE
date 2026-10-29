@@ -1,54 +1,7 @@
--- =============================================================================
--- Supplier / Vendor Master Schema & Data Migration
--- Incorporates all Book 3 attributes & Book 5 attributes (address, city, state, state_code, pincode)
--- =============================================================================
-
-CREATE TABLE IF NOT EXISTS public.supplier_master (
-    id BIGSERIAL PRIMARY KEY,
-    supplier_id VARCHAR(50) NOT NULL UNIQUE,
-    supplier_code VARCHAR(50) NOT NULL UNIQUE,
-    supplier_name VARCHAR(255) NOT NULL,
-    company_id VARCHAR(50) NOT NULL DEFAULT 'COMP-001',
-    supplier_type VARCHAR(50) DEFAULT 'MATERIAL',
-    gstin VARCHAR(50),
-    pan VARCHAR(30),
-    udyam_no VARCHAR(50),
-    msme_category VARCHAR(50) DEFAULT 'NOT_MSME',
-    gst_registration_type VARCHAR(50) NOT NULL DEFAULT 'REGISTERED',
-    tds_section_id VARCHAR(50) DEFAULT 'TDS-194C',
-    contact_person VARCHAR(255),
-    email VARCHAR(255),
-    phone VARCHAR(50),
-    payment_terms_id VARCHAR(50) DEFAULT 'PT-30',
-    currency VARCHAR(10) DEFAULT 'INR',
-    status VARCHAR(30) NOT NULL DEFAULT 'ACTIVE',
-    address TEXT,
-    city VARCHAR(100),
-    state VARCHAR(100),
-    state_code VARCHAR(10),
-    pincode VARCHAR(20),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    created_by VARCHAR(50) NOT NULL DEFAULT 'SYSTEM',
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_by VARCHAR(50) NOT NULL DEFAULT 'SYSTEM'
-);
-
-CREATE INDEX IF NOT EXISTS idx_supplier_code ON public.supplier_master(supplier_code);
-CREATE INDEX IF NOT EXISTS idx_supplier_name ON public.supplier_master(supplier_name);
-CREATE INDEX IF NOT EXISTS idx_supplier_gstin ON public.supplier_master(gstin);
-CREATE INDEX IF NOT EXISTS idx_supplier_state ON public.supplier_master(state);
-
--- Create vendor_master view for seamless access under both names
-
-
--- Also create table in sms_inventory schema if it exists
-DO $$
-BEGIN
-    IF EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = 'sms_inventory') THEN
-        CREATE TABLE IF NOT EXISTS sms_inventory.supplier_master (LIKE public.supplier_master INCLUDING ALL);
-        
-    END IF;
-END $$;
+-- startup-guard: bulk-seed-when-empty public.supplier_master
+-- Book 5 vendor list (209 suppliers).
+-- Loaded by DataInitializer ONLY when public.supplier_master is empty. Data rows only: the table,
+-- columns and indexes are defined in schema.sql. Enforced by StartupSafetyGuardTest.
 
 -- Insert / Update 209 vendor records from Book 5
 INSERT INTO public.supplier_master (supplier_id, supplier_code, supplier_name, company_id, supplier_type, gstin, pan, udyam_no, msme_category, gst_registration_type, tds_section_id, contact_person, email, phone, payment_terms_id, currency, status, address, city, state, state_code, pincode, created_by, updated_by) VALUES ('SUP-001', 'SUP-001', 'A.B.Paint & Chemicals', 'COMP-001', 'MATERIAL', '06AWYPK7782M1ZC', 'AWYPK7782M', NULL, 'NOT_MSME', 'REGISTERED', 'TDS-194C', 'BALJEET KAUR', 'ripsyjaspreet@gmail.com', '9891213889', 'PT-30', 'INR', 'ACTIVE', 'VPO FIROZPUR BANGAR, FIROZPUR BANGAR, KHARKHODA, Sonipat, Haryana, 131402', 'Sonipat', 'Haryana', '06', '131402', 'SYSTEM', 'SYSTEM')

@@ -15,7 +15,6 @@ import java.util.Map;
  * purchase endpoints and does not change them. To retire this flow, delete this package and its frontend folder.
  */
 @RestController
-@CrossOrigin(origins = "*")
 @RequestMapping("/api/new-po")
 public class NewPoController {
 

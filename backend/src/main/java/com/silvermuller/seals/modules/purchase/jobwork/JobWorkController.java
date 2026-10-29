@@ -13,7 +13,6 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@CrossOrigin(origins = "*")
 @RequestMapping("/api/job-work")
 public class JobWorkController {
 
@@ -30,7 +29,22 @@ public class JobWorkController {
     // ------------------------------------------------------------------ reference data
 
     @GetMapping("/operations")
-    public List<Map<String, Object>> operations() { return service.operations(); }
+    public List<Map<String, Object>> operations(@RequestParam(defaultValue = "false") boolean includeInactive) {
+        return service.operations(includeInactive);
+    }
+
+    @PostMapping("/operations")
+    public ResponseEntity<?> createOperation(@RequestBody Map<String, Object> body, @RequestHeader(value = "X-User-Name", required = false) String user,
+                                             @RequestHeader(value = "X-User-Role", required = false) String role) {
+        return run(() -> service.createOperation(body, service.actor(user, role)), HttpStatus.CREATED);
+    }
+
+    @PutMapping("/operations/{id}")
+    public ResponseEntity<?> updateOperation(@PathVariable long id, @RequestBody Map<String, Object> body,
+                                             @RequestHeader(value = "X-User-Name", required = false) String user,
+                                             @RequestHeader(value = "X-User-Role", required = false) String role) {
+        return run(() -> service.updateOperation(id, body, service.actor(user, role)), HttpStatus.OK);
+    }
 
     @GetMapping("/locations")
     public List<Map<String, Object>> locations() { return service.locations(); }

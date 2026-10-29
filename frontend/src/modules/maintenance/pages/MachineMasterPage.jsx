@@ -1,7 +1,6 @@
 import { useResizableColumns, ResizableColGroup, ColumnResizeHandle } from "../../../shared/components/ResizableTable";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { Eye, Pencil, Trash2, Search, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
-import fallbackMachines from "../data/machinesData.json";
 
 const INITIAL_MACHINE_FORM = {
   sNo: "",
@@ -82,24 +81,15 @@ export function MachineMasterPage({
     return String(code).replace(/m\/c\s*-?\s*(\d+)/i, "M/C -$1");
   };
 
-  const initialList = (fallbackMachines || []).map((m, idx) => ({
-    ...m,
-    sNo: m.sNo ?? m.sno ?? m.serialNo ?? (idx + 1),
-    machineNo: standardizeCode(m.machineNo)
-  }));
-
-  const [machines, setMachines] = useState(initialList);
+  // Machines come only from PostgreSQL, so a deleted machine never reappears from a bundled copy
+  const [machines, setMachines] = useState([]);
   const [loading, setLoading] = useState(true);
   const [toastMessage, setToastMessage] = useState(null);
   const [detailItem, setDetailItem] = useState(null);
 
   // Determine API base URL
   const getApiUrl = () => {
-    if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
-    if (typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")) {
-      return "http://localhost:4000";
-    }
-    return "https://silver-muller-seals-backend-deploy.onrender.com";
+    return import.meta.env.VITE_API_URL || "http://localhost:4000";
   };
 
   // Fetch Machines from API on component mount
@@ -109,7 +99,7 @@ export function MachineMasterPage({
       const res = await fetch(`${getApiUrl()}/api/maintenance/machines`);
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
+        if (Array.isArray(data)) {
           setMachines(
             data.map((m, idx) => ({
               ...m,
@@ -187,8 +177,7 @@ export function MachineMasterPage({
         setToastMessage(errJson.message || `Failed to delete machine "${deletedName}"`);
       }
     } catch {
-      setMachines((prev) => prev.filter((item) => item.id !== deleteTarget.id));
-      setToastMessage(`Machine "${deletedName}" removed locally.`);
+      setToastMessage(`Machine "${deletedName}" was not deleted: the server could not be reached.`);
     } finally {
       setDeleteTarget(null);
       setTimeout(() => setToastMessage(null), 3000);
@@ -224,36 +213,33 @@ export function MachineMasterPage({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload)
         });
-        if (res.ok) {
-          const updated = await res.json();
-          setMachines((prev) => prev.map((m) => (m.id === editingId ? { ...updated, machineNo: standardizeCode(updated.machineNo) } : m)));
-          setToastMessage(`Machine "${payload.machineNo}" updated successfully!`);
-        } else {
-          setMachines((prev) => prev.map((m) => (m.id === editingId ? { ...m, ...payload } : m)));
-          setToastMessage(`Machine "${payload.machineNo}" updated.`);
-        }
+        if (!res.ok) return await showSaveError(res);
+        const updated = await res.json();
+        setMachines((prev) => prev.map((m) => (m.id === editingId ? { ...updated, machineNo: standardizeCode(updated.machineNo) } : m)));
+        setToastMessage(`Machine "${payload.machineNo}" updated successfully!`);
       } else {
         const res = await fetch(`${getApiUrl()}/api/maintenance/machines`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload)
         });
-        if (res.ok) {
-          const created = await res.json();
-          setMachines((prev) => [...prev, { ...created, machineNo: standardizeCode(created.machineNo) }]);
-          setToastMessage(`New Machine "${payload.machineNo}" registered successfully!`);
-        } else {
-          const newObj = { ...payload, id: Date.now() };
-          setMachines((prev) => [...prev, newObj]);
-          setToastMessage(`New Machine "${payload.machineNo}" registered.`);
-        }
+        if (!res.ok) return await showSaveError(res);
+        const created = await res.json();
+        setMachines((prev) => [...prev, { ...created, machineNo: standardizeCode(created.machineNo) }]);
+        setToastMessage(`New Machine "${payload.machineNo}" registered successfully!`);
       }
       setIsModalOpen(false);
       setTimeout(() => setToastMessage(null), 3000);
     } catch (err) {
       console.error(err);
-      setIsModalOpen(false);
+      alert("The machine was not saved: the server could not be reached.");
     }
+  };
+
+  // A refused save keeps the form open and shows the server's reason; nothing is added to the list.
+  const showSaveError = async (res) => {
+    const err = await res.json().catch(() => ({}));
+    alert(err.message || err.error || `The machine was not saved (HTTP ${res.status}).`);
   };
 
   // Header Toolbar actions matching ItemMasterFormPage
@@ -437,7 +423,7 @@ export function MachineMasterPage({
         maxHeight: "calc(100vh - 68px)",
         overflow: "hidden",
         background: bg,
-        padding: "12px 20px 42px 20px",
+        padding: 0,
         boxSizing: "border-box",
         display: "flex",
         flexDirection: "column",
@@ -446,18 +432,16 @@ export function MachineMasterPage({
     >
       <div
         style={{
-          maxWidth: 1440,
           width: "100%",
-          margin: "0 auto",
           height: "100%",
           maxHeight: "100%",
           display: "flex",
           flexDirection: "column",
           minHeight: 0,
           overflow: "hidden",
-          borderRadius: 12,
-          border: "1px solid #e2e8f0",
-          boxShadow: "0 4px 20px rgba(0,0,0,0.06)",
+          borderRadius: 0,
+          border: "none",
+          boxShadow: "none",
           background: "#ffffff"
         }}
       >

@@ -1,3 +1,5 @@
+# Regenerates backend/src/main/resources/customer_master.sql (seed inserts and column alters only).
+# The table is defined in schema.sql. Inserts use ON CONFLICT DO NOTHING, so re-running never overwrites rows.
 import csv
 import re
 
@@ -12,77 +14,7 @@ header = rows[0]
 data_rows = rows[1:]
 
 sql_statements = [
-    "-- Customer Master Schema Definition & Seed Data from Excel Sheet",
-    """CREATE TABLE IF NOT EXISTS public.customer_master (
-    id BIGSERIAL PRIMARY KEY,
-    customer_id VARCHAR(50) NOT NULL UNIQUE,
-    customer_code VARCHAR(50) NOT NULL UNIQUE,
-    customer_name VARCHAR(255) NOT NULL,
-    customer_alias VARCHAR(150),
-    company_id VARCHAR(50) NOT NULL DEFAULT 'COMP-001',
-    customer_type VARCHAR(50) DEFAULT 'OEM',
-    domestic_export VARCHAR(50),
-    gstin VARCHAR(50),
-    pan VARCHAR(30),
-    udyam_no VARCHAR(50),
-    msme_category VARCHAR(50) DEFAULT 'NOT_MSME',
-    gst_registration_type VARCHAR(50) NOT NULL DEFAULT 'REGISTERED',
-    check_by_accounts BOOLEAN DEFAULT FALSE,
-    check_by_sales BOOLEAN DEFAULT TRUE,
-    billing_source VARCHAR(100),
-    supplier_code_sms VARCHAR(100),
-    contact_person VARCHAR(255),
-    sales_person VARCHAR(255),
-    phone VARCHAR(150),
-    sales_contact VARCHAR(150),
-    email TEXT,
-    sales_email TEXT,
-    mode_of_payment_reminder VARCHAR(100),
-    accounts_contact_details TEXT,
-    payment_terms_id VARCHAR(50) DEFAULT 'PT-30',
-    credit_days INTEGER DEFAULT 30,
-    credit_limit NUMERIC(15, 2) DEFAULT 500000.00,
-    currency VARCHAR(10) DEFAULT 'INR',
-    scm VARCHAR(255),
-    status VARCHAR(30) NOT NULL DEFAULT 'ACTIVE',
-    bill_to_address TEXT,
-    ship_to_address TEXT,
-    customer_address TEXT,
-    address TEXT,
-    city VARCHAR(100),
-    state VARCHAR(100),
-    state_code VARCHAR(10),
-    country VARCHAR(100) DEFAULT 'India',
-    pincode VARCHAR(20),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    created_by VARCHAR(50) NOT NULL DEFAULT 'SYSTEM',
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_by VARCHAR(50) NOT NULL DEFAULT 'SYSTEM'
-);
-
-ALTER TABLE public.customer_master ALTER COLUMN email TYPE TEXT;
-ALTER TABLE public.customer_master ALTER COLUMN phone TYPE VARCHAR(255);
-ALTER TABLE public.customer_master ALTER COLUMN contact_person TYPE TEXT;
-ALTER TABLE public.customer_master ADD COLUMN IF NOT EXISTS customer_alias VARCHAR(150);
-ALTER TABLE public.customer_master ADD COLUMN IF NOT EXISTS domestic_export VARCHAR(50);
-ALTER TABLE public.customer_master ADD COLUMN IF NOT EXISTS check_by_accounts BOOLEAN DEFAULT FALSE;
-ALTER TABLE public.customer_master ADD COLUMN IF NOT EXISTS check_by_sales BOOLEAN DEFAULT TRUE;
-ALTER TABLE public.customer_master ADD COLUMN IF NOT EXISTS billing_source VARCHAR(100);
-ALTER TABLE public.customer_master ADD COLUMN IF NOT EXISTS supplier_code_sms VARCHAR(100);
-ALTER TABLE public.customer_master ADD COLUMN IF NOT EXISTS sales_person TEXT;
-ALTER TABLE public.customer_master ADD COLUMN IF NOT EXISTS sales_contact VARCHAR(255);
-ALTER TABLE public.customer_master ADD COLUMN IF NOT EXISTS sales_email TEXT;
-ALTER TABLE public.customer_master ADD COLUMN IF NOT EXISTS mode_of_payment_reminder VARCHAR(100);
-ALTER TABLE public.customer_master ADD COLUMN IF NOT EXISTS accounts_contact_details TEXT;
-ALTER TABLE public.customer_master ADD COLUMN IF NOT EXISTS credit_days INTEGER DEFAULT 30;
-ALTER TABLE public.customer_master ADD COLUMN IF NOT EXISTS scm VARCHAR(255);
-ALTER TABLE public.customer_master ADD COLUMN IF NOT EXISTS bill_to_address TEXT;
-ALTER TABLE public.customer_master ADD COLUMN IF NOT EXISTS ship_to_address TEXT;
-ALTER TABLE public.customer_master ADD COLUMN IF NOT EXISTS customer_address TEXT;
-ALTER TABLE public.customer_master ADD COLUMN IF NOT EXISTS country VARCHAR(100) DEFAULT 'India';
-
-TRUNCATE TABLE public.customer_master RESTART IDENTITY;
-"""
+    '-- startup-guard: bulk-seed-when-empty public.customer_master\n-- Customer master generated from customer_source_sheet.csv.\n-- Loaded by DataInitializer ONLY when public.customer_master is empty. Data rows only: the table,\n-- columns and indexes are defined in schema.sql. Enforced by StartupSafetyGuardTest.\n',
 ]
 
 def sql_str(s):
@@ -180,15 +112,9 @@ for r in data_rows:
     {sql_str(sale_email)}, {sql_str(sale_email)}, {sql_str(mode_rem)}, {sql_str(accounts_info)}, 'PT-30', {credit_days}, 500000.00,
     'INR', {sql_str(scm)}, 'ACTIVE', {sql_str(bill_to)}, {sql_str(ship_to)}, {sql_str(customer_addr)}, {sql_str(general_addr)},
     {sql_str(city)}, {sql_str(state)}, {sql_str(state_code)}, {sql_str(country)}, '', CURRENT_TIMESTAMP, 'SYSTEM', CURRENT_TIMESTAMP, 'SYSTEM'
-);"""
+) ON CONFLICT DO NOTHING;"""
     sql_statements.append(stmt)
 
-sql_statements.append("""
-CREATE INDEX IF NOT EXISTS idx_customer_code ON public.customer_master(customer_code);
-CREATE INDEX IF NOT EXISTS idx_customer_name ON public.customer_master(customer_name);
-CREATE INDEX IF NOT EXISTS idx_customer_gstin ON public.customer_master(gstin);
-CREATE INDEX IF NOT EXISTS idx_customer_state ON public.customer_master(state);
-""")
 
 with open(output_sql_path, "w", encoding="utf-8") as f:
     f.write("\n".join(sql_statements))

@@ -11,7 +11,9 @@ For one PR line (`purchase_requisition_items`):
 |---|---|---|
 | Requested | `req_qty` | `purchase_requisition_items.req_qty` |
 | Ordered (reserved) | `ordered_qty` = all quantity reserved on the line, from every workflow (PO-by-PR, proposal approval, clubbing, manual change). Released quantity is subtracted. | `purchase_requisition_items.ordered_qty` |
-| Remaining to order | `req_qty - ordered_qty` (never below 0) | `remaining_qty` (kept in step on every write) |
+| Remaining to order | `req_qty - ordered_qty` (never below 0). Includes quantity still in vendor drafts. | `remaining_qty` (kept in step on every write) |
+| In draft | Quantity reserved in open vendor drafts (sourcing) | `purchase_requisition_items.drafted_qty`, detail in `po_draft_allocations` |
+| Ready for sourcing / available to order | `req_qty - ordered_qty - drafted_qty`. Every reservation (PO by PR, proposal approval, clubbing, manual change, draft) is checked against this under the PR line lock. | derived |
 | Allocated (PO-by-PR) | `SUM(allocated_qty - released_qty)` over `po_pr_allocations` for the line | derived |
 | Ordered outside PO-by-PR | `ordered_qty - allocated` (legacy reservations; cannot be received against a PR line) | derived |
 | Received | `SUM(received_qty)` of POSTED GRN lines attributed to the line's allocations through `grn_item_allocations` | derived |
@@ -77,6 +79,32 @@ A PR is never closed by a PO closing. There is no stored "Closed" status yet (se
   Limitation: the `released_qty <= allocated_qty` check exists only where the table is created fresh; the
   service enforces it under lock for existing databases (`schema.sql` cannot hold a `DO` block safely).
 - `grn_item_allocations` (new): `grn_item_id`, `allocation_id`, `received_qty > 0`, unique (grn_item, allocation).
+
+## 6a. Sourcing: clubbed demand, vendor drafts, draft to PO (`/api/new-po/sourcing`)
+
+- Clubbed demand groups ready-for-sourcing PR lines by item code + unit for display only; PR lines are never merged.
+- Vendor suggestions: active vendors linked to the item in the Supplier Master (`supplier_item`), priced from the
+  Vendor Rate Master rate effective today; cheapest first. Suggestions create nothing.
+- Assigning an item to a vendor reserves PR quantity (`drafted_qty`) in that vendor's single OPEN draft
+  (`DRAFT-YYYY-NNN`). The vendor must be linked to the item and have a rate effective today.
+- Release sends open draft quantity back to sourcing. Convert moves the chosen quantities out of the draft and creates
+  the PO through PO by PR in the same transaction (same pricing, GST, freight, terms, schedules, numbering);
+  `po_pr_allocations.draft_allocation_id` records the draft line. Lines left at zero stay in the draft.
+- Lock order: vendor advisory lock (assign) -> draft row -> draft lines -> PR lines by id.
+- Audit: PR status decisions and draft actions are written to `procurement_audit_log`.
+- Report: `GET /api/new-po/reports/traceability` (nested, or `flat=true` for export) and `/pr-status/{pr}`.
+  Lines ordered through older flows without allocations are reported as `ORDERED_UNTRACKED`, never as completed.
+
+## 6b. Document numbers
+
+PR, PO, GRN and draft numbers are `PREFIX-YEAR-NNNNN` (`DRAFT-YEAR-NNN`) and restart at 1 every calendar year. They come
+from `document_number_counters` (one row per document type and year, incremented atomically) and always stay above the
+highest number of that year already stored (`DocumentNumbers`). The server always assigns the number of a new document;
+a number shown on the form beforehand (`next-number` endpoints) is a preview and is not reserved. The older
+`po_number_seq` is no longer used.
+
+Purchase UoM: a PR line takes the item's purchase UoM from the Item Master (`purchased_uom`, else `uom`); the UoM
+chosen on the form is used only when the item has none. Counted units must be whole numbers (`QuantityRules`).
 
 ## 7. Still open (explicit decisions or deferred work)
 

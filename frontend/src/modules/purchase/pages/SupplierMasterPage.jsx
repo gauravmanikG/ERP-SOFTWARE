@@ -113,14 +113,34 @@ export function SupplierMasterPage({
   const [loading, setLoading] = useState(true);
   const [toastMessage, setToastMessage] = useState(null);
   const [detailItem, setDetailItem] = useState(null);
+  const [allItems, setAllItems] = useState([]);
+  const [supplierItems, setSupplierItems] = useState([]);
+  const [itemsLoading, setItemsLoading] = useState(false);
+  const [selectedItemId, setSelectedItemId] = useState(null);
+  const [itemQuery, setItemQuery] = useState("");
+  const [itemMenuOpen, setItemMenuOpen] = useState(false);
+
+  const ITEM_MATCH_LIMIT = 100;
+  const itemMatchCount = useMemo(() => {
+    const q = itemQuery.trim().toLowerCase();
+    if (!q) return allItems.length;
+    return allItems.filter((i) =>
+      `${i.item_code ?? ""} ${i.description_size ?? ""} ${i.item_name ?? ""}`.toLowerCase().includes(q)
+    ).length;
+  }, [allItems, itemQuery]);
+  const itemMatches = useMemo(() => {
+    const q = itemQuery.trim().toLowerCase();
+    const source = q
+      ? allItems.filter((i) =>
+          `${i.item_code ?? ""} ${i.description_size ?? ""} ${i.item_name ?? ""}`.toLowerCase().includes(q)
+        )
+      : allItems;
+    return source.slice(0, ITEM_MATCH_LIMIT);
+  }, [allItems, itemQuery]);
 
   // Determine API base URL
   const getApiUrl = () => {
-    if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
-    if (typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")) {
-      return "http://localhost:4000";
-    }
-    return "https://silver-muller-seals-backend-deploy.onrender.com";
+    return import.meta.env.VITE_API_URL || "http://localhost:4000";
   };
 
   // Fetch Suppliers from API on component mount
@@ -141,8 +161,39 @@ export function SupplierMasterPage({
     }
   };
 
+  const fetchItems = async () => {
+    try {
+      const res = await fetch(`${getApiUrl()}/api/items`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setAllItems(data);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch items:", err);
+    }
+  };
+
+  const fetchSupplierItems = async (supplierId) => {
+    setItemsLoading(true);
+    try {
+      const res = await fetch(`${getApiUrl()}/api/suppliers/${supplierId}/items`);
+      if (res.ok) {
+        const data = await res.json();
+        setSupplierItems(Array.isArray(data) ? data : []);
+      }
+    } catch (err) {
+      console.error("Failed to fetch supplier items:", err);
+      setSupplierItems([]);
+    } finally {
+      setItemsLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchSuppliers();
+    fetchItems();
   }, []);
 
 
@@ -165,6 +216,7 @@ export function SupplierMasterPage({
       supplierId: generatedCode
     });
     setActiveTab("tab1");
+    setSupplierItems([]);
     setIsModalOpen(true);
   };
 
@@ -182,6 +234,7 @@ export function SupplierMasterPage({
     setActiveTab("tab1");
     if (detailItem) setDetailItem(null);
     setIsModalOpen(true);
+    fetchSupplierItems(supplier.id);
   };
 
   // Delete handlers
@@ -201,11 +254,11 @@ export function SupplierMasterPage({
         if (detailItem?.id === deleteTarget.id) setDetailItem(null);
         setToastMessage(`Supplier "${deletedName}" deleted successfully!`);
       } else {
-        setToastMessage(`Failed to delete supplier "${deletedName}"`);
+        const err = await res.json().catch(() => ({}));
+        setToastMessage(err.message || `Supplier "${deletedName}" could not be deleted (HTTP ${res.status}).`);
       }
     } catch (e) {
-      setSuppliers((prev) => prev.filter((item) => item.id !== deleteTarget.id));
-      setToastMessage(`Supplier "${deletedName}" deleted locally.`);
+      setToastMessage(`Supplier "${deletedName}" was not deleted: the server could not be reached.`);
     } finally {
       setDeleteTarget(null);
       setTimeout(() => setToastMessage(null), 4000);
@@ -234,6 +287,54 @@ export function SupplierMasterPage({
     });
   };
 
+  // Add item to supplier items list
+  const handleAddItem = () => {
+    if (!selectedItemId) {
+      alert("Please select an item");
+      return;
+    }
+    if (supplierItems.includes(Number(selectedItemId))) {
+      alert("This item is already added");
+      return;
+    }
+    setSupplierItems([...supplierItems, Number(selectedItemId)]);
+    setSelectedItemId(null);
+    setItemQuery("");
+  };
+
+  // Remove item from supplier items list
+  const handleRemoveItem = (itemId) => {
+    setSupplierItems(supplierItems.filter(id => id !== itemId));
+  };
+
+  // Save Supplier Items
+  const handleSaveSupplierItems = async () => {
+    if (!editingId) {
+      setToastMessage("Please save the supplier first before adding items.");
+      setTimeout(() => setToastMessage(null), 3000);
+      return;
+    }
+
+    try {
+      const res = await fetch(`${getApiUrl()}/api/suppliers/${editingId}/items`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ supplierId: editingId, itemIds: supplierItems })
+      });
+
+      if (res.ok) {
+        setToastMessage("Items saved successfully!");
+        setTimeout(() => setToastMessage(null), 2500);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(err.message || `Failed to save items (HTTP ${res.status}).`);
+      }
+    } catch (err) {
+      console.error("Save supplier items failed:", err);
+      alert("Failed to save items: the server could not be reached.");
+    }
+  };
+
   // Save Supplier (POST / PUT)
   const handleSaveSupplier = async (e) => {
     e.preventDefault();
@@ -253,38 +354,26 @@ export function SupplierMasterPage({
         body: JSON.stringify(formData)
       });
 
-      if (res.ok) {
-        const savedData = await res.json();
-        if (isEdit) {
-          setSuppliers((prev) => prev.map((item) => (item.id === editingId ? savedData : item)));
-          setToastMessage(`Supplier "${savedData.supplierName}" updated successfully!`);
-        } else {
-          setSuppliers((prev) => [savedData, ...prev]);
-          setToastMessage(`Supplier "${savedData.supplierName}" created successfully!`);
-        }
-      } else {
-        // Fallback local update if backend offline
-        const localObj = { ...formData, id: editingId || Date.now() };
-        if (isEdit) {
-          setSuppliers((prev) => prev.map((item) => (item.id === editingId ? localObj : item)));
-        } else {
-          setSuppliers((prev) => [localObj, ...prev]);
-        }
-        setToastMessage(`Supplier saved locally.`);
+      // A refused save keeps the form open and shows the server's reason; nothing is added to the list.
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(err.message || err.error || `The supplier was not saved (HTTP ${res.status}).`);
+        return;
       }
-    } catch (err) {
-      console.error("Save supplier failed:", err);
-      const localObj = { ...formData, id: editingId || Date.now() };
-      if (editingId) {
-        setSuppliers((prev) => prev.map((item) => (item.id === editingId ? localObj : item)));
+      const savedData = await res.json();
+      if (isEdit) {
+        setSuppliers((prev) => prev.map((item) => (item.id === editingId ? savedData : item)));
+        setToastMessage(`Supplier "${savedData.supplierName}" updated successfully!`);
       } else {
-        setSuppliers((prev) => [localObj, ...prev]);
+        setSuppliers((prev) => [savedData, ...prev]);
+        setToastMessage(`Supplier "${savedData.supplierName}" created successfully!`);
       }
-      setToastMessage(`Saved to local state.`);
-    } finally {
       setIsModalOpen(false);
       setEditingId(null);
       setTimeout(() => setToastMessage(null), 4000);
+    } catch (err) {
+      console.error("Save supplier failed:", err);
+      alert("The supplier was not saved: the server could not be reached.");
     }
   };
 
@@ -478,7 +567,7 @@ export function SupplierMasterPage({
         maxHeight: "calc(100vh - 68px)",
         overflow: "hidden",
         background: bg,
-        padding: "12px 20px 42px 20px",
+        padding: 0,
         boxSizing: "border-box",
         display: "flex",
         flexDirection: "column",
@@ -487,18 +576,16 @@ export function SupplierMasterPage({
     >
       <div
         style={{
-          maxWidth: 1440,
           width: "100%",
-          margin: "0 auto",
           height: "100%",
           maxHeight: "100%",
           display: "flex",
           flexDirection: "column",
           minHeight: 0,
           overflow: "hidden",
-          borderRadius: 12,
-          border: "1px solid #e2e8f0",
-          boxShadow: "0 4px 20px rgba(0,0,0,0.06)",
+          borderRadius: 0,
+          border: "none",
+          boxShadow: "none",
           background: "#ffffff"
         }}
       >
@@ -1244,6 +1331,22 @@ export function SupplierMasterPage({
               >
                 2. Contact, Address & Terms
               </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("tab3")}
+                style={{
+                  padding: "12px 20px",
+                  fontSize: 13,
+                  fontWeight: activeTab === "tab3" ? 700 : 500,
+                  border: "none",
+                  borderBottom: activeTab === "tab3" ? "3px solid #1e293b" : "3px solid transparent",
+                  background: "transparent",
+                  color: activeTab === "tab3" ? "#1e293b" : "#64748b",
+                  cursor: "pointer"
+                }}
+              >
+                3. Supplied Items
+              </button>
             </div>
 
             {/* Modal Body Form */}
@@ -1438,6 +1541,170 @@ export function SupplierMasterPage({
                         </option>
                       ))}
                     </select>
+                  </div>
+                </div>
+              )}
+
+              {activeTab === "tab3" && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                  <div>
+                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 10 }}>
+                      Add Items Supplied by This Vendor
+                    </label>
+                    {!editingId && (
+                      <p style={{ fontSize: 12, color: "#64748b", marginBottom: 12 }}>
+                        ℹ️ Save the supplier first (Tab 1 & 2) before adding items.
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Item Selection Dropdown & Add Button */}
+                  <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
+                    <div style={{ flex: 1 }}>
+                      <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 6 }}>
+                        Select Item from Item Master
+                      </label>
+                      <div style={{ position: "relative" }}>
+                        <input
+                          type="text"
+                          value={itemQuery}
+                          placeholder={itemsLoading ? "Loading items..." : "Type code or description to search"}
+                          disabled={itemsLoading || allItems.length === 0}
+                          onFocus={() => setItemMenuOpen(true)}
+                          onBlur={() => setItemMenuOpen(false)}
+                          onChange={(e) => {
+                            setItemQuery(e.target.value);
+                            setSelectedItemId(null);
+                            setItemMenuOpen(true);
+                          }}
+                          style={{
+                            width: "100%",
+                            padding: "10px 12px",
+                            borderRadius: 6,
+                            border: "1px solid #cbd5e1",
+                            fontSize: 13,
+                            boxSizing: "border-box",
+                            backgroundColor: "#ffffff"
+                          }}
+                        />
+                        {itemMenuOpen && itemMatches.length > 0 && (
+                          <div style={{
+                            position: "absolute",
+                            top: "100%",
+                            left: 0,
+                            right: 0,
+                            marginTop: 4,
+                            maxHeight: 260,
+                            overflowY: "auto",
+                            background: "#ffffff",
+                            border: "1px solid #cbd5e1",
+                            borderRadius: 6,
+                            boxShadow: "0 8px 24px rgba(15, 23, 42, 0.15)",
+                            zIndex: 10
+                          }}>
+                            {itemMatches.map((item) => (
+                              <div
+                                key={item.id}
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  setSelectedItemId(item.id);
+                                  setItemQuery(`${item.item_code} - ${item.description_size || item.item_name}`);
+                                  setItemMenuOpen(false);
+                                }}
+                                style={{
+                                  padding: "8px 12px",
+                                  fontSize: 13,
+                                  cursor: "pointer",
+                                  borderBottom: "1px solid #f1f5f9",
+                                  background: selectedItemId === item.id ? "#dbeafe" : "#ffffff"
+                                }}
+                              >
+                                <span style={{ fontWeight: 700, color: "#0f172a" }}>{item.item_code}</span>
+                                <span style={{ color: "#475569" }}> - {item.description_size || item.item_name}</span>
+                              </div>
+                            ))}
+                            {itemMatchCount > itemMatches.length && (
+                              <div style={{ padding: "8px 12px", fontSize: 12, color: "#64748b" }}>
+                                Showing {itemMatches.length} of {itemMatchCount} matches. Type more to narrow down.
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAddItem}
+                      disabled={!selectedItemId || !editingId}
+                      style={{
+                        padding: "10px 20px",
+                        borderRadius: 6,
+                        border: "none",
+                        background: selectedItemId && editingId ? "#2563eb" : "#cbd5e1",
+                        color: "#ffffff",
+                        fontSize: 13,
+                        fontWeight: 600,
+                        cursor: selectedItemId && editingId ? "pointer" : "not-allowed",
+                        whiteSpace: "nowrap"
+                      }}
+                    >
+                      + Add Item
+                    </button>
+                  </div>
+
+                  {/* Selected Items List */}
+                  <div>
+                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 10 }}>
+                      Selected Items ({supplierItems.length})
+                    </label>
+                    {supplierItems.length === 0 ? (
+                      <div style={{ padding: 16, background: "#f8fafc", borderRadius: 6, border: "1px solid #e2e8f0", color: "#64748b", fontSize: 13, textAlign: "center" }}>
+                        No items added yet. Select an item above and click "Add Item".
+                      </div>
+                    ) : (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        {supplierItems.map((itemId) => {
+                          const item = allItems.find(i => i.id === itemId);
+                          return (
+                            <div key={itemId} style={{
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              padding: "12px",
+                              background: "#f0fdf4",
+                              border: "1px solid #bbf7d0",
+                              borderRadius: 6,
+                              fontSize: 13
+                            }}>
+                              <div>
+                                <div style={{ fontWeight: 600, color: "#0f172a" }}>
+                                  {item?.item_code}
+                                </div>
+                                <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
+                                  {item?.description_size || item?.item_name}
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveItem(itemId)}
+                                style={{
+                                  padding: "6px 12px",
+                                  borderRadius: 4,
+                                  border: "none",
+                                  background: "#fee2e2",
+                                  color: "#dc2626",
+                                  fontSize: 12,
+                                  fontWeight: 600,
+                                  cursor: "pointer"
+                                }}
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -1694,22 +1961,62 @@ export function SupplierMasterPage({
                 >
                   Cancel
                 </button>
-                <button
-                  type="submit"
-                  style={{
-                    padding: "8px 22px",
-                    borderRadius: 6,
-                    border: "none",
-                    background: "#1e293b",
-                    color: "#ffffff",
-                    fontSize: 13,
-                    fontWeight: 700,
-                    cursor: "pointer",
-                    boxShadow: "0 2px 4px rgba(0,0,0,0.15)"
-                  }}
-                >
-                  {editingId ? "Update Supplier" : "Save Supplier Record"}
-                </button>
+                {activeTab === "tab3" ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab("tab2")}
+                      style={{
+                        padding: "8px 18px",
+                        borderRadius: 6,
+                        border: "1px solid #cbd5e1",
+                        background: "#ffffff",
+                        color: "#475569",
+                        fontSize: 13,
+                        fontWeight: 600,
+                        cursor: "pointer"
+                      }}
+                    >
+                      Back
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveSupplierItems}
+                      disabled={!editingId}
+                      style={{
+                        padding: "8px 22px",
+                        borderRadius: 6,
+                        border: "none",
+                        background: editingId ? "#10b981" : "#cbd5e1",
+                        color: "#ffffff",
+                        fontSize: 13,
+                        fontWeight: 700,
+                        cursor: editingId ? "pointer" : "not-allowed",
+                        opacity: editingId ? 1 : 0.6,
+                        boxShadow: editingId ? "0 2px 4px rgba(16, 185, 129, 0.2)" : "none"
+                      }}
+                    >
+                      Save Items
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="submit"
+                    style={{
+                      padding: "8px 22px",
+                      borderRadius: 6,
+                      border: "none",
+                      background: "#1e293b",
+                      color: "#ffffff",
+                      fontSize: 13,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      boxShadow: "0 2px 4px rgba(0,0,0,0.15)"
+                    }}
+                  >
+                    {editingId ? "Update Supplier" : "Save Supplier Record"}
+                  </button>
+                )}
               </div>
             </form>
           </div>

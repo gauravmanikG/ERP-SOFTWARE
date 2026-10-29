@@ -1,11 +1,12 @@
 import json
+import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
 conn = psycopg2.connect(
     dbname="sms_seals",
     user="postgres",
-    password="postgres",
+    password=os.environ["SMS_DB_PASSWORD"],  # set in the shell; never hard-code it
     host="localhost",
     port=5434
 )

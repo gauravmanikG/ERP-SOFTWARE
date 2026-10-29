@@ -10,7 +10,6 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@CrossOrigin(origins = "*")
 @RequestMapping("/api/purchase/grn")
 public class GoodsReceiptNoteController {
 
@@ -59,7 +58,7 @@ public class GoodsReceiptNoteController {
      */
     @GetMapping("/next-number")
     public ResponseEntity<Map<String, String>> getNextGrnNumber() {
-        return ResponseEntity.ok(Map.of("grnNumber", grnService.generateNextGrnNumber()));
+        return ResponseEntity.ok(Map.of("grnNumber", grnService.peekGrnNumber()));
     }
 
     /**
