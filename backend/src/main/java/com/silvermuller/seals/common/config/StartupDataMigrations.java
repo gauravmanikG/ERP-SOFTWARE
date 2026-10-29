@@ -148,6 +148,31 @@ public class StartupDataMigrations implements ApplicationRunner {
                                            public.master, public.department, public.companies;
                       DELETE FROM public.app_seed_registry
                       WHERE split_part(seed_key, ':', 1) IN ('master', 'department', 'transaction_type', 'opening_balance', 'companies');
+                    END $$"""),
+            new Migration("2026-10-29-08-job-work-indent-optional-source-store",
+                    "Makes job_work_indents.source_department_id nullable: the source store is chosen on the job work order, "
+                            + "not on the indent. Schema-only change to an existing column; no rows are read or changed. "
+                            + "Safe to re-run on an already nullable column, and fresh databases already create it nullable.",
+                    "ALTER TABLE public.job_work_indents ALTER COLUMN source_department_id DROP NOT NULL"),
+            new Migration("2026-10-29-09-job-work-line-received-includes-rework-and-write-off",
+                    "Brings job_work_order_lines.ck_jwo_line_received to the definition in schema.sql: received + unused returned "
+                            + "+ written off <= dispatched + re-dispatched rework. schema.sql used to drop and re-add it on every "
+                            + "start, locking the table each time. Replaces it only if it does not already cover rework and "
+                            + "write-offs; no rows are changed. If an existing row breaks the rule, startup stops instead of "
+                            + "dropping the check.",
+                    """
+                    DO $$
+                    BEGIN
+                      IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                                     WHERE conrelid = 'public.job_work_order_lines'::regclass
+                                       AND conname = 'ck_jwo_line_received'
+                                       AND pg_get_constraintdef(oid) LIKE '%written_off_qty%'
+                                       AND pg_get_constraintdef(oid) LIKE '%rework_redispatched_qty%') THEN
+                        ALTER TABLE public.job_work_order_lines DROP CONSTRAINT IF EXISTS ck_jwo_line_received;
+                        ALTER TABLE public.job_work_order_lines ADD CONSTRAINT ck_jwo_line_received
+                          CHECK (received_qty >= 0 AND unused_returned_qty >= 0 AND written_off_qty >= 0
+                                 AND received_qty + unused_returned_qty + written_off_qty <= dispatched_qty + rework_redispatched_qty);
+                      END IF;
                     END $$""")
     );
 

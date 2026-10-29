@@ -1369,9 +1369,6 @@ CREATE TABLE IF NOT EXISTS public.job_work_indents (
   CONSTRAINT ck_jw_indent_status CHECK (status IN ('DRAFT','SUBMITTED','APPROVED','REJECTED','CANCELLED'))
 );
 
--- The source store is chosen on the job work order, not on the indent.
-ALTER TABLE public.job_work_indents ALTER COLUMN source_department_id DROP NOT NULL;
-
 CREATE TABLE IF NOT EXISTS public.job_work_indent_lines (
   id                    BIGSERIAL PRIMARY KEY,
   indent_id             BIGINT NOT NULL REFERENCES public.job_work_indents(id) ON DELETE CASCADE,
@@ -1443,12 +1440,16 @@ CREATE TABLE IF NOT EXISTS public.job_work_order_lines (
   rejected_qty          NUMERIC(15,2) NOT NULL DEFAULT 0,
   rework_qty            NUMERIC(15,2) NOT NULL DEFAULT 0,
   rework_redispatched_qty NUMERIC(15,2) NOT NULL DEFAULT 0,
+  written_off_qty       NUMERIC(15,2) NOT NULL DEFAULT 0,  -- written off after an approved shortage or process-loss adjustment
   scrap_qty             NUMERIC(15,2) NOT NULL DEFAULT 0,
   remarks               TEXT,
   CONSTRAINT uq_jwo_line UNIQUE (jwo_id, line_no),
   CONSTRAINT ck_jwo_line_qty CHECK (input_qty > 0 AND expected_output_qty >= 0 AND rate >= 0),
   CONSTRAINT ck_jwo_line_dispatch CHECK (dispatched_qty >= 0 AND dispatched_qty <= input_qty),
-  CONSTRAINT ck_jwo_line_received CHECK (received_qty >= 0 AND unused_returned_qty >= 0 AND received_qty + unused_returned_qty <= dispatched_qty),
+  -- Re-dispatched rework goes out again, so what a worker may return includes re-dispatched rework. Older databases
+  -- get this definition from migration 2026-10-29-09.
+  CONSTRAINT ck_jwo_line_received CHECK (received_qty >= 0 AND unused_returned_qty >= 0 AND written_off_qty >= 0
+                                         AND received_qty + unused_returned_qty + written_off_qty <= dispatched_qty + rework_redispatched_qty),
   CONSTRAINT ck_jwo_line_inspected CHECK (accepted_qty + rejected_qty + rework_qty + scrap_qty <= received_qty + 0.001)
 );
 
@@ -1579,17 +1580,8 @@ CREATE TABLE IF NOT EXISTS public.job_work_attachments (
 -- Job work: a challan dispatched from the Rework store re-sends rejected/rework material.
 ALTER TABLE public.job_work_challans ADD COLUMN IF NOT EXISTS rework_dispatch BOOLEAN NOT NULL DEFAULT FALSE;
 
--- Job work: re-dispatched rework goes out again, so what a worker may return includes re-dispatched rework.
-ALTER TABLE public.job_work_order_lines DROP CONSTRAINT IF EXISTS ck_jwo_line_received;
-ALTER TABLE public.job_work_order_lines ADD CONSTRAINT ck_jwo_line_received
-  CHECK (received_qty >= 0 AND unused_returned_qty >= 0 AND received_qty + unused_returned_qty <= dispatched_qty + rework_redispatched_qty);
-
 -- Quantity of an order line written off after an approved shortage or process-loss adjustment.
 ALTER TABLE public.job_work_order_lines ADD COLUMN IF NOT EXISTS written_off_qty NUMERIC(15,2) NOT NULL DEFAULT 0;
-ALTER TABLE public.job_work_order_lines DROP CONSTRAINT IF EXISTS ck_jwo_line_received;
-ALTER TABLE public.job_work_order_lines ADD CONSTRAINT ck_jwo_line_received
-  CHECK (received_qty >= 0 AND unused_returned_qty >= 0 AND written_off_qty >= 0
-         AND received_qty + unused_returned_qty + written_off_qty <= dispatched_qty + rework_redispatched_qty);
 
 -- Permissible process loss, as a percentage of dispatched quantity, per operation (and optional category).
 CREATE TABLE IF NOT EXISTS public.job_work_loss_policy (
