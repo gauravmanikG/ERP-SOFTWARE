@@ -1,0 +1,8 @@
+# Every text file is stored with LF in the repository and checked out with LF on every machine, Windows included.
+# Without this, core.autocrlf=true on Windows warns "LF will be replaced by CRLF" on every add and diff.
+# Binary files (images, .xlsx) are detected automatically and never converted.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.xlsx binary
