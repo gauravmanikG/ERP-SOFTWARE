@@ -90,11 +90,7 @@ export function DepartmentMasterPage({
 
   // Determine API base URL
   const getApiUrl = () => {
-    if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
-    if (typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")) {
-      return "http://localhost:4000";
-    }
-    return "https://silver-muller-seals-backend-deploy.onrender.com";
+    return import.meta.env.VITE_API_URL || "http://localhost:4000";
   };
 
   // Fetch Departments from API on component mount

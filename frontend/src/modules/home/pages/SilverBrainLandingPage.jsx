@@ -34,11 +34,7 @@ export function SilverBrainLandingPage({
 
   // Fetch unread notifications count from backend API if available
   useEffect(() => {
-    const api = import.meta.env.VITE_API_URL || (
-      typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
-        ? ""
-        : "https://silver-muller-seals-backend-deploy.onrender.com"
-    );
+    const api = import.meta.env.VITE_API_URL || "";
     fetch(`${api}/api/notifications/unread-count`)
       .then((r) => (r.ok ? r.json() : { count: 3 }))
       .then((d) => setNotificationCount(Number(d.count) || 3))

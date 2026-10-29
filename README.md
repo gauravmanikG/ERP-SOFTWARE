@@ -84,7 +84,7 @@ browser origins allowed to do so are set by `app.cors.allowed-origins` in
 - Never commit `backend/.env` or real credentials — `backend/.gitignore`
   already excludes `.env`.
 - For a production deploy, host the backend somewhere that runs a Java jar
-  (Render, Railway, Fly.io, an EC2 box, etc.), point
+  (Railway, Fly.io, an EC2 box, etc.), point
   `SPRING_DATASOURCE_URL`/`SPRING_DATASOURCE_USERNAME`/`SPRING_DATASOURCE_PASSWORD`
   at your production Postgres instance, and set the frontend's
   `VITE_API_URL` env var to that backend's public URL before building the
