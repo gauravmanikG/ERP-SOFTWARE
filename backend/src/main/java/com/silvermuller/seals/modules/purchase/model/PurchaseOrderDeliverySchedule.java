@@ -7,7 +7,6 @@ import java.time.OffsetDateTime;
 public class PurchaseOrderDeliverySchedule {
 
     private Long id;
-    private Long poId;
     private String poNumber;
     private String itemCode;
     private Integer lotNumber = 1;
@@ -24,9 +23,6 @@ public class PurchaseOrderDeliverySchedule {
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
-
-    public Long getPoId() { return poId; }
-    public void setPoId(Long poId) { this.poId = poId; }
 
     public String getPoNumber() { return poNumber; }
     public void setPoNumber(String poNumber) { this.poNumber = poNumber; }

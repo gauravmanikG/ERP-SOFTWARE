@@ -6,7 +6,6 @@ import com.silvermuller.seals.modules.purchase.service.PurchaseProcessingService
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 
@@ -47,7 +46,7 @@ public class PurchaseProcessingController {
     }
 
     /**
-     * Save Delivery Schedule Lines for a PO.
+     * Replace the delivery lots of a PO. Received quantities on the lots come from posted GRNs, never from this request.
      */
     @PostMapping("/orders/{poNumber}/schedules")
     public ResponseEntity<?> saveDeliverySchedules(
@@ -55,24 +54,5 @@ public class PurchaseProcessingController {
             @RequestBody List<PurchaseOrderDeliverySchedule> schedules) {
         purchaseService.saveDeliverySchedules(poNumber, schedules);
         return ResponseEntity.ok(Map.of("success", true, "poNumber", poNumber, "count", schedules.size()));
-    }
-
-    /**
-     * Record receipt against a specific scheduled delivery lot (used by GRN).
-     */
-    @PostMapping("/orders/{poNumber}/receipt")
-    public ResponseEntity<?> recordScheduleReceipt(
-            @PathVariable String poNumber,
-            @RequestBody Map<String, Object> body) {
-        String itemCode = (String) body.get("itemCode");
-        Integer lotNumber = body.get("lotNumber") != null ? Integer.parseInt(body.get("lotNumber").toString()) : 1;
-        BigDecimal qty = body.get("receivedQty") != null ? new BigDecimal(body.get("receivedQty").toString()) : BigDecimal.ZERO;
-        try {
-            purchaseService.recordScheduleReceipt(poNumber, itemCode, lotNumber, qty);
-        } catch (IllegalArgumentException ex) {
-            // e.g. PO validity expired: quantities are not updated
-            return ResponseEntity.badRequest().body(Map.of("error", ex.getMessage()));
-        }
-        return ResponseEntity.ok(Map.of("success", true, "poNumber", poNumber, "lotNumber", lotNumber, "receivedQty", qty));
     }
 }

@@ -1,7 +1,5 @@
 package com.silvermuller.seals.modules.masters;
 
-import org.springframework.boot.ApplicationArguments;
-import org.springframework.boot.ApplicationRunner;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
@@ -11,11 +9,11 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Stores the optional PO terms in purchase_order_terms, one row per PO. Used by both PO by PR and Direct PO inside
+ * Stores the optional PO terms in purchase_order_terms (defined in schema.sql), one row per PO. Used by both PO by PR and Direct PO inside
  * their create transactions, so a PO and its terms are saved together or not at all.
  */
 @Service
-public class PurchaseOrderTermsService implements ApplicationRunner {
+public class PurchaseOrderTermsService {
 
     /** The four dropdowns and the master table each one must match. */
     private static final List<Object[]> CODE_FIELDS = List.of(
@@ -28,20 +26,6 @@ public class PurchaseOrderTermsService implements ApplicationRunner {
 
     public PurchaseOrderTermsService(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
-    }
-
-    @Override
-    public void run(ApplicationArguments args) {
-        jdbc.execute(
-            "CREATE TABLE IF NOT EXISTS public.purchase_order_terms (" +
-            "po_number VARCHAR(50) PRIMARY KEY, " +
-            "mode_of_payment_code VARCHAR(20), payment_terms_code VARCHAR(20), " +
-            "credit_period_basis_code VARCHAR(20), freight_option_code VARCHAR(20), " +
-            "freight_amount NUMERIC(15,2), dispatch_through TEXT, delivery_required DATE, " +
-            "currency VARCHAR(10), conversion_rate NUMERIC(12,4), insurance TEXT, " +
-            "terms_conditions TEXT, test_certificate TEXT, packing_instructions TEXT, " +
-            "transporter TEXT, bankers TEXT, warranty TEXT, kind_attention TEXT, " +
-            "dispatch_to TEXT, bill_to TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
     }
 
     /**

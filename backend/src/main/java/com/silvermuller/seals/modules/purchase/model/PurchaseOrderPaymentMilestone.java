@@ -7,7 +7,6 @@ import java.time.OffsetDateTime;
 public class PurchaseOrderPaymentMilestone {
 
     private Long id;
-    private Long poId;
     private String poNumber;
     private Integer milestoneSequence = 1;
     private String milestoneTitle;
@@ -26,9 +25,6 @@ public class PurchaseOrderPaymentMilestone {
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
-
-    public Long getPoId() { return poId; }
-    public void setPoId(Long poId) { this.poId = poId; }
 
     public String getPoNumber() { return poNumber; }
     public void setPoNumber(String poNumber) { this.poNumber = poNumber; }

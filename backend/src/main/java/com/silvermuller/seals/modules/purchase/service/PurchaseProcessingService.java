@@ -1,6 +1,8 @@
 package com.silvermuller.seals.modules.purchase.service;
 
 import com.silvermuller.seals.common.exception.ConflictException;
+import com.silvermuller.seals.common.exception.ResourceNotFoundException;
+import com.silvermuller.seals.modules.purchase.newpo.DeliveryLots;
 import com.silvermuller.seals.modules.purchase.servicepo.ServicePoService;
 import com.silvermuller.seals.modules.inventory.model.SupplierMaster;
 import com.silvermuller.seals.modules.inventory.repository.SupplierMasterRepository;
@@ -8,26 +10,34 @@ import com.silvermuller.seals.modules.purchase.dto.*;
 import com.silvermuller.seals.modules.purchase.model.*;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
 
+/**
+ * Standard POs: pricing, cancellation and delivery schedules. POs are read from purchase_orders on every call; there
+ * is no in-memory copy, so every server instance and every request sees the committed state.
+ */
 @Service
 public class PurchaseProcessingService {
+
+    private static final Logger log = LoggerFactory.getLogger(PurchaseProcessingService.class);
 
     private final SupplierMasterRepository supplierRepository;
     private final PurchaseRequisitionService prService;
     private final JdbcTemplate jdbc;
     private final ObjectMapper objectMapper;
-    private final Map<String, PurchaseOrder> purchaseOrdersMap = new ConcurrentHashMap<>();
 
     public static final String COMPANY_BILLING_ADDRESS =
             "Silver Muller Seals Ltd, Plot 42, GIDC Sector 3, Silvassa, D&NH - 396230. GSTIN: 24AAACS1234D1Z5";
@@ -40,7 +50,6 @@ public class PurchaseProcessingService {
         this.prService = prService;
         this.jdbc = jdbc;
         this.objectMapper = objectMapper;
-        loadOrdersFromDb();
     }
 
     public PurchaseCalculationResponse calculate(PurchaseCalculationRequest request) {
@@ -313,17 +322,25 @@ public class PurchaseProcessingService {
         return DocumentNumbers.peek(jdbc, DocumentNumbers.Doc.PO);
     }
 
+    /**
+     * Cancels a PO and releases its PR quantities, all in one transaction. The PO row is locked first, so a GRN being
+     * posted against the same PO either finishes before this (and blocks the cancel) or waits and then sees it cancelled.
+     */
+    @Transactional
     public PurchaseOrder cancelPurchaseOrder(String poNumberOrId, String user, String reason) {
         PurchaseOrder po = getPurchaseOrder(poNumberOrId)
                 .orElseThrow(() -> new IllegalArgumentException("Purchase Order not found: " + poNumberOrId));
-        if ("CANCELLED".equalsIgnoreCase(po.getStatus())) {
+        Map<String, Object> locked = jdbc.queryForMap(
+                "SELECT status, remarks FROM public.purchase_orders WHERE po_number = ? FOR UPDATE", po.getPoNumber());
+        if ("CANCELLED".equalsIgnoreCase((String) locked.get("status"))) {
             throw new IllegalArgumentException("Purchase Order " + poNumberOrId + " is already cancelled. Quantities cannot be restored again.");
         }
-        // POs raised through PO by PR must be cancelled through their own endpoint, which releases exactly the
-        // quantities their allocations reserved. This legacy path would release to po.prNumber instead.
+        // POs with PR allocations (raised through PO by PR, or older POs linked to their PR lines) must be cancelled
+        // through the PO-by-PR endpoint, which releases exactly the quantities their allocations reserved. This
+        // legacy path would release to po.prNumber instead.
         Integer raised = jdbc.queryForObject("SELECT COUNT(*) FROM public.po_pr_allocations WHERE po_number = ?", Integer.class, po.getPoNumber());
         if (raised != null && raised > 0) {
-            throw new ConflictException("PO " + po.getPoNumber() + " was raised through PO by PR. Cancel it with POST /api/new-po/pr/purchase-orders/"
+            throw new ConflictException("PO " + po.getPoNumber() + " is linked to PR lines. Cancel it with POST /api/new-po/pr/purchase-orders/"
                     + po.getPoNumber() + "/cancel; it was not changed here.");
         }
         // Shared rule for every PO type: a PO with any posted receipt (accepted or rejected) cannot be cancelled.
@@ -333,13 +350,14 @@ public class PurchaseProcessingService {
         if (posted != null && posted > 0) {
             throw new ConflictException("PO " + po.getPoNumber() + " has posted receipts and cannot be cancelled. Receipt reversal is not supported yet; it was not changed.");
         }
-        po.setStatus("CANCELLED");
         String actor = (user != null && !user.trim().isEmpty()) ? user : "Purchase Manager";
         String r = (reason != null && !reason.trim().isEmpty()) ? reason : "Order cancelled";
-        po.setRemarks((po.getRemarks() != null ? po.getRemarks() + " | " : "") + "Cancelled by " + actor + ": " + r);
-        purchaseOrdersMap.put(po.getId(), po);
-        purchaseOrdersMap.put(po.getPoNumber(), po);
-        savePoToDb(po);
+        String currentRemarks = (String) locked.get("remarks");
+        String remarks = (currentRemarks != null ? currentRemarks + " | " : "") + "Cancelled by " + actor + ": " + r;
+        jdbc.update("UPDATE public.purchase_orders SET status = 'CANCELLED', remarks = ?, updated_at = NOW() WHERE po_number = ?",
+                remarks, po.getPoNumber());
+        po.setStatus("CANCELLED");
+        po.setRemarks(remarks);
 
         // RELEASE PR QUANTITIES BACK TO PR (supporting multi-PR line items)!
         if (po.getItems() != null) {
@@ -355,143 +373,100 @@ public class PurchaseProcessingService {
         return po;
     }
 
-    public void savePoToDb(PurchaseOrder po) {
-        try {
-            String itemsJson = objectMapper.writeValueAsString(po.getItems());
-            jdbc.update(
-                "INSERT INTO purchase_orders (" +
-                "id, po_number, po_date, pr_number, pr_date, department, requested_by, " +
-                "vendor_code, vendor_name, vendor_gstin, vendor_pan, contact_person, phone, email, " +
-                "billing_address, shipping_address, payment_terms, delivery_date, delivery_location, " +
-                "status, items_gross, total_discount, taxable_amount, total_tax, delivery_charges, " +
-                "other_charges, round_off, grand_total, remarks, approved_by, approved_at, " +
-                "source_quotation_number, source_quotation_id, details_json, " +
-                "po_type, incoterms, freight_terms, delivery_mode, credit_period, revision_number, validity_date, created_at, updated_at) " +
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS DATE), NOW(), NOW()) " +
-                "ON CONFLICT (id) DO UPDATE SET " +
-                "status = EXCLUDED.status, remarks = EXCLUDED.remarks, details_json = EXCLUDED.details_json, " +
-                "po_type = EXCLUDED.po_type, incoterms = EXCLUDED.incoterms, freight_terms = EXCLUDED.freight_terms, " +
-                "delivery_mode = EXCLUDED.delivery_mode, credit_period = EXCLUDED.credit_period, revision_number = EXCLUDED.revision_number, updated_at = NOW()",
-                po.getId(), po.getPoNumber(), po.getPoDate(), po.getPrNumber(), po.getPrDate(),
-                po.getDepartment(), po.getRequestedBy(), po.getVendorCode(), po.getVendorName(), po.getVendorGstin(),
-                po.getVendorPan(), po.getContactPerson(), po.getPhone(), po.getEmail(), po.getBillingAddress(),
-                po.getShippingAddress(), po.getPaymentTerms(), po.getDeliveryDate(), po.getDeliveryLocation(),
-                po.getStatus(), po.getItemsGross(), po.getTotalDiscount(), po.getTaxableAmount(), po.getTotalTax(),
-                po.getDeliveryCharges(), po.getOtherCharges(), po.getRoundOff(), po.getGrandTotal(), po.getRemarks(),
-                po.getApprovedBy(), po.getApprovedAt(), po.getSourceQuotationNumber(), po.getSourceQuotationId(),
-                itemsJson,
-                po.getPoType() != null ? po.getPoType() : "STANDARD",
-                po.getIncoterms() != null ? po.getIncoterms() : "FOR Destination",
-                po.getFreightTerms() != null ? po.getFreightTerms() : "Included in Price",
-                po.getDeliveryMode() != null ? po.getDeliveryMode() : "Road Transport",
-                po.getCreditPeriod() != null ? po.getCreditPeriod() : 30,
-                po.getRevisionNumber() != null ? po.getRevisionNumber() : 0,
-                po.getValidityDate()
-            );
-        } catch (Exception e) {
-            System.err.println("Could not save PO to DB: " + e.getMessage());
-        }
-    }
-
+    /**
+     * Does nothing. POs used to be cached in memory and this reloaded the cache; they are now read from the database
+     * on every call, so there is nothing to reload. Kept because DirectPoService still calls it after a commit.
+     */
+    @Deprecated
     public void loadOrdersFromDb() {
-        try {
-            purchaseOrdersMap.clear();
-            jdbc.query("SELECT * FROM purchase_orders ORDER BY id", (rs) -> {
-                PurchaseOrder po = new PurchaseOrder();
-                po.setId(rs.getString("id"));
-                po.setPoNumber(rs.getString("po_number"));
-                po.setPoDate(rs.getString("po_date"));
-                po.setPrNumber(rs.getString("pr_number"));
-                po.setPrDate(rs.getString("pr_date"));
-                po.setDepartment(rs.getString("department"));
-                po.setRequestedBy(rs.getString("requested_by"));
-                po.setVendorCode(rs.getString("vendor_code"));
-                po.setVendorName(rs.getString("vendor_name"));
-                po.setVendorGstin(rs.getString("vendor_gstin"));
-                po.setVendorPan(rs.getString("vendor_pan"));
-                po.setContactPerson(rs.getString("contact_person"));
-                po.setPhone(rs.getString("phone"));
-                po.setEmail(rs.getString("email"));
-                po.setBillingAddress(rs.getString("billing_address"));
-                po.setShippingAddress(rs.getString("shipping_address"));
-                po.setPaymentTerms(rs.getString("payment_terms"));
-                po.setDeliveryDate(rs.getString("delivery_date"));
-                po.setDeliveryLocation(rs.getString("delivery_location"));
-                po.setStatus(rs.getString("status"));
-                po.setItemsGross(rs.getBigDecimal("items_gross"));
-                po.setTotalDiscount(rs.getBigDecimal("total_discount"));
-                po.setTaxableAmount(rs.getBigDecimal("taxable_amount"));
-                po.setTotalTax(rs.getBigDecimal("total_tax"));
-                po.setDeliveryCharges(rs.getBigDecimal("delivery_charges"));
-                po.setOtherCharges(rs.getBigDecimal("other_charges"));
-                po.setRoundOff(rs.getBigDecimal("round_off"));
-                po.setGrandTotal(rs.getBigDecimal("grand_total"));
-                po.setRemarks(rs.getString("remarks"));
-                po.setApprovedBy(rs.getString("approved_by"));
-                po.setApprovedAt(rs.getString("approved_at"));
-                po.setSourceQuotationNumber(rs.getString("source_quotation_number"));
-                po.setSourceQuotationId(rs.getLong("source_quotation_id"));
-
-                po.setPoType(rs.getString("po_type") != null ? rs.getString("po_type") : "STANDARD");
-                po.setIncoterms(rs.getString("incoterms") != null ? rs.getString("incoterms") : "FOR Destination");
-                po.setFreightTerms(rs.getString("freight_terms") != null ? rs.getString("freight_terms") : "Included in Price");
-                po.setDeliveryMode(rs.getString("delivery_mode") != null ? rs.getString("delivery_mode") : "Road Transport");
-                po.setCreditPeriod(rs.getObject("credit_period") != null ? rs.getInt("credit_period") : 30);
-                po.setRevisionNumber(rs.getObject("revision_number") != null ? rs.getInt("revision_number") : 0);
-                java.sql.Date validityRaw = rs.getDate("validity_date");
-                po.setValidityDate(validityRaw != null ? validityRaw.toLocalDate().toString() : null);
-                
-                String json = rs.getString("details_json");
-                if (json != null && !json.trim().isEmpty()) {
-                    try {
-                        List<PurchaseItemLine> lines = objectMapper.readValue(json, new TypeReference<List<PurchaseItemLine>>() {});
-                        po.setItems(lines);
-                    } catch (Exception ex) {
-                        po.setItems(new ArrayList<>());
-                    }
-                }
-                purchaseOrdersMap.put(po.getId(), po);
-                purchaseOrdersMap.put(po.getPoNumber(), po);
-            });
-        } catch (Exception e) {
-            System.err.println("Could not load POs from DB: " + e.getMessage());
-        }
     }
 
+    /** Every PO, newest first (PO numbers are issued in increasing sequence). Read from the database on every call. */
     public List<PurchaseOrder> getAllPurchaseOrders() {
-        Set<String> seenPoNumbers = new HashSet<>();
-        List<PurchaseOrder> list = new ArrayList<>();
-        for (PurchaseOrder po : purchaseOrdersMap.values()) {
-            if (seenPoNumbers.add(po.getPoNumber())) {
-                list.add(po);
-            }
-        }
-        // Newest first: PO numbers are issued in increasing sequence
-        list.sort((a, b) -> b.getPoNumber().compareTo(a.getPoNumber()));
-        return list;
+        return jdbc.query("SELECT * FROM public.purchase_orders ORDER BY po_number COLLATE \"C\" DESC", this::mapPurchaseOrder);
     }
 
+    /** A PO by PO number or internal id (exact match first, then ignoring case), with its delivery schedules. */
     public Optional<PurchaseOrder> getPurchaseOrder(String poNumberOrId) {
         if (poNumberOrId == null) return Optional.empty();
-        PurchaseOrder po = purchaseOrdersMap.get(poNumberOrId);
-        if (po == null) {
-            po = purchaseOrdersMap.values().stream()
-                    .filter(x -> poNumberOrId.equalsIgnoreCase(x.getId()) || poNumberOrId.equalsIgnoreCase(x.getPoNumber()))
-                    .findFirst().orElse(null);
+        List<PurchaseOrder> found = jdbc.query(
+                "SELECT * FROM public.purchase_orders WHERE po_number = ? OR id = ? ORDER BY (po_number = ?) DESC LIMIT 1",
+                this::mapPurchaseOrder, poNumberOrId, poNumberOrId, poNumberOrId);
+        if (found.isEmpty()) {
+            found = jdbc.query(
+                    "SELECT * FROM public.purchase_orders WHERE lower(po_number) = lower(?) OR lower(id) = lower(?) ORDER BY po_number LIMIT 1",
+                    this::mapPurchaseOrder, poNumberOrId, poNumberOrId);
         }
-        if (po != null) {
-            po.setDeliverySchedules(getDeliverySchedules(po.getPoNumber()));
+        if (found.isEmpty()) return Optional.empty();
+        PurchaseOrder po = found.get(0);
+        po.setDeliverySchedules(getDeliverySchedules(po.getPoNumber()));
+        return Optional.of(po);
+    }
+
+    private PurchaseOrder mapPurchaseOrder(ResultSet rs, int rowNum) throws SQLException {
+        PurchaseOrder po = new PurchaseOrder();
+        po.setId(rs.getString("id"));
+        po.setPoNumber(rs.getString("po_number"));
+        po.setPoDate(rs.getString("po_date"));
+        po.setPrNumber(rs.getString("pr_number"));
+        po.setPrDate(rs.getString("pr_date"));
+        po.setDepartment(rs.getString("department"));
+        po.setRequestedBy(rs.getString("requested_by"));
+        po.setVendorCode(rs.getString("vendor_code"));
+        po.setVendorName(rs.getString("vendor_name"));
+        po.setVendorGstin(rs.getString("vendor_gstin"));
+        po.setVendorPan(rs.getString("vendor_pan"));
+        po.setContactPerson(rs.getString("contact_person"));
+        po.setPhone(rs.getString("phone"));
+        po.setEmail(rs.getString("email"));
+        po.setBillingAddress(rs.getString("billing_address"));
+        po.setShippingAddress(rs.getString("shipping_address"));
+        po.setPaymentTerms(rs.getString("payment_terms"));
+        po.setDeliveryDate(rs.getString("delivery_date"));
+        po.setDeliveryLocation(rs.getString("delivery_location"));
+        po.setStatus(rs.getString("status"));
+        po.setItemsGross(rs.getBigDecimal("items_gross"));
+        po.setTotalDiscount(rs.getBigDecimal("total_discount"));
+        po.setTaxableAmount(rs.getBigDecimal("taxable_amount"));
+        po.setTotalTax(rs.getBigDecimal("total_tax"));
+        po.setDeliveryCharges(rs.getBigDecimal("delivery_charges"));
+        po.setOtherCharges(rs.getBigDecimal("other_charges"));
+        po.setRoundOff(rs.getBigDecimal("round_off"));
+        po.setGrandTotal(rs.getBigDecimal("grand_total"));
+        po.setRemarks(rs.getString("remarks"));
+        po.setApprovedBy(rs.getString("approved_by"));
+        po.setApprovedAt(rs.getString("approved_at"));
+        po.setSourceQuotationNumber(rs.getString("source_quotation_number"));
+        po.setSourceQuotationId(rs.getLong("source_quotation_id"));
+
+        po.setPoType(rs.getString("po_type") != null ? rs.getString("po_type") : "STANDARD");
+        po.setIncoterms(rs.getString("incoterms") != null ? rs.getString("incoterms") : "FOR Destination");
+        po.setFreightTerms(rs.getString("freight_terms") != null ? rs.getString("freight_terms") : "Included in Price");
+        po.setDeliveryMode(rs.getString("delivery_mode") != null ? rs.getString("delivery_mode") : "Road Transport");
+        po.setCreditPeriod(rs.getObject("credit_period") != null ? rs.getInt("credit_period") : 30);
+        po.setRevisionNumber(rs.getObject("revision_number") != null ? rs.getInt("revision_number") : 0);
+        java.sql.Date validityRaw = rs.getDate("validity_date");
+        po.setValidityDate(validityRaw != null ? validityRaw.toLocalDate().toString() : null);
+
+        String json = rs.getString("details_json");
+        if (json != null && !json.trim().isEmpty()) {
+            try {
+                po.setItems(objectMapper.readValue(json, new TypeReference<List<PurchaseItemLine>>() {}));
+            } catch (Exception ex) {
+                // One unreadable PO must not break every PO list; it shows without lines and the problem is logged.
+                log.warn("PO {} has unreadable line details and is shown without lines: {}", po.getPoNumber(), ex.getMessage());
+                po.setItems(new ArrayList<>());
+            }
         }
-        return Optional.ofNullable(po);
+        return po;
     }
 
     public List<PurchaseOrderDeliverySchedule> getDeliverySchedules(String poNumber) {
-        String sql = "SELECT id, po_id, po_number, item_code, lot_number, scheduled_date, scheduled_qty, received_qty, balance_qty, destination_store, status, created_at, updated_at " +
+        String sql = "SELECT id, po_number, item_code, lot_number, scheduled_date, scheduled_qty, received_qty, balance_qty, destination_store, status, created_at, updated_at " +
                      "FROM public.purchase_order_delivery_schedules WHERE po_number = ? ORDER BY lot_number ASC, scheduled_date ASC";
         return jdbc.query(sql, (rs, rowNum) -> {
             PurchaseOrderDeliverySchedule s = new PurchaseOrderDeliverySchedule();
             s.setId(rs.getLong("id"));
-            s.setPoId(rs.getObject("po_id") != null ? rs.getLong("po_id") : null);
             s.setPoNumber(rs.getString("po_number"));
             s.setItemCode(rs.getString("item_code"));
             s.setLotNumber(rs.getInt("lot_number"));
@@ -507,48 +482,126 @@ public class PurchaseProcessingService {
         }, poNumber);
     }
 
+    /**
+     * Replaces the delivery lots of a PO, in one transaction with the PO row locked. Lots are checked against the PO
+     * (see DeliveryLots.validate) and numbered per item in date order, lot 1 being the earliest. Received quantities
+     * are never taken from the request: they are worked out again from the PO's posted GRNs.
+     */
     @Transactional
     public void saveDeliverySchedules(String poNumber, List<PurchaseOrderDeliverySchedule> schedules) {
+        List<Map<String, Object>> po = jdbc.queryForList(
+                "SELECT status, po_date FROM public.purchase_orders WHERE po_number = ? FOR UPDATE", poNumber);
+        if (po.isEmpty()) {
+            throw new ResourceNotFoundException("PO " + poNumber + " was not found.");
+        }
+        String status = String.valueOf(po.get(0).get("status"));
+        if ("CANCELLED".equalsIgnoreCase(status) || "COMPLETED".equalsIgnoreCase(status)) {
+            throw new ConflictException("PO " + poNumber + " is " + status + "; its delivery schedule cannot be changed.");
+        }
+
+        List<PurchaseOrderDeliverySchedule> rows = schedules == null ? List.of() : schedules;
+        List<DeliveryLots.Lot> lots = new ArrayList<>();
+        for (PurchaseOrderDeliverySchedule s : rows) {
+            lots.add(s == null ? null : new DeliveryLots.Lot(s.getItemCode(), s.getScheduledDate(), s.getScheduledQty()));
+        }
+        Map<String, BigDecimal> poQtyByItem = new HashMap<>();
+        jdbc.query("SELECT item_code, quantity FROM public.purchase_order_items WHERE po_number = ?",
+                rs -> { poQtyByItem.put(rs.getString("item_code"), rs.getBigDecimal("quantity")); }, poNumber);
+        DeliveryLots.validate(lots, poQtyByItem, parseIsoDate(po.get(0).get("po_date")));
+
+        // An item's lots must still hold what has already been received for it.
+        Map<String, BigDecimal> scheduledByItem = new HashMap<>();
+        for (PurchaseOrderDeliverySchedule s : rows) {
+            scheduledByItem.merge(s.getItemCode().trim(), s.getScheduledQty(), BigDecimal::add);
+        }
+        Map<String, BigDecimal> receivedByItem = acceptedQtyByItem(poNumber);
+        for (Map.Entry<String, BigDecimal> e : scheduledByItem.entrySet()) {
+            BigDecimal received = receivedByItem.getOrDefault(e.getKey(), BigDecimal.ZERO);
+            if (received.compareTo(e.getValue()) > 0) {
+                throw new IllegalArgumentException(e.getKey() + " on PO " + poNumber + " has already received "
+                        + received.stripTrailingZeros().toPlainString() + "; its lots must add up to at least that. The schedule was not changed.");
+            }
+        }
+
+        List<PurchaseOrderDeliverySchedule> ordered = new ArrayList<>(rows);
+        ordered.sort(Comparator.comparing((PurchaseOrderDeliverySchedule s) -> s.getItemCode().trim())
+                .thenComparing(PurchaseOrderDeliverySchedule::getScheduledDate));
         jdbc.update("DELETE FROM public.purchase_order_delivery_schedules WHERE po_number = ?", poNumber);
-        if (schedules == null || schedules.isEmpty()) return;
-
-        for (PurchaseOrderDeliverySchedule s : schedules) {
-            BigDecimal schedQty = s.getScheduledQty() != null ? s.getScheduledQty() : BigDecimal.ZERO;
-            BigDecimal recQty = s.getReceivedQty() != null ? s.getReceivedQty() : BigDecimal.ZERO;
-            BigDecimal balQty = (s.getBalanceQty() != null && s.getBalanceQty().compareTo(BigDecimal.ZERO) > 0) 
-                    ? s.getBalanceQty() 
-                    : schedQty.subtract(recQty).max(BigDecimal.ZERO);
-
+        Map<String, Integer> lotNumbers = new HashMap<>();
+        for (PurchaseOrderDeliverySchedule s : ordered) {
+            String itemCode = s.getItemCode().trim();
             jdbc.update(
                 "INSERT INTO public.purchase_order_delivery_schedules (po_number, item_code, lot_number, scheduled_date, scheduled_qty, received_qty, balance_qty, destination_store, status) " +
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                poNumber, s.getItemCode(), s.getLotNumber() != null ? s.getLotNumber() : 1,
-                s.getScheduledDate() != null ? java.sql.Date.valueOf(s.getScheduledDate()) : java.sql.Date.valueOf(LocalDate.now()),
-                schedQty, recQty, balQty, s.getDestinationStore(), s.getStatus() != null ? s.getStatus() : "SCHEDULED"
+                "VALUES (?, ?, ?, ?, ?, 0, ?, ?, 'SCHEDULED')",
+                poNumber, itemCode, lotNumbers.merge(itemCode, 1, Integer::sum), java.sql.Date.valueOf(s.getScheduledDate()),
+                s.getScheduledQty(), s.getScheduledQty(), s.getDestinationStore()
             );
         }
+        syncScheduleReceipts(poNumber);
     }
 
-    @Transactional
-    public void recordScheduleReceipt(String poNumber, String itemCode, Integer lotNumber, BigDecimal receivedQty) {
-        // Service POs never record goods receipts against delivery schedules.
-        ServicePoService.assertNotServicePo(jdbc, poNumber);
-        getPurchaseOrder(poNumber).ifPresent(po ->
-                PoValidity.assertNotExpired(po.getPoNumber(), po.getValidityDate(), LocalDate.now()));
-        if (receivedQty == null || receivedQty.compareTo(BigDecimal.ZERO) <= 0) return;
-        jdbc.update(
-            "UPDATE public.purchase_order_delivery_schedules SET received_qty = received_qty + ?, " +
-            "balance_qty = GREATEST(0, scheduled_qty - (received_qty + ?)), " +
-            "status = CASE WHEN scheduled_qty <= (received_qty + ?) THEN 'COMPLETED' ELSE 'PARTIALLY_RECEIVED' END, " +
-            "updated_at = NOW() WHERE po_number = ? AND (item_code = ? OR ? IS NULL) AND lot_number = ?",
-            receivedQty, receivedQty, receivedQty, poNumber, itemCode, itemCode, lotNumber
-        );
-
-        // Also update linked payment milestone if any
+    /**
+     * Works out the received quantity of every delivery lot of a PO from its posted GRNs: per item, the accepted
+     * quantity fills the lots in lot order. Lots linked to payment milestones make those milestones due once they
+     * have received anything. Safe to run any number of times; a lot that already matches is not rewritten.
+     */
+    public void syncScheduleReceipts(String poNumber) {
+        jdbc.update(SYNC_SCHEDULE_RECEIPTS_SQL, poNumber, poNumber);
         jdbc.update(
             "UPDATE public.purchase_order_payment_milestones SET payment_status = 'DUE' " +
-            "WHERE po_number = ? AND linked_lot_number = ? AND payment_status IN ('PENDING', 'UPCOMING')",
-            poNumber, lotNumber
+            "WHERE po_number = ? AND payment_status IN ('PENDING', 'UPCOMING') AND linked_lot_number IN (" +
+            "SELECT lot_number FROM public.purchase_order_delivery_schedules WHERE po_number = ? AND received_qty > 0)",
+            poNumber, poNumber
         );
+    }
+
+    private static final String SYNC_SCHEDULE_RECEIPTS_SQL = """
+            WITH accepted AS (
+                SELECT gi.item_code, SUM(gi.accepted_qty) AS qty
+                FROM public.goods_receipt_note_items gi
+                JOIN public.goods_receipt_notes g ON g.id = gi.grn_id
+                WHERE g.status = 'POSTED' AND gi.po_number = ?
+                GROUP BY gi.item_code
+            ), filled AS (
+                SELECT s.id, s.scheduled_qty,
+                       LEAST(s.scheduled_qty, GREATEST(0, COALESCE(a.qty, 0) - COALESCE(SUM(s.scheduled_qty) OVER (
+                           PARTITION BY s.item_code ORDER BY s.lot_number, s.id
+                           ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING), 0))) AS received
+                FROM public.purchase_order_delivery_schedules s
+                LEFT JOIN accepted a ON a.item_code = s.item_code
+                WHERE s.po_number = ?
+            ), target AS (
+                SELECT id, received, scheduled_qty - received AS balance,
+                       CASE WHEN received = 0 THEN 'SCHEDULED'
+                            WHEN received >= scheduled_qty THEN 'COMPLETED'
+                            ELSE 'PARTIALLY_RECEIVED' END AS status
+                FROM filled
+            )
+            UPDATE public.purchase_order_delivery_schedules s
+            SET received_qty = t.received, balance_qty = t.balance, status = t.status, updated_at = NOW()
+            FROM target t
+            WHERE s.id = t.id
+              AND (s.received_qty IS DISTINCT FROM t.received OR s.balance_qty IS DISTINCT FROM t.balance
+                   OR s.status IS DISTINCT FROM t.status)
+            """;
+
+    /** Accepted quantity per item from the PO's posted GRNs. */
+    private Map<String, BigDecimal> acceptedQtyByItem(String poNumber) {
+        Map<String, BigDecimal> accepted = new HashMap<>();
+        jdbc.query(
+            "SELECT gi.item_code, SUM(gi.accepted_qty) AS qty FROM public.goods_receipt_note_items gi " +
+            "JOIN public.goods_receipt_notes g ON g.id = gi.grn_id WHERE g.status = 'POSTED' AND gi.po_number = ? GROUP BY gi.item_code",
+            rs -> { accepted.put(rs.getString("item_code"), rs.getBigDecimal("qty")); }, poNumber);
+        return accepted;
+    }
+
+    /** po_date is stored as text; an ISO date is read, anything else counts as no date. */
+    private static LocalDate parseIsoDate(Object value) {
+        if (value == null) return null;
+        try {
+            return LocalDate.parse(value.toString().trim());
+        } catch (DateTimeParseException e) {
+            return null;
+        }
     }
 }

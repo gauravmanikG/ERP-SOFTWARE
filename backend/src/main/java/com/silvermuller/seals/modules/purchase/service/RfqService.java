@@ -104,10 +104,9 @@ public class RfqService {
         return list;
     }
 
-    public synchronized String generateNextRfqNumber() {
-        Integer maxId = jdbc.queryForObject("SELECT COALESCE(MAX(id), 0) FROM rfq_headers", Integer.class);
-        int nextSeq = (maxId != null ? maxId : 0) + 1;
-        return String.format("RFQ-2026-%05d", nextSeq);
+    /** The number the next RFQ will get, shown on the form. Nothing is reserved. */
+    public String generateNextRfqNumber() {
+        return DocumentNumbers.peek(jdbc, DocumentNumbers.Doc.RFQ);
     }
 
     @Transactional
@@ -115,12 +114,19 @@ public class RfqService {
         if (rfq.getPrNumber() == null || rfq.getPrNumber().trim().isEmpty()) {
             throw new IllegalArgumentException("Purchase Requisition reference (prNumber) is mandatory for RFQ.");
         }
+        rfq.setPrNumber(rfq.getPrNumber().trim());
+        Integer prExists = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM public.purchase_requisitions WHERE pr_number = ?", Integer.class, rfq.getPrNumber());
+        if (prExists == null || prExists == 0) {
+            throw new IllegalArgumentException("PR " + rfq.getPrNumber() + " was not found.");
+        }
         if (rfq.getItems() == null || rfq.getItems().isEmpty()) {
             throw new IllegalArgumentException("At least one line item is required in the RFQ.");
         }
 
+        // RFQ-YEAR-NNNNN from document_number_counters (atomic, restarts each year); see DocumentNumbers.
         if (rfq.getRfqNumber() == null || rfq.getRfqNumber().trim().isEmpty()) {
-            rfq.setRfqNumber(generateNextRfqNumber());
+            rfq.setRfqNumber(DocumentNumbers.next(jdbc, DocumentNumbers.Doc.RFQ));
         }
         if (rfq.getRfqDate() == null) {
             rfq.setRfqDate(LocalDate.now());

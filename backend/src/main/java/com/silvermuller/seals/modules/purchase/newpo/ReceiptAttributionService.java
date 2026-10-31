@@ -34,11 +34,12 @@ public class ReceiptAttributionService {
      * Attributes the accepted quantity of one posted GRN to the PO's allocations, oldest allocation first.
      * No-op for a PO without allocations (legacy receipts stay unattributed).
      * Throws ConflictException, which rolls the GRN back, when the PO is cancelled or the accepted quantity
-     * exceeds what is still open on the PO.
+     * exceeds what is still open on the PO. Exception: an older PO (po_origin LEGACY) whose lines were linked to PR
+     * lines afterwards may hold more than its PR lines needed; the excess is received unattributed, as before.
      */
     public void attributePostedGrn(long grnId, String poNumber) {
         List<Map<String, Object>> po = jdbc.queryForList(
-                "SELECT status FROM public.purchase_orders WHERE po_number = ? FOR UPDATE", poNumber);
+                "SELECT status, po_origin FROM public.purchase_orders WHERE po_number = ? FOR UPDATE", poNumber);
         if (po.isEmpty()) {
             throw new ConflictException("PO " + poNumber + " was not found; the GRN was not posted.");
         }
@@ -47,6 +48,7 @@ public class ReceiptAttributionService {
         if (allocationCount == null || allocationCount == 0) {
             return; // legacy PO: receipts are not attributed to PR lines
         }
+        boolean legacy = "LEGACY".equals(po.get(0).get("po_origin"));
         if ("CANCELLED".equalsIgnoreCase(String.valueOf(po.get(0).get("status")))) {
             throw new ConflictException("PO " + poNumber + " is cancelled; nothing can be received against it. The GRN was not posted.");
         }
@@ -73,7 +75,7 @@ public class ReceiptAttributionService {
                 BigDecimal open = ((BigDecimal) a.get("net_qty")).subtract((BigDecimal) a.get("attributed_qty"));
                 if (open.signum() > 0) capacity = capacity.add(open);
             }
-            if (accepted.compareTo(capacity) > 0) {
+            if (accepted.compareTo(capacity) > 0 && !legacy) {
                 throw new ConflictException("Accepted quantity on PO " + poNumber + " / " + itemCode + " is "
                         + accepted.stripTrailingZeros().toPlainString() + " but only "
                         + capacity.stripTrailingZeros().toPlainString() + " is still open. The GRN was not posted.");

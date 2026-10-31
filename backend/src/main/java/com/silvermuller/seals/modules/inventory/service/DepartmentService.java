@@ -53,15 +53,17 @@ public class DepartmentService {
         if (departmentMasterRepository.findByDepartmentNameIgnoreCase(name).isPresent()) {
             throw new IllegalArgumentException("A department named '" + name + "' already exists");
         }
-        long count = departmentMasterRepository.count();
+        // The next number after the highest code or number in use. A count of rows would repeat an existing code
+        // once any department has been deleted; dept_code is unique.
         Integer num = req.getDeptNumber();
         if (num == null) {
-            num = (int) count + 1;
+            num = departmentMasterRepository.highestDepartmentNumber() + 1;
         }
         String code = req.getDeptCode();
         if (code == null || code.isBlank()) {
             code = String.format("DPT-%03d", num);
         }
+        assertCodeFree(code.trim(), null);
 
         DepartmentMaster dept = new DepartmentMaster();
         dept.setDeptCode(code.trim());
@@ -120,6 +122,7 @@ public class DepartmentService {
         if (code == null || code.isBlank()) {
             code = String.format("DPT-%03d", num != null ? num : master.getId().intValue());
         }
+        assertCodeFree(code, id);
 
         master.setDeptCode(code);
         master.setDeptNumber(num);
@@ -139,6 +142,14 @@ public class DepartmentService {
         req.setDepartmentName(name);
         req.setProcessSequence(processSequence);
         return updateDepartment(id, req);
+    }
+
+    private void assertCodeFree(String code, Long ownId) {
+        departmentMasterRepository.findByDeptCode(code).ifPresent(other -> {
+            if (!other.getId().equals(ownId)) {
+                throw new IllegalArgumentException("Department code '" + code + "' is already used by " + other.getDepartmentName());
+            }
+        });
     }
 
     @Transactional

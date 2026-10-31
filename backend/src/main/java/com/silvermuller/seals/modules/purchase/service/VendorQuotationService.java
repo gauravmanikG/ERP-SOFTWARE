@@ -319,9 +319,7 @@ public class VendorQuotationService {
         if (q.getVendorName() == null || q.getVendorName().trim().isEmpty()) {
             throw new IllegalArgumentException("Vendor selection is required.");
         }
-        if (q.getVendorCode() == null || q.getVendorCode().trim().isEmpty()) {
-            q.setVendorCode("VEND-" + (q.getVendorId() != null ? q.getVendorId() : (System.currentTimeMillis() % 10000)));
-        }
+        resolveVendor(q);
         if (q.getQuotationDate() == null) {
             q.setQuotationDate(LocalDate.now());
         }
@@ -332,12 +330,9 @@ public class VendorQuotationService {
             throw new IllegalArgumentException("At least one item line is required for a quotation.");
         }
 
-        // Auto-generate quotation number if not present
+        // QT-YEAR-NNNN from document_number_counters (atomic, restarts each year); see DocumentNumbers.
         if (q.getQuotationNumber() == null || q.getQuotationNumber().trim().isEmpty()) {
-            int year = LocalDate.now().getYear();
-            Integer nextVal = jdbc.queryForObject(
-                    "SELECT COALESCE(MAX(id), 0) + 1 FROM vendor_quotations", Integer.class);
-            q.setQuotationNumber(String.format("QT-%d-%04d", year, nextVal));
+            q.setQuotationNumber(DocumentNumbers.next(jdbc, DocumentNumbers.Doc.QT));
         }
 
         // Perform exact calculations using BigDecimal
@@ -435,7 +430,7 @@ public class VendorQuotationService {
                                 "quotation_date, valid_until, contact_person, payment_terms, delivery_time, " +
                                 "delivery_location, subtotal_amount, tax_amount, delivery_charges, other_charges, " +
                                 "final_amount, status, notes, document_name, document_url, revision_number, is_latest, " +
-                                "created_by, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                                "created_by, updated_by, parent_quotation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                         Statement.RETURN_GENERATED_KEYS);
                 ps.setString(1, q.getQuotationNumber());
                 if (q.getPrId() != null) ps.setLong(2, q.getPrId()); else ps.setNull(2, java.sql.Types.BIGINT);
@@ -463,6 +458,8 @@ public class VendorQuotationService {
                 ps.setBoolean(24, q.getIsLatest() != null ? q.getIsLatest() : true);
                 ps.setString(25, q.getCreatedBy() != null ? q.getCreatedBy() : "Purchase Officer");
                 ps.setString(26, q.getUpdatedBy() != null ? q.getUpdatedBy() : "Purchase Officer");
+                if (q.getParentQuotationId() != null && q.getParentQuotationId() > 0) ps.setLong(27, q.getParentQuotationId());
+                else ps.setNull(27, java.sql.Types.BIGINT);
                 return ps;
             }, keyHolder);
 
@@ -517,6 +514,26 @@ public class VendorQuotationService {
         }
 
         return findById(quotationId).orElse(q);
+    }
+
+    /**
+     * The quotation's vendor must be a Vendor Master entry (vendor_id and vendor_code are foreign keys). Found by
+     * vendor id, else by vendor code; id, code and name are then taken from the master so they always agree.
+     */
+    private void resolveVendor(VendorQuotation q) {
+        List<Map<String, Object>> rows = List.of();
+        if (q.getVendorId() != null && q.getVendorId() > 0) {
+            rows = jdbc.queryForList("SELECT id, supplier_code, supplier_name FROM public.supplier_master WHERE id = ?", q.getVendorId());
+        } else if (q.getVendorCode() != null && !q.getVendorCode().isBlank()) {
+            rows = jdbc.queryForList("SELECT id, supplier_code, supplier_name FROM public.supplier_master WHERE supplier_code = ?",
+                    q.getVendorCode().trim());
+        }
+        if (rows.isEmpty()) {
+            throw new IllegalArgumentException("Select the vendor from the Vendor Master.");
+        }
+        q.setVendorId(((Number) rows.get(0).get("id")).longValue());
+        q.setVendorCode((String) rows.get(0).get("supplier_code"));
+        q.setVendorName((String) rows.get(0).get("supplier_name"));
     }
 
     // 5. Update Status (Workflow: Draft -> Submitted for Review -> Under Evaluation -> Selected for Purchase / Rejected)

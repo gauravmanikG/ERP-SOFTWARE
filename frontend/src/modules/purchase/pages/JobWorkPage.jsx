@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useLayoutEffect, useCallback, useRef } from "react";
 import * as XLSX from "xlsx";
 import DateInput from "../../../shared/components/DateInput";
 import SearchableSelect from "../../../shared/components/SearchableSelect";
@@ -16,18 +16,23 @@ import { getSetting, setSetting } from "../../../shared/utils/settingsStore";
 
 const USER_KEY = "SMS_CURRENT_USER";
 const ROLES = ["CREATOR", "APPROVER", "STORE", "QUALITY", "ADMIN"];
-const SCREENS = [
-  { key: "dashboard", label: "Dashboard" },
+const STEP_SCREENS = [
+  { key: "dashboard", label: "Home" },
+  { key: "indents", label: "1 · Indents" },
+  { key: "orders", label: "2 · Orders" },
+  { key: "send", label: "3 · Send material" },
+  { key: "receive", label: "4 · Receive material" },
+  { key: "receipts", label: "5 · Inspection" }
+];
+const OTHER_SCREENS = [
+  { key: "challans", label: "Challan register" },
   { key: "workers", label: "Job Workers" },
-  { key: "indents", label: "Indents" },
-  { key: "orders", label: "Job Work Orders" },
-  { key: "challans", label: "Challans" },
-  { key: "receipts", label: "Receipts & Inspection" },
   { key: "ledger", label: "Worker Stock Ledger" },
   { key: "recon", label: "Reconciliation & Scrap" },
   { key: "reports", label: "Reports" },
   { key: "operations", label: "Operations Master" }
 ];
+const SCREENS = [...STEP_SCREENS, ...OTHER_SCREENS];
 const RATE_BASIS = ["PER_PIECE", "PER_KG", "PER_BATCH", "PER_HOUR"];
 const DEFECTS_NOTE = "Give a defect code for rejected, rework or scrap quantities.";
 
@@ -116,9 +121,10 @@ const inp = { width: "100%", boxSizing: "border-box", border: "1px solid #cbd5e1
 const labelStyle = { fontSize: 12, fontWeight: 700, color: "#334155" };
 const btn = (variant = "ghost") => ({
   border: variant === "ghost" ? "1px solid #cbd5e1" : "none",
-  background: variant === "primary" ? "#2563eb" : variant === "danger" ? "#dc2626" : "#fff",
+  background: variant === "primary" ? "#1e293b" : variant === "danger" ? "#dc2626" : "#fff",
   color: variant === "ghost" ? "#334155" : "#fff",
-  borderRadius: 6, padding: "6px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap"
+  borderRadius: 6, padding: "6px 14px", fontSize: 12, fontWeight: variant === "ghost" ? 600 : 700, cursor: "pointer", whiteSpace: "nowrap",
+  boxShadow: variant === "primary" ? "0 2px 4px rgba(30, 41, 59, 0.25)" : "none"
 });
 const h4 = { fontSize: 13, fontWeight: 800, color: "#0f172a", margin: "18px 0 8px", borderBottom: "1px solid #e2e8f0", paddingBottom: 4 };
 const grid4 = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 10 };
@@ -155,7 +161,26 @@ function Banner({ kind = "error", children }) {
   return <div style={{ background: c[0], color: c[1], border: `1px solid ${c[2]}`, borderRadius: 8, padding: "8px 12px", fontSize: 12, marginBottom: 12 }}>{children}</div>;
 }
 
-function Modal({ title, onClose, children, footer, width = 760, zIndex = 1000 }) {
+function Modal({ title, onClose, children, footer, width = 760, zIndex = 1000, page, badge, backLabel = "Back" }) {
+  // page = a full screen inside the Job Work area with a Back button, so a form or a record is one thing on one screen.
+  if (page) {
+    return (
+      <div style={{ position: "absolute", inset: 0, zIndex: 20, background: "#f1f5f9", display: "flex", flexDirection: "column" }}>
+        <div style={{ background: "#fff", borderBottom: "1px solid #e2e8f0", padding: "9px 18px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <button onClick={onClose} style={{ ...btn(), fontSize: 13, padding: "7px 16px" }}>← {backLabel}</button>
+          <span style={{ color: "#e2e8f0", fontSize: 18 }}>|</span>
+          <div style={{ fontSize: 15, fontWeight: 800, color: "#0f172a" }}>{title}</div>
+          {badge}
+        </div>
+        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 18 }}>
+          <div style={{ maxWidth: 1180, margin: "0 auto" }}>{children}</div>
+        </div>
+        {footer && (
+          <div style={{ background: "#fff", borderTop: "1px solid #e2e8f0", padding: "10px 18px", display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>{footer}</div>
+        )}
+      </div>
+    );
+  }
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.45)", zIndex, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
       <div style={{ background: "#fff", borderRadius: 12, width: "100%", maxWidth: width, maxHeight: "92vh", display: "flex", flexDirection: "column", boxShadow: "0 20px 50px rgba(0,0,0,0.25)" }}>
@@ -180,14 +205,25 @@ function KV({ label, value }) {
 }
 
 function Table({ headers, children, minWidth }) {
+  // A header takes the alignment of the cells under it (Td right), so the two can never disagree. Guessing from the
+  // header text (isNumericHeader) is only the fallback while the table has no plain data row to read.
+  const bodyRef = useRef(null);
+  const [bodyAligns, setBodyAligns] = useState([]);
+  useLayoutEffect(() => {
+    const row = Array.from(bodyRef.current ? bodyRef.current.rows : [])
+      .find((r) => r.cells.length === headers.length && Array.from(r.cells).every((c) => c.colSpan === 1));
+    if (!row) return;
+    const next = Array.from(row.cells).map((c) => (c.style.textAlign === "right" ? "right" : "left"));
+    setBodyAligns((prev) => (prev.length === next.length && prev.every((a, i) => a === next[i]) ? prev : next));
+  });
   return (
     <div style={{ overflowX: "auto", border: "1px solid #e2e8f0", borderRadius: 8 }}>
       <table style={{ width: "100%", minWidth, borderCollapse: "collapse", fontSize: 12 }}>
         <thead>
           <tr style={{ background: "#f8fafc" }}>
-            {headers.map((h) => {
+            {headers.map((h, i) => {
               const label = typeof h === "string" ? h : (h && h.label) || "";
-              const align = isNumericHeader(label) ? "right" : "left";
+              const align = bodyAligns.length === headers.length ? bodyAligns[i] : (isNumericHeader(label) ? "right" : "left");
               return (
                 <th key={label} style={{ textAlign: align, padding: "7px 8px", borderBottom: "1px solid #e2e8f0", color: "#334155", whiteSpace: "nowrap" }}>
                   {label}
@@ -196,13 +232,83 @@ function Table({ headers, children, minWidth }) {
             })}
           </tr>
         </thead>
-        <tbody>{children}</tbody>
+        <tbody ref={bodyRef}>{children}</tbody>
       </table>
     </div>
   );
 }
-const Td = ({ children, right }) => <td style={{ padding: "6px 8px", borderBottom: "1px solid #f1f5f9", textAlign: right ? "right" : "left", verticalAlign: "top" }}>{children}</td>;
+const Td =({ children, right }) => <td style={{ padding: "6px 8px", borderBottom: "1px solid #f1f5f9", textAlign: right ? "right" : "left", verticalAlign: "top" }}>{children}</td>;
 const Empty = ({ text }) => <div style={{ fontSize: 12, color: "#64748b", padding: "8px 0" }}>{text}</div>;
+
+// Tabs inside a record page: one topic at a time.
+function Tabs({ tabs, value, onChange }) {
+  return (
+    <div style={{ display: "flex", gap: 4, borderBottom: "2px solid #e2e8f0", margin: "18px 0 14px", flexWrap: "wrap" }}>
+      {tabs.map((t) => {
+        const on = t.key === value;
+        return (
+          <button key={t.key} onClick={() => onChange(t.key)}
+            style={{ border: "none", background: on ? "#fff" : "transparent", color: on ? "#0f172a" : "#475569", fontWeight: 800, fontSize: 13, padding: "9px 16px", cursor: "pointer",
+              borderBottom: on ? "3px solid #1e293b" : "3px solid transparent", marginBottom: -2, borderRadius: "8px 8px 0 0" }}>
+            {t.label}{t.count !== undefined && t.count !== null && <span style={{ marginLeft: 6, background: on ? "#dbeafe" : "#e2e8f0", borderRadius: 999, padding: "1px 8px", fontSize: 11 }}>{t.count}</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// A big number with a plain label.
+function Tile({ label, value, tone = "#0f172a", hint, onClick }) {
+  return (
+    <div onClick={onClick} style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 8, padding: "10px 14px", minWidth: 0, cursor: onClick ? "pointer" : "default" }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.4 }}>{label}</div>
+      <div style={{ fontSize: 20, fontWeight: 800, color: tone, lineHeight: 1.2 }}>{value}</div>
+      {hint && <div style={{ fontSize: 11, color: "#94a3b8" }}>{hint}</div>}
+    </div>
+  );
+}
+const tileGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 };
+
+function Bar({ value, total, color = "#2563eb", height = 8 }) {
+  const pct = num(total) > 0 ? Math.min(100, Math.max(0, (num(value) / num(total)) * 100)) : 0;
+  return (
+    <div style={{ background: "#e2e8f0", borderRadius: 999, height, overflow: "hidden", minWidth: 60 }}>
+      <div style={{ width: `${pct}%`, background: color, height: "100%", borderRadius: 999 }} />
+    </div>
+  );
+}
+
+// Queue filter: one button per status with how many records are in it.
+function Chips({ options, value, onChange }) {
+  return (
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+      {options.map((o) => {
+        const on = o.key === value;
+        return (
+          <button key={o.key || "all"} onClick={() => onChange(o.key)}
+            style={{ border: on ? "1px solid #1e293b" : "1px solid #cbd5e1", background: on ? "#1e293b" : "#fff", color: on ? "#fff" : "#334155", borderRadius: 999,
+              padding: "5px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+            {o.label}{o.count !== undefined && o.count !== null && <span style={{ marginLeft: 6, color: on ? "#fff" : (o.tone || "#64748b"), fontWeight: 800 }}>{o.count}</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// Page title for a list screen: what this screen is for, in one line.
+function ScreenIntro({ title, text, action }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 10 }}>
+      <div style={{ minWidth: 0 }}>
+        <span style={{ fontSize: 15, fontWeight: 800, color: "#0f172a" }}>{title}</span>
+        <span style={{ fontSize: 12, color: "#64748b", marginLeft: 10 }}>{text}</span>
+      </div>
+      {action}
+    </div>
+  );
+}
 
 // ============================================================================
 // Dashboard
@@ -225,9 +331,35 @@ function DashboardScreen({ user, goTo, flash }) {
       {hint && <div style={{ fontSize: 10, color: "#94a3b8" }}>{hint}</div>}
     </div>
   );
+  const steps = [
+    { n: 1, title: "Indents", count: d.pendingIndentApprovals, text: "waiting for approval", go: "indents", f: { status: "SUBMITTED" }, cta: "Open indents" },
+    { n: 2, title: "Job work orders", count: d.ordersPendingApproval, text: "waiting for approval", go: "orders", f: { status: "PENDING_APPROVAL" }, cta: "Open orders" },
+    { n: 3, title: "Send material", count: byStatus.APPROVED || 0, text: "approved orders waiting to be sent", go: "send", cta: "Send material" },
+    { n: 4, title: "Receive material", count: d.pendingReturnOrders, text: "orders with material at the job worker", go: "receive", cta: "Receive material" },
+    { n: 5, title: "Inspection", count: d.receiptsAwaitingInspection, text: "receipts waiting for inspection", go: "receipts", f: { inspection: "PENDING" }, cta: "Inspect" }
+  ];
   return (
     <div>
-      <h4 style={h4}>Job work orders by status</h4>
+      <ScreenIntro title="Job Work" text="Material goes out to a job worker, comes back processed, and is inspected. Work through the five steps in order; the number shows what is waiting for you." />
+      {num(d.overdueOrders) > 0 && (
+        <div onClick={() => goTo("orders", { overdue: "true" })} style={{ background: "#fef2f2", border: "1px solid #fecaca", color: "#991b1b", borderRadius: 10, padding: "10px 14px", fontSize: 13, fontWeight: 700, marginBottom: 12, cursor: "pointer" }}>
+          {d.overdueOrders} order{d.overdueOrders > 1 ? "s are" : " is"} past the return date. Click to see {d.overdueOrders > 1 ? "them" : "it"}.
+        </div>
+      )}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 12 }}>
+        {steps.map((st) => (
+          <div key={st.n} style={{ background: "#fff", border: "1px solid #e2e8f0", borderTop: st.count > 0 ? "3px solid #1e293b" : "3px solid #e2e8f0", borderRadius: 8, padding: 12, display: "flex", flexDirection: "column", gap: 6 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ background: "#1e293b", color: "#fff", borderRadius: 999, width: 24, height: 24, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 800 }}>{st.n}</span>
+              <span style={{ fontSize: 14, fontWeight: 800, color: "#0f172a" }}>{st.title}</span>
+            </div>
+            <div style={{ fontSize: 26, fontWeight: 800, color: st.count > 0 ? "#0f172a" : "#94a3b8", lineHeight: 1.1 }}>{st.count}</div>
+            <div style={{ fontSize: 12, color: "#64748b", minHeight: 30 }}>{st.text}</div>
+            <button style={{ ...btn(st.count > 0 ? "primary" : "ghost"), padding: "8px 12px" }} onClick={() => goTo(st.go, st.f || {})}>{st.cta} →</button>
+          </div>
+        ))}
+      </div>
+      <h4 style={{ ...h4, marginTop: 26, fontSize: 15 }}>All job work orders by status</h4>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
         {card("Total orders", d.totalOrders, () => goTo("orders", {}))}
         {Object.entries(ORDER_STYLE).map(([k, v]) => <React.Fragment key={k}>{card(v.label, byStatus[k] || 0, () => goTo("orders", { status: k }), v.fg)}</React.Fragment>)}
@@ -378,7 +510,7 @@ function WorkerForm({ user, onSaved, onClose }) {
     } catch (e) { setError(e.message); } finally { setBusy(false); }
   };
   return (
-    <Modal title="Onboard job worker" onClose={onClose} width={860}
+    <Modal page title="Onboard job worker" onClose={onClose} width={860}
       footer={<><button style={btn()} onClick={onClose}>Cancel</button><button style={btn("primary")} disabled={busy} onClick={save}>{busy ? "Saving…" : "Save job worker"}</button></>}>
       {error && <Banner kind="error">{error}</Banner>}
       <Section title="Vendor" subtitle="Pick a vendor from the Vendor Master. Its details fill in below for you to check or correct. A vendor can be onboarded only once.">
@@ -500,9 +632,9 @@ function WorkerDetail({ id, user, onClose, flash, onChanged }) {
     if (!reason) return;
     try { await api("POST", `/rate-contracts/${c.id}/revoke`, user, { comments: reason }); flash("Rate contract revoked."); load(); } catch (e) { flash(e.message, true); }
   };
-  if (!w) return <Modal title="Job worker" onClose={onClose}>{error ? <Banner kind="error">{error}</Banner> : <Empty text="Loading…" />}</Modal>;
+  if (!w) return <Modal page title="Job worker" onClose={onClose}>{error ? <Banner kind="error">{error}</Banner> : <Empty text="Loading…" />}</Modal>;
   return (
-    <Modal title={`${w.workerCode} · ${w.legalName}`} onClose={onClose} width={980}>
+    <Modal page title={`${w.workerCode} · ${w.legalName}`} onClose={onClose} width={980}>
       {error && <Banner kind="error">{error}</Banner>}
       <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}>
         <Badge map={WORKER_STYLE} value={w.status} />
@@ -725,7 +857,7 @@ function IndentForm({ user, locations, operations, categories, items, workers = 
     } catch (e) { setError(e.message); } finally { setBusy(false); }
   };
   return (
-    <Modal title={editing ? `Edit ${editing.indentNumber}` : "New job work indent"} onClose={onClose} width={1000}
+    <Modal page title={editing ? `Edit ${editing.indentNumber}` : "New job work indent"} onClose={onClose} width={1000}
       footer={<><button style={btn()} onClick={onClose}>Cancel</button><button style={btn()} disabled={busy} onClick={() => save(false)}>Save draft</button><button style={btn("primary")} disabled={busy} onClick={() => save(true)}>Save and submit</button></>}>
       {error && <Banner kind="error">{error}</Banner>}
       <Section title="Request">
@@ -781,37 +913,49 @@ const INDENT_STAGES = [
   { key: "ORDER", label: "Job work order raised" }
 ];
 const ORDER_NEXT_STEP = {
-  DRAFT: "Submit for approval (creator)",
-  PENDING_APPROVAL: "Waiting for an approver",
-  APPROVED: "Dispatch material to the job worker (store)",
-  IN_PROGRESS: "Dispatch more material, or record a receipt (store)",
-  PARTIALLY_RECEIVED: "Record the remaining receipts and inspections (store)",
-  COMPLETED: "Approver closes the order",
-  REJECTED: "Edit and resubmit (creator)",
-  CLOSED: "Nothing: the order is closed",
-  CANCELLED: "Nothing: the order is cancelled"
+  DRAFT: "Check the order, then send it for approval.",
+  PENDING_APPROVAL: "Waiting for an approver to approve or reject this order.",
+  APPROVED: "Approved. Send the material to the job worker.",
+  IN_PROGRESS: "Material is with the job worker. Send more, or record what came back.",
+  PARTIALLY_RECEIVED: "Some material is back. Receive the rest and get it inspected.",
+  COMPLETED: "Everything is back. An approver can now close the order.",
+  REJECTED: "This order was rejected. Fix it and send it again.",
+  CLOSED: "Nothing more to do. The order is closed.",
+  CANCELLED: "Nothing more to do. The order is cancelled."
 };
 const INDENT_NEXT_STEP = {
-  DRAFT: "Submit for approval (creator)",
-  SUBMITTED: "Waiting for an approver",
-  APPROVED: "Create a job work order from this indent",
-  REJECTED: "Edit and resubmit (creator)",
-  CANCELLED: "Nothing: the indent is cancelled"
+  DRAFT: "Check the indent, then send it for approval.",
+  SUBMITTED: "Waiting for an approver to approve or reject this indent.",
+  APPROVED: "Approved. Create the job work order from it.",
+  REJECTED: "This indent was rejected. Fix it and send it again.",
+  CANCELLED: "Nothing more to do. The indent is cancelled."
 };
+// Who has to act next, shown beside the status so nobody has to guess.
+const ORDER_WHO = {
+  DRAFT: "Creator", PENDING_APPROVAL: "Approver", APPROVED: "Store", IN_PROGRESS: "Store", PARTIALLY_RECEIVED: "Store / Quality",
+  COMPLETED: "Approver", REJECTED: "Creator", CLOSED: "—", CANCELLED: "—"
+};
+const INDENT_WHO = { DRAFT: "Creator", SUBMITTED: "Approver", APPROVED: "Creator", REJECTED: "Creator", CANCELLED: "—" };
+// The buttons that matter at each status. Everything else goes under "Other actions".
+const ORDER_MAIN = {
+  DRAFT: ["SUBMIT"], REJECTED: ["SUBMIT"], PENDING_APPROVAL: ["APPROVE", "REJECT"], APPROVED: ["CREATE_CHALLAN"],
+  IN_PROGRESS: ["CREATE_CHALLAN", "CREATE_RECEIPT"], PARTIALLY_RECEIVED: ["CREATE_CHALLAN", "CREATE_RECEIPT"], COMPLETED: ["CLOSE"]
+};
+const INDENT_MAIN = { DRAFT: ["SUBMIT"], REJECTED: ["SUBMIT"], SUBMITTED: ["APPROVE", "REJECT"], APPROVED: ["CREATE_ORDER"] };
 // Who may use each order action and in which statuses. Mirrors the server rules.
 const ORDER_RULES = {
   EDIT: { label: "Edit draft", statuses: ["DRAFT", "REJECTED"], roles: ["CREATOR", "APPROVER"], variant: "ghost", unsupported: "Editing an order is not available yet. Cancel it and create a new one." },
-  SUBMIT: { label: "Submit for approval", statuses: ["DRAFT", "REJECTED"], roles: ["CREATOR", "APPROVER"], variant: "primary" },
+  SUBMIT: { label: "Send for approval", statuses: ["DRAFT", "REJECTED"], roles: ["CREATOR", "APPROVER"], variant: "primary" },
   APPROVE: { label: "Approve", statuses: ["PENDING_APPROVAL"], roles: ["APPROVER"], variant: "primary", note: "The person who created the order cannot approve it" },
   REJECT: { label: "Reject", statuses: ["PENDING_APPROVAL"], roles: ["APPROVER"], variant: "danger" },
   CANCEL: { label: "Cancel order", statuses: ["DRAFT", "PENDING_APPROVAL", "REJECTED", "APPROVED"], roles: ["CREATOR", "APPROVER"], variant: "danger" },
-  CREATE_CHALLAN: { label: "Dispatch material", statuses: ["APPROVED", "IN_PROGRESS", "PARTIALLY_RECEIVED"], roles: ["STORE"], variant: "primary" },
-  CREATE_RECEIPT: { label: "Record receipt", statuses: ["APPROVED", "IN_PROGRESS", "PARTIALLY_RECEIVED"], roles: ["STORE"], variant: "primary" },
+  CREATE_CHALLAN: { label: "Send material to worker", statuses: ["APPROVED", "IN_PROGRESS", "PARTIALLY_RECEIVED"], roles: ["STORE"], variant: "primary" },
+  CREATE_RECEIPT: { label: "Receive material back", statuses: ["APPROVED", "IN_PROGRESS", "PARTIALLY_RECEIVED"], roles: ["STORE"], variant: "primary" },
   CLOSE: { label: "Close order", statuses: ["COMPLETED"], roles: ["APPROVER"], variant: "primary" }
 };
 const INDENT_RULES = {
   EDIT: { label: "Edit", statuses: ["DRAFT", "REJECTED"], roles: ["CREATOR", "APPROVER"], variant: "ghost" },
-  SUBMIT: { label: "Submit for approval", statuses: ["DRAFT", "REJECTED"], roles: ["CREATOR", "APPROVER"], variant: "primary" },
+  SUBMIT: { label: "Send for approval", statuses: ["DRAFT", "REJECTED"], roles: ["CREATOR", "APPROVER"], variant: "primary" },
   APPROVE: { label: "Approve", statuses: ["SUBMITTED"], roles: ["APPROVER"], variant: "primary", note: "The person who raised the indent cannot approve it" },
   REJECT: { label: "Reject", statuses: ["SUBMITTED"], roles: ["APPROVER"], variant: "danger" },
   CANCEL: { label: "Cancel indent", statuses: ["DRAFT", "SUBMITTED"], roles: ["CREATOR", "APPROVER"], variant: "danger" },
@@ -840,7 +984,7 @@ function StageTracker({ stages, currentIndex }) {
         return (
           <span key={s.key} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
             <span style={{ padding: "4px 10px", borderRadius: 999, fontSize: 12, fontWeight: 700,
-              background: current ? "#2563eb" : done ? "#dcfce7" : "#f1f5f9", color: current ? "#fff" : done ? "#166534" : "#64748b" }}>
+              background: current ? "#1e293b" : done ? "#dcfce7" : "#f1f5f9", color: current ? "#fff" : done ? "#166534" : "#64748b" }}>
               {done ? "✓ " : current ? "● " : ""}{s.label}
             </span>
             {i < stages.length - 1 && <span style={{ color: "#94a3b8", fontSize: 12 }}>→</span>}
@@ -851,23 +995,36 @@ function StageTracker({ stages, currentIndex }) {
   );
 }
 
-// Shows every action for the record: enabled ones as buttons, the rest greyed out with the reason.
-function ActionPanel({ title, rules, acts, handlers, status, role, styleMap, nextStep }) {
+// The one box that tells the user what to do now: a sentence, who acts, and the button(s). Buttons the user cannot press say why.
+function NextStepCard({ rules, mainKeys = [], acts, handlers, status, role, styleMap, nextStep, who }) {
+  const enabled = (k) => acts.includes(k) && !rules[k].unsupported;
+  const mine = mainKeys.filter(enabled);
+  const secondary = Object.keys(rules).filter((k) => !mainKeys.includes(k) && enabled(k));
+  const waiting = mainKeys.length > 0 && mine.length === 0;
+  const tone = mainKeys.length === 0 ? ["#f8fafc", "#e2e8f0", "#475569"] : waiting ? ["#fffbeb", "#fde68a", "#92400e"] : ["#eff6ff", "#93c5fd", "#1d4ed8"];
   return (
-    <div style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: 12, marginBottom: 12, background: "#f8fafc" }}>
-      <div style={{ fontSize: 12, fontWeight: 800, color: "#0f172a" }}>{title}</div>
-      <div style={{ fontSize: 12, color: "#334155", margin: "4px 0 10px" }}>Next step: {nextStep}</div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-        {Object.entries(rules).map(([key, rule]) => {
-          const on = acts.includes(key) && !rule.unsupported;
+    <div style={{ background: tone[0], border: `1px solid ${tone[1]}`, borderLeft: `5px solid ${tone[1]}`, borderRadius: 8, padding: "12px 16px", margin: "10px 0 14px" }}>
+      <div style={{ fontSize: 11, fontWeight: 800, color: tone[2], letterSpacing: 0.6 }}>
+        {mainKeys.length === 0 ? "NOTHING LEFT TO DO" : waiting ? "WAITING" : "YOUR TURN · WHAT TO DO NEXT"}{who && who !== "—" ? ` · Done by: ${who}` : ""}
+      </div>
+      <div style={{ fontSize: 14, fontWeight: 700, color: "#0f172a", margin: "3px 0 10px" }}>{nextStep}</div>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-start" }}>
+        {mainKeys.map((k) => {
+          const on = enabled(k);
           return (
-            <div key={key} style={{ flex: "1 1 180px", minWidth: 180, background: "#fff", border: "1px solid #e2e8f0", borderRadius: 8, padding: 8 }}>
-              <button style={{ ...btn(on ? rule.variant : "ghost"), width: "100%", opacity: on ? 1 : 0.5, cursor: on ? "pointer" : "not-allowed" }}
-                disabled={!on} onClick={() => on && handlers[key]()}>{rule.label}</button>
-              <div style={{ fontSize: 11, marginTop: 4, color: on ? "#166534" : "#64748b" }}>{on ? "Available now" : actionReason(rule, status, role, styleMap)}</div>
+            <div key={k} style={{ maxWidth: 300 }}>
+              <button disabled={!on} onClick={() => on && handlers[k]()}
+                style={{ ...btn(on ? rules[k].variant : "ghost"), fontSize: 13, padding: "8px 20px", opacity: on ? 1 : 0.55, cursor: on ? "pointer" : "not-allowed" }}>{rules[k].label}</button>
+              {!on && <div style={{ fontSize: 11, color: "#92400e", marginTop: 4 }}>{actionReason(rules[k], status, role, styleMap)}</div>}
             </div>
           );
         })}
+        {secondary.length > 0 && (
+          <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <span style={{ fontSize: 11, color: "#64748b" }}>Other actions:</span>
+            {secondary.map((k) => <button key={k} style={btn(rules[k].variant === "danger" ? "danger" : "ghost")} onClick={() => handlers[k]()}>{rules[k].label}</button>)}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -877,50 +1034,79 @@ function IndentDetail({ id, user, locations, operations, categories, items, work
   const [d, setD] = useState(null);
   const [error, setError] = useState("");
   const [editing, setEditing] = useState(false);
+  const [tab, setTab] = useState("items");
   const load = useCallback(() => api("GET", `/indents/${id}`, user).then(setD).catch((e) => setError(e.message)), [id, user]);
   useEffect(() => { load(); }, [load]);
+  const [ask, setAsk] = useState(null);
   const act = async (action, label) => {
-    let comments = null;
-    if (["reject", "cancel"].includes(action)) { comments = window.prompt(`Reason to ${label.toLowerCase()}?`); if (!comments) return; }
-    try { await api("POST", `/indents/${id}/${action}`, user, { comments }); flash(`Indent ${label.toLowerCase()}d.`); load(); onChanged(); } catch (e) { flash(e.message, true); }
+    const run = async (comments) => {
+      try { await api("POST", `/indents/${id}/${action}`, user, { comments }); flash(`Indent ${label.toLowerCase()}d.`); load(); onChanged(); } catch (e) { flash(e.message, true); }
+    };
+    if (["reject", "cancel"].includes(action)) setAsk({ title: `${label} this indent`, confirmLabel: label, run }); else run(null);
   };
   if (editing && d) return <IndentForm user={user} locations={locations} operations={operations} categories={categories} items={items} workers={workers} editing={d}
     onSaved={(x, msg) => { setEditing(false); flash(msg); load(); onChanged(); }} onClose={() => setEditing(false)} />;
-  if (!d) return <Modal title="Indent" onClose={onClose}>{error ? <Banner kind="error">{error}</Banner> : <Empty text="Loading…" />}</Modal>;
+  if (!d) return <Modal page title="Indent" onClose={onClose}>{error ? <Banner kind="error">{error}</Banner> : <Empty text="Loading…" />}</Modal>;
   const acts = d.allowedActions || [];
+  const orders = d.orders || [];
   return (
-    <Modal title={`${d.indentNumber} · ${d.reason}`} onClose={onClose} width={1000}>
-      <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}><Badge map={INDENT_STYLE} value={d.status} /><span style={{ fontSize: 12, color: "#64748b" }}>by {d.createdBy} on {dateText(d.indentDate)}</span></div>
-      {indentStageIndex(d) >= 0 && <StageTracker stages={INDENT_STAGES} currentIndex={indentStageIndex(d)} />}
-      <ActionPanel title="Actions on this indent" rules={INDENT_RULES} acts={acts} status={d.status} role={user.role} styleMap={INDENT_STYLE}
-        nextStep={INDENT_NEXT_STEP[d.status] && !(d.status === "APPROVED" && (d.orders || []).length > 0) ? INDENT_NEXT_STEP[d.status] : d.status === "APPROVED" ? "Job work order raised" : "—"}
+    <Modal page title={`${d.indentNumber} · ${d.reason}`} onClose={onClose} backLabel="Back to indents" badge={<Badge map={INDENT_STYLE} value={d.status} />}>
+      <div style={{ fontSize: 12, color: "#64748b" }}>Raised by {d.createdBy} on {dateText(d.indentDate)}</div>
+      {indentStageIndex(d) >= 0 && <div style={{ marginTop: 10 }}><StageTracker stages={INDENT_STAGES} currentIndex={indentStageIndex(d)} /></div>}
+      {d.rejectionReason && <Banner kind="error">Rejected: {d.rejectionReason}</Banner>}
+      <NextStepCard rules={INDENT_RULES} mainKeys={INDENT_MAIN[d.status] && !(d.status === "APPROVED" && orders.length > 0) ? INDENT_MAIN[d.status] : []} acts={acts} status={d.status} role={user.role} styleMap={INDENT_STYLE}
+        nextStep={d.status === "APPROVED" && orders.length > 0 ? "A job work order has been raised from this indent." : INDENT_NEXT_STEP[d.status] || "—"}
+        who={d.status === "APPROVED" && orders.length > 0 ? "—" : INDENT_WHO[d.status]}
         handlers={{ EDIT: () => setEditing(true), SUBMIT: () => act("submit", "Submit"), APPROVE: () => act("approve", "Approve"), REJECT: () => act("reject", "Reject"),
           CANCEL: () => act("cancel", "Cancel"), CREATE_ORDER: () => onOpenOrder(d) }} />
-      {d.rejectionReason && <Banner kind="error">Rejected: {d.rejectionReason}</Banner>}
-      <div style={grid4}>
-        <KV label="Requesting department" value={d.requestingDepartment} />
-        <KV label="Required dispatch / return" value={`${dateText(d.requiredDispatchDate)} / ${dateText(d.requiredReturnDate)}`} />
-        <KV label="Production reference" value={d.productionRef} />
-        <KV label="Preferred job worker" value={d.preferredWorker} />
-        <KV label="Estimated cost" value={money(d.estimatedCost)} />
+      <div style={tileGrid}>
+        <Tile label="Items" value={(d.lines || []).length} />
+        <Tile label="Estimated cost" value={money(d.estimatedCost)} />
+        <Tile label="Needed dispatch by" value={dateText(d.requiredDispatchDate)} />
+        <Tile label="Needed back by" value={dateText(d.requiredReturnDate)} />
       </div>
-      <h4 style={h4}>Items</h4>
-      <Table headers={["#", "Item", "Category", "Operation", "Required", "Remarks"]} minWidth={700}>
-        {(d.lines || []).map((l) => (
-          <tr key={l.id}><Td>{l.lineNo}</Td><Td>{l.itemCode} <span style={{ color: "#64748b" }}>{l.itemName}</span></Td><Td>{l.category}</Td><Td>{l.operationName}</Td><Td right>{qty(l.requiredQty)} {l.uom}</Td>
-            <Td>{l.remarks || "—"}</Td></tr>
-        ))}
-      </Table>
-      <h4 style={h4}>Job work orders from this indent</h4>
-      {(d.orders || []).length === 0 ? <Empty text="None yet." /> : d.orders.map((o) => <div key={o.id} style={{ fontSize: 13 }}>{o.jwoNumber} · <Badge map={ORDER_STYLE} value={o.status} /></div>)}
-      <h4 style={h4}>Approval history</h4>
-      {(d.history || []).length === 0 ? <Empty text="No activity." /> : (
-        <Table headers={["When", "Action", "From → To", "By (role)", "Comments"]} minWidth={600}>
-          {d.history.map((h) => <tr key={h.id}><Td>{formatDisplayDate(h.actedAt)}</Td><Td>{h.action}</Td><Td>{h.fromStatus || "—"} → {h.toStatus || "—"}</Td><Td>{h.actor} ({h.actorRole})</Td><Td>{h.comments || "—"}</Td></tr>)}
+      <Tabs value={tab} onChange={setTab} tabs={[{ key: "items", label: "Items" }, { key: "details", label: "Details" }, { key: "orders", label: "Job work orders", count: orders.length }, { key: "history", label: "History", count: (d.history || []).length }]} />
+      {tab === "items" && (
+        <Table headers={["#", "Item", "Category", "Operation", "Quantity needed", "Remarks"]} minWidth={700}>
+          {(d.lines || []).map((l) => (
+            <tr key={l.id}><Td>{l.lineNo}</Td><Td>{l.itemCode} <span style={{ color: "#64748b" }}>{l.itemName}</span></Td><Td>{l.category}</Td><Td>{l.operationName}</Td><Td right>{qty(l.requiredQty)} {l.uom}</Td>
+              <Td>{l.remarks || "—"}</Td></tr>
+          ))}
         </Table>
       )}
+      {tab === "details" && (
+        <div style={grid4}>
+          <KV label="Requesting department" value={d.requestingDepartment} />
+          <KV label="Production reference" value={d.productionRef} />
+          <KV label="Preferred job worker" value={d.preferredWorker} />
+        </div>
+      )}
+      {tab === "orders" && (orders.length === 0 ? <Empty text="No job work order has been raised from this indent yet." /> : (
+        <Table headers={["Order", "Status"]} minWidth={300}>
+          {orders.map((o) => <tr key={o.id}><Td>{o.jwoNumber}</Td><Td><Badge map={ORDER_STYLE} value={o.status} /></Td></tr>)}
+        </Table>
+      ))}
+      {tab === "history" && ((d.history || []).length === 0 ? <Empty text="No activity yet." /> : (
+        <Table headers={["When", "What happened", "Status change", "By (role)", "Comments"]} minWidth={600}>
+          {d.history.map((h) => <tr key={h.id}><Td>{formatDisplayDate(h.actedAt)}</Td><Td>{h.action}</Td><Td>{h.fromStatus || "—"} → {h.toStatus || "—"}</Td><Td>{h.actor} ({h.actorRole})</Td><Td>{h.comments || "—"}</Td></tr>)}
+        </Table>
+      ))}
+      {ask && <ReasonModal title={ask.title} confirmLabel={ask.confirmLabel} onCancel={() => setAsk(null)} onConfirm={(text) => { const run = ask.run; setAsk(null); run(text); }} />}
     </Modal>
   );
+}
+
+// Counts per status for the queue buttons (first 200 records is plenty for a count).
+function useStatusCounts(path, user, tick) {
+  const [counts, setCounts] = useState(null);
+  useEffect(() => {
+    api("GET", `${path}${path.includes("?") ? "&" : "?"}size=200`, user).then((d) => {
+      const c = { _all: d.totalElements ?? (d.content || []).length };
+      (d.content || []).forEach((r) => { c[r.status] = (c[r.status] || 0) + 1; if (r.overdue) c._overdue = (c._overdue || 0) + 1; });
+      setCounts(c);
+    }).catch(() => setCounts(null));
+  }, [path, user, tick]);
+  return counts;
 }
 
 function IndentsScreen({ user, filter, locations, operations, categories, items, workers, flash, onOpenOrder }) {
@@ -932,6 +1118,7 @@ function IndentsScreen({ user, filter, locations, operations, categories, items,
   const [creating, setCreating] = useState(false);
   const [detailId, setDetailId] = useState(null);
   const [tick, setTick] = useState(0);
+  const counts = useStatusCounts("/indents", user, tick);
   useEffect(() => { setStatus(filter.status || ""); }, [filter]);
   useEffect(() => { setPage(0); }, [q, status]);
   useEffect(() => {
@@ -940,22 +1127,23 @@ function IndentsScreen({ user, filter, locations, operations, categories, items,
     if (status) params.set("status", status);
     api("GET", `/indents?${params}`, user).then((d) => { setData(d); setError(""); }).catch((e) => setError(e.message));
   }, [user, q, status, page, tick]);
+  const chips = [{ key: "", label: "All", count: counts ? counts._all : null }, ...Object.entries(INDENT_STYLE).map(([k, v]) => ({ key: k, label: v.label, count: counts ? counts[k] || 0 : null, tone: v.fg }))];
   return (
     <div>
+      <ScreenIntro title="Step 1 · Indents" text="An indent is a request to send material out for job work. It must be approved before a job work order is made."
+        action={<button style={{ ...btn("primary"), fontSize: 13, padding: "7px 18px" }} onClick={() => setCreating(true)}>+ New indent</button>} />
       {error && <Banner kind="error">{error}</Banner>}
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10, alignItems: "flex-end" }}>
-        <div style={{ width: 280 }}><Field label="Search"><input style={inp} placeholder="Indent no., reason or item" value={q} onChange={(e) => setQ(e.target.value)} /></Field></div>
-        <div style={{ width: 180 }}><Field label="Status"><select style={inp} value={status} onChange={(e) => setStatus(e.target.value)}><option value="">All</option>{Object.entries(INDENT_STYLE).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select></Field></div>
-        <div style={{ marginLeft: "auto" }}><button style={btn("primary")} onClick={() => setCreating(true)}>+ New indent</button></div>
-      </div>
-      <Table headers={["Indent no.", "Date", "Items", "Reason", "Est. cost", "Orders", "Status", "Next step", "Raised by"]} minWidth={1000}>
-        {data.content.length === 0 && <tr><Td>No indents match.</Td></tr>}
+      <Chips options={chips} value={status} onChange={setStatus} />
+      <div style={{ width: 320, marginBottom: 10 }}><input style={inp} placeholder="Search by indent no., reason or item" value={q} onChange={(e) => setQ(e.target.value)} /></div>
+      <Table headers={["Indent no.", "Date", "Items", "Reason", "Est. cost", "Orders", "Status", "What happens next", "Raised by", ""]} minWidth={1100}>
+        {data.content.length === 0 && <tr><Td>No indents here.</Td></tr>}
         {data.content.map((r) => (
-          <tr key={r.id}>
-            <Td><button onClick={() => setDetailId(r.id)} style={{ border: "none", background: "none", color: "#2563eb", fontWeight: 700, cursor: "pointer", padding: 0 }}>{r.indentNumber}</button></Td>
+          <tr key={r.id} onClick={() => setDetailId(r.id)} style={{ cursor: "pointer" }}>
+            <Td><b style={{ color: "#2563eb" }}>{r.indentNumber}</b></Td>
             <Td>{dateText(r.indentDate)}</Td><Td>{r.items}</Td><Td>{r.reason}</Td><Td right>{money(r.estimatedCost)}</Td><Td right>{r.orderCount}</Td>
             <Td><Badge map={INDENT_STYLE} value={r.status} /></Td>
             <Td>{r.status === "APPROVED" && r.orderCount > 0 ? "Job work order raised" : INDENT_NEXT_STEP[r.status] || "—"}</Td><Td>{r.createdBy}</Td>
+            <Td><button style={{ ...btn("primary"), padding: "4px 12px" }} onClick={(e) => { e.stopPropagation(); setDetailId(r.id); }}>Open</button></Td>
           </tr>
         ))}
       </Table>
@@ -1023,7 +1211,7 @@ function OrderForm({ user, workers, locations, operations, categories, items, fr
   };
   const workerOpts = (freshWorkers || workers).filter((w) => w.status === "ACTIVE").map((w) => ({ value: w.id, label: `${w.legalName} (${w.workerCode})` }));
   return (
-    <Modal title="New job work order" onClose={onClose} width={1000}
+    <Modal page title="New job work order" onClose={onClose} width={1000}
       footer={<><button style={btn()} onClick={onClose}>Cancel</button><button style={btn()} disabled={busy} onClick={() => save(false)}>Save draft</button><button style={btn("primary")} disabled={busy} onClick={() => save(true)}>Save and submit</button></>}>
       {error && <Banner kind="error">{error}</Banner>}
       <Section title="Order">
@@ -1061,6 +1249,39 @@ function OrderForm({ user, workers, locations, operations, categories, items, fr
   );
 }
 
+// Number box with a label above it and an optional "fill" shortcut. Used on the send / receive / inspect pages.
+function QtyBox({ label, value, onChange, max, fill, fillLabel = "All", width = 130 }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b" }}>{label}</span>
+      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+        <input type="number" min="0" step="0.01" max={max} style={{ ...inp, width, fontSize: 16, fontWeight: 700 }} value={value || ""} onChange={(e) => onChange(e.target.value)} />
+        {fill !== undefined && <button type="button" style={{ ...btn(), padding: "6px 10px" }} onClick={() => onChange(String(fill))}>{fillLabel}</button>}
+      </div>
+    </div>
+  );
+}
+
+// One line of an order as a card: the item, and read-only facts above the boxes the user fills.
+function LineCard({ title, sub, facts = [], children }) {
+  return (
+    <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 10, padding: 14, marginBottom: 10 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <div><div style={{ fontSize: 14, fontWeight: 800, color: "#0f172a" }}>{title}</div>{sub && <div style={{ fontSize: 12, color: "#64748b" }}>{sub}</div>}</div>
+        <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
+          {facts.map((f) => (
+            <div key={f.label} style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b" }}>{f.label}</div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: f.tone || "#0f172a" }}>{f.value}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+      {children && <div style={{ display: "flex", gap: 18, flexWrap: "wrap", marginTop: 12, paddingTop: 12, borderTop: "1px dashed #e2e8f0" }}>{children}</div>}
+    </div>
+  );
+}
+
 function ChallanForm({ user, order, onSaved, onClose }) {
   const [f, setF] = useState({ challanDate: TODAY(), transporter: "", vehicleNo: "", ewayBillNo: "", authorizedBy: "", destinationLocation: order.lines[0] ? "" : "", purpose: "Job work outward", remarks: "", reworkDispatch: false });
   const [qtys, setQtys] = useState({});
@@ -1071,47 +1292,56 @@ function ChallanForm({ user, order, onSaved, onClose }) {
     const avail = f.reworkDispatch ? num(l.reworkPending) : num(l.toDispatch);
     return { l, avail };
   }).filter((x) => x.avail > 0);
+  const hasRework = order.lines.some((l) => num(l.reworkPending) > 0);
+  const total = rows.reduce((sum, { l }) => sum + num(qtys[l.id]), 0);
   const save = async () => {
     setError("");
     const lines = rows.map(({ l }) => ({ jwoLineId: l.id, qty: Number(qtys[l.id] || 0), batchNo: null })).filter((x) => x.qty > 0);
-    if (lines.length === 0) return setError("Enter the quantity to dispatch on at least one line.");
-    if (!f.authorizedBy.trim()) return setError("Enter the authorised person for this dispatch.");
+    if (lines.length === 0) return setError("Enter the quantity you are sending on at least one item.");
+    if (!f.authorizedBy.trim()) return setError("Enter the name of the person who authorised this dispatch (step 2).");
     setBusy(true);
     try {
       const d = await api("POST", "/challans", user, { clientRequestId: newKey("ch"), jwoId: order.id, challanDate: f.challanDate, reworkDispatch: f.reworkDispatch,
         destinationLocation: f.destinationLocation || null, transporter: f.transporter || null, vehicleNo: f.vehicleNo || null, ewayBillNo: f.ewayBillNo || null,
         purpose: f.purpose, authorizedBy: f.authorizedBy, remarks: f.remarks || null, lines });
-      onSaved(d, `${d.challanNumber} posted: stock moved to External Job Work.`);
+      onSaved(d, `${d.challanNumber} created: material recorded as sent to ${order.workerName}.`);
     } catch (e) { setError(e.message); } finally { setBusy(false); }
   };
   return (
-    <Modal title={`Dispatch material — ${order.jwoNumber}`} onClose={onClose} width={900}
-      footer={<><button style={btn()} onClick={onClose}>Cancel</button><button style={btn("primary")} disabled={busy} onClick={save}>{busy ? "Posting…" : "Post challan"}</button></>}>
+    <Modal page title={`Send material · ${order.jwoNumber}`} onClose={onClose} backLabel="Back to order"
+      footer={<><span style={{ marginRight: "auto", alignSelf: "center", fontSize: 14, fontWeight: 700, color: "#334155" }}>Total to send: {qty(total)}</span>
+        <button style={btn()} onClick={onClose}>Cancel</button><button style={{ ...btn("primary"), fontSize: 14, padding: "9px 22px" }} disabled={busy} onClick={save}>{busy ? "Saving…" : "Create challan and send"}</button></>}>
       {error && <Banner kind="error">{error}</Banner>}
-      <Section title="Challan details" subtitle="Posting moves the stock out of the store into External Job Work and records it against the job worker.">
+      <div style={{ fontSize: 14, color: "#334155", marginBottom: 14 }}>You are sending material to <b>{order.workerName}</b>. This creates a delivery challan and records the material against the job worker.</div>
+      <h4 style={{ ...h4, fontSize: 15 }}>Step 1 · How much are you sending?</h4>
+      {hasRework && (
+        <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
+          <button style={f.reworkDispatch ? btn() : btn("primary")} onClick={() => { setF((x) => ({ ...x, reworkDispatch: false })); setQtys({}); }}>New material</button>
+          <button style={f.reworkDispatch ? btn("primary") : btn()} onClick={() => { setF((x) => ({ ...x, reworkDispatch: true })); setQtys({}); }}>Rework material (sending again)</button>
+        </div>
+      )}
+      {rows.length === 0 ? <Empty text={f.reworkDispatch ? "No rework material is waiting to be sent again." : "Everything on this order has already been sent."} /> : (
+        <>
+          <div style={{ marginBottom: 8 }}><button style={btn()} onClick={() => setQtys(Object.fromEntries(rows.map(({ l, avail }) => [l.id, String(avail)])))}>Fill every item with the full balance</button></div>
+          {rows.map(({ l, avail }) => (
+            <LineCard key={l.id} title={`${l.itemCode} ${l.itemName || ""}`} sub={`${l.operationName}${l.category ? " · " + l.category : ""}`}
+              facts={[{ label: "Ordered", value: qty(l.inputQty) }, { label: "Already sent", value: qty(l.dispatchedQty) }, { label: "Left to send", value: `${qty(avail)} ${l.uom || ""}`, tone: "#1d4ed8" }]}>
+              <QtyBox label="Quantity sending now" value={qtys[l.id]} max={avail} fill={avail} fillLabel="All" onChange={(v) => setQtys((q) => ({ ...q, [l.id]: v }))} />
+            </LineCard>
+          ))}
+        </>
+      )}
+      <h4 style={{ ...h4, fontSize: 15 }}>Step 2 · Challan details</h4>
+      <Section title="Who and how">
+        <Field label="Authorised by" required hint="Person who approved this dispatch"><input style={inp} value={f.authorizedBy} onChange={set("authorizedBy")} /></Field>
         <Field label="Challan date"><DateInput value={f.challanDate} onChange={set("challanDate")} style={inp} /></Field>
-        <Field label="Authorised by" required><input style={inp} value={f.authorizedBy} onChange={set("authorizedBy")} /></Field>
         <Field label="Transporter"><input style={inp} value={f.transporter} onChange={set("transporter")} /></Field>
         <Field label="Vehicle number"><input style={inp} value={f.vehicleNo} onChange={set("vehicleNo")} /></Field>
-        <Field label="E-way bill number" hint="Enter if your transport rules require it"><input style={inp} value={f.ewayBillNo} onChange={set("ewayBillNo")} /></Field>
+        <Field label="E-way bill number" hint="Only if your transport rules need it"><input style={inp} value={f.ewayBillNo} onChange={set("ewayBillNo")} /></Field>
         <Field label="Purpose"><input style={inp} value={f.purpose} onChange={set("purpose")} /></Field>
-        <Field label="Dispatch type">
-          <label style={{ fontSize: 13, display: "flex", gap: 6, alignItems: "center" }}><input type="checkbox" checked={f.reworkDispatch} onChange={set("reworkDispatch")} /> Re-dispatch rework material from Rework-Burning</label>
-        </Field>
         <Field label="Remarks" span={2}><input style={inp} value={f.remarks} onChange={set("remarks")} /></Field>
       </Section>
-      <h4 style={h4}>Lines</h4>
-      {rows.length === 0 ? <Empty text={f.reworkDispatch ? "No rework material is pending re-dispatch." : "Nothing left to dispatch on this order."} /> : (
-        <Table headers={["Item", "Category", "Operation", "Balance to dispatch", "Dispatch qty"]} minWidth={640}>
-          {rows.map(({ l, avail }) => (
-            <tr key={l.id}>
-              <Td>{l.itemCode} <span style={{ color: "#64748b" }}>{l.itemName}</span></Td><Td>{l.category}</Td><Td>{l.operationName}</Td><Td right>{qty(avail)} {l.uom}</Td>
-              <Td><input type="number" min="0" step="0.01" max={avail} style={{ ...inp, width: 120 }} value={qtys[l.id] || ""} onChange={(e) => setQtys((q) => ({ ...q, [l.id]: e.target.value }))} /></Td>
-            </tr>
-          ))}
-        </Table>
-      )}
-      <div style={{ fontSize: 11, color: "#64748b", marginTop: 6 }}>Dispatch cannot exceed the approved balance or the stock available at the source store; the server checks both.</div>
+      <div style={{ fontSize: 12, color: "#64748b" }}>You cannot send more than the balance left on the order; the server checks this.</div>
     </Modal>
   );
 }
@@ -1125,42 +1355,65 @@ function ReceiptForm({ user, order, challans, onSaved, onClose }) {
   const [key] = useState(() => newKey("rc"));
   const set = (k) => (e) => setF((x) => ({ ...x, [k]: e && e.target ? e.target.value : e }));
   const rows = order.lines.filter((l) => num(l.pendingWithWorker) > 0);
+  const total = rows.reduce((sum, l) => sum + num(got[l.id]) + num(unused[l.id]), 0);
   const save = async () => {
     setError("");
     const lines = rows.map((l) => ({ jwoLineId: l.id, qtyReceived: num(got[l.id]), unusedReturnedQty: num(unused[l.id]) }))
       .filter((x) => x.qtyReceived > 0 || x.unusedReturnedQty > 0);
-    if (lines.length === 0) return setError("Enter what came back on at least one line.");
+    if (lines.length === 0) return setError("Enter what came back on at least one item.");
     setBusy(true);
     try {
       const d = await api("POST", "/receipts", user, { idempotencyKey: key, jwoId: order.id, challanId: f.challanId ? Number(f.challanId) : null,
         receiptDate: f.receiptDate, deliveryNoteNo: f.deliveryNoteNo || null, remarks: f.remarks || null, lines });
-      onSaved(d, `${d.receiptNumber} recorded: material is in Quality Hold awaiting inspection.`);
+      onSaved(d, `${d.receiptNumber} recorded: the material now waits for inspection.`);
     } catch (e) { setError(e.message); } finally { setBusy(false); }
   };
   return (
-    <Modal title={`Record receipt — ${order.jwoNumber}`} onClose={onClose} width={960}
-      footer={<><button style={btn()} onClick={onClose}>Cancel</button><button style={btn("primary")} disabled={busy} onClick={save}>{busy ? "Posting…" : "Record receipt"}</button></>}>
+    <Modal page title={`Receive material · ${order.jwoNumber}`} onClose={onClose} backLabel="Back to order"
+      footer={<><span style={{ marginRight: "auto", alignSelf: "center", fontSize: 14, fontWeight: 700, color: "#334155" }}>Total received: {qty(total)}</span>
+        <button style={btn()} onClick={onClose}>Cancel</button><button style={{ ...btn("primary"), fontSize: 14, padding: "9px 22px" }} disabled={busy} onClick={save}>{busy ? "Saving…" : "Save receipt"}</button></>}>
       {error && <Banner kind="error">{error}</Banner>}
-      <Section title="Receipt">
+      <div style={{ fontSize: 14, color: "#334155", marginBottom: 14 }}>You are recording material that came back from <b>{order.workerName}</b>. Next it goes to inspection, where it is accepted, rejected, sent for rework or scrapped.</div>
+      <h4 style={{ ...h4, fontSize: 15 }}>Step 1 · What came back?</h4>
+      {rows.length === 0 ? <Empty text="Nothing is with the job worker on this order." /> : (
+        <>
+          <div style={{ marginBottom: 8 }}><button style={btn()} onClick={() => setGot(Object.fromEntries(rows.map((l) => [l.id, String(num(l.pendingWithWorker))])))}>Everything came back as processed material</button></div>
+          {rows.map((l) => (
+            <LineCard key={l.id} title={`${l.itemCode} ${l.itemName || ""}`} sub={`${l.operationName}${l.category ? " · " + l.category : ""}`}
+              facts={[{ label: "Sent", value: qty(l.dispatchedQty) }, { label: "Already back", value: qty(l.receivedQty) }, { label: "Still with worker", value: `${qty(l.pendingWithWorker)} ${l.uom || ""}`, tone: "#854d0e" }]}>
+              <QtyBox label="Processed material back" value={got[l.id]} max={num(l.pendingWithWorker)} fill={num(l.pendingWithWorker)} fillLabel="All" onChange={(v) => setGot((g) => ({ ...g, [l.id]: v }))} />
+              <QtyBox label="Unused raw material back" value={unused[l.id]} max={num(l.pendingWithWorker)} onChange={(v) => setUnused((g) => ({ ...g, [l.id]: v }))} />
+            </LineCard>
+          ))}
+        </>
+      )}
+      <h4 style={{ ...h4, fontSize: 15 }}>Step 2 · Receipt details</h4>
+      <Section title="Delivery">
         <Field label="Receipt date"><DateInput value={f.receiptDate} onChange={set("receiptDate")} style={inp} /></Field>
         <Field label="Against challan" hint="Optional"><SearchableSelect value={f.challanId} onChange={set("challanId")} emptyLabel="Not linked"
-  options={challans.filter((c) => c.status === "POSTED").map((c) => ({ value: c.id, label: c.challanNumber }))} /></Field>
+          options={challans.filter((c) => c.status === "POSTED").map((c) => ({ value: c.id, label: c.challanNumber }))} /></Field>
         <Field label="Job worker's delivery note"><input style={inp} value={f.deliveryNoteNo} onChange={set("deliveryNoteNo")} /></Field>
-        <Field label="Remarks" span={3}><input style={inp} value={f.remarks} onChange={set("remarks")} /></Field>
+        <Field label="Remarks" span={2}><input style={inp} value={f.remarks} onChange={set("remarks")} /></Field>
       </Section>
-      <h4 style={h4}>What came back</h4>
-      {rows.length === 0 ? <Empty text="Nothing is with the job worker on this order." /> : (
-        <Table headers={["Item", "With worker", "Processed qty back", "Unused raw material back"]} minWidth={640}>
-          {rows.map((l) => (
-            <tr key={l.id}>
-              <Td>{l.itemCode} <span style={{ color: "#64748b" }}>{l.itemName}</span></Td><Td right>{qty(l.pendingWithWorker)} {l.uom}</Td>
-              <Td><input type="number" min="0" step="0.01" style={{ ...inp, width: 120 }} value={got[l.id] || ""} onChange={(e) => setGot((g) => ({ ...g, [l.id]: e.target.value }))} /></Td>
-              <Td><input type="number" min="0" step="0.01" style={{ ...inp, width: 120 }} value={unused[l.id] || ""} onChange={(e) => setUnused((g) => ({ ...g, [l.id]: e.target.value }))} /></Td>
-            </tr>
-          ))}
-        </Table>
-      )}
-      <div style={{ fontSize: 11, color: "#64748b", marginTop: 6 }}>Quantities above what the worker holds are refused. Processed material goes to Quality Hold; it is not available for use until inspected.</div>
+      <div style={{ fontSize: 12, color: "#64748b" }}>You cannot enter more than the worker still holds; the server refuses it.</div>
+    </Modal>
+  );
+}
+
+const INSPECT_STYLE = {
+  PENDING: { bg: "#fef3c7", fg: "#92400e", label: "Awaiting inspection" },
+  DONE: { bg: "#dcfce7", fg: "#166534", label: "Inspected" }
+};
+const inspectionOf = (pendingLines) => (num(pendingLines) > 0 ? "PENDING" : "DONE");
+const sumOf = (rows, key) => (rows || []).reduce((t, r) => t + num(r[key]), 0);
+
+// Asks for a reason in a small box (instead of the browser's pop-up) before a reject / cancel / reverse.
+function ReasonModal({ title, label = "Reason", confirmLabel = "Confirm", onCancel, onConfirm }) {
+  const [text, setText] = useState("");
+  return (
+    <Modal title={title} onClose={onCancel} width={480} zIndex={3000}
+      footer={<><button style={btn()} onClick={onCancel}>Go back</button><button style={btn("danger")} disabled={!text.trim()} onClick={() => onConfirm(text.trim())}>{confirmLabel}</button></>}>
+      <Field label={label} required><textarea autoFocus style={{ ...inp, minHeight: 90, fontFamily: "inherit" }} value={text} onChange={(e) => setText(e.target.value)} /></Field>
     </Modal>
   );
 }
@@ -1169,137 +1422,215 @@ function OrderDetail({ id, user, onClose, flash, onChanged, locations, workers, 
   const [d, setD] = useState(null);
   const [error, setError] = useState("");
   const [screenForm, setScreenForm] = useState(null);
+  const [inspectId, setInspectId] = useState(null);
+  const [ask, setAsk] = useState(null);
+  const [tab, setTab] = useState("items");
   const [printing, setPrinting] = useState(false);
   const load = useCallback(() => api("GET", `/orders/${id}`, user).then(setD).catch((e) => setError(e.message)), [id, user]);
   useEffect(() => { load(); }, [load]);
   const act = async (action, label, needsReason) => {
-    let comments = null;
-    if (needsReason) { comments = window.prompt(`Reason to ${label.toLowerCase()}?`); if (!comments) return; }
-    try { await api("POST", `/orders/${id}/${action}`, user, { comments }); flash(`Order ${label.toLowerCase()} done.`); load(); onChanged(); } catch (e) { flash(e.message, true); }
+    const run = async (comments) => {
+      try { await api("POST", `/orders/${id}/${action}`, user, { comments }); flash(`Order ${label.toLowerCase()} done.`); load(); onChanged(); } catch (e) { flash(e.message, true); }
+    };
+    if (needsReason) setAsk({ title: `${label} this order`, confirmLabel: label, run }); else run(null);
   };
-  const cancelChallan = async (c) => {
-    const reason = window.prompt(`Reason to reverse ${c.challanNumber}?`);
-    if (!reason) return;
-    try { await api("POST", `/challans/${c.id}/cancel`, user, { comments: reason }); flash(`${c.challanNumber} reversed; stock returned to the store.`); load(); onChanged(); }
-    catch (e) { flash(e.message, true); }
-  };
-  if (!d) return <Modal title="Job work order" onClose={onClose}>{error ? <Banner kind="error">{error}</Banner> : <Empty text="Loading…" />}</Modal>;
+  const cancelChallan = (c) => setAsk({
+    title: `Reverse ${c.challanNumber}`, confirmLabel: "Reverse challan",
+    run: async (reason) => {
+      try { await api("POST", `/challans/${c.id}/cancel`, user, { comments: reason }); flash(`${c.challanNumber} reversed.`); load(); onChanged(); }
+      catch (e) { flash(e.message, true); }
+    }
+  });
+  if (!d) return <Modal page title="Job work order" onClose={onClose} backLabel="Back">{error ? <Banner kind="error">{error}</Banner> : <Empty text="Loading…" />}</Modal>;
   const acts = d.allowedActions || [];
   const openPrint = async (cid) => {
     setPrinting(true);
     try { window.open(await openBlob(`/challans/${cid}/print`, user, "text/html"), "_blank"); } catch (e) { flash(e.message, true); } finally { setPrinting(false); }
   };
+  const lines = d.lines || [];
+  const ordered = sumOf(lines, "inputQty");
+  const sent = sumOf(lines, "dispatchedQty");
+  const withWorker = sumOf(lines, "pendingWithWorker");
+  const back = sumOf(lines, "receivedQty");
+  const awaiting = (d.receipts || []).filter((r) => num(r.pendingInspectionLines) > 0).length;
+  const canSend = acts.includes("CREATE_CHALLAN");
+  const canReceive = acts.includes("CREATE_RECEIPT");
   return (
-    <Modal title={`${d.jwoNumber} · ${d.workerName}`} onClose={onClose} width={1040}>
-      <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
-        <Badge map={ORDER_STYLE} value={d.status} />
-        {d.overdue && <span style={{ fontSize: 11, fontWeight: 700, color: "#991b1b" }}>Overdue for return</span>}
-        <span style={{ fontSize: 12, color: "#64748b" }}>Created by {d.createdBy} · {d.indentId ? "from indent" : "direct order"}</span>
+    <Modal page title={`${d.jwoNumber} · ${d.workerName}`} onClose={onClose} backLabel="Back to orders" badge={<Badge map={ORDER_STYLE} value={d.status} />}>
+      <div style={{ fontSize: 12, color: "#64748b", display: "flex", gap: 12, flexWrap: "wrap" }}>
+        <span>Created by {d.createdBy} · {d.indentId ? "from an indent" : "direct order"}</span>
+        <span>Order date {dateText(d.jwoDate)}</span>
+        <span>Return by {dateText(d.expectedReturnDate)}</span>
+        {d.overdue && <b style={{ color: "#991b1b" }}>Overdue for return</b>}
       </div>
-      {orderStageIndex(d) >= 0 && <StageTracker stages={ORDER_STAGES} currentIndex={orderStageIndex(d)} />}
-      <ActionPanel title="Actions on this order" rules={ORDER_RULES} acts={acts} status={d.status} role={user.role} styleMap={ORDER_STYLE}
-        nextStep={ORDER_NEXT_STEP[d.status] || "—"}
+      {orderStageIndex(d) >= 0 && <div style={{ marginTop: 10 }}><StageTracker stages={ORDER_STAGES} currentIndex={orderStageIndex(d)} /></div>}
+      {d.rejectionReason && <Banner kind="error">Rejected: {d.rejectionReason}</Banner>}
+      <NextStepCard rules={ORDER_RULES} mainKeys={ORDER_MAIN[d.status] || []} acts={acts} status={d.status} role={user.role} styleMap={ORDER_STYLE}
+        nextStep={ORDER_NEXT_STEP[d.status] || "—"} who={ORDER_WHO[d.status]}
         handlers={{ SUBMIT: () => act("submit", "Submit"), APPROVE: () => act("approve", "Approve"), REJECT: () => act("reject", "Reject", true),
           CANCEL: () => act("cancel", "Cancel", true), CREATE_CHALLAN: () => setScreenForm("challan"), CREATE_RECEIPT: () => setScreenForm("receipt"),
           CLOSE: () => act("close", "Close", false) }} />
-      {d.rejectionReason && <Banner kind="error">Rejected: {d.rejectionReason}</Banner>}
-      <div style={grid4}>
-        <KV label="Order date" value={dateText(d.jwoDate)} />
-        <KV label="Expected return" value={dateText(d.expectedReturnDate)} />
-        <KV label="Source store" value={d.sourceDepartment} />
-        <KV label="Requesting department" value={d.requestingDepartment} />
-        <KV label="Estimated charges (per contract)" value={money(d.estimatedCharges)} />
-        <KV label="Payment terms" value={d.paymentTerms} />
+      <div style={tileGrid}>
+        <Tile label="Ordered" value={qty(ordered)} />
+        <Tile label="Sent to worker" value={qty(sent)} tone="#3730a3" hint={ordered > 0 ? `${Math.round((sent / ordered) * 100)}% of order` : undefined} />
+        <Tile label="Still with worker" value={qty(withWorker)} tone="#854d0e" />
+        <Tile label="Received back" value={qty(back)} tone="#166534" />
+        <Tile label="Accepted" value={qty(sumOf(lines, "acceptedQty"))} tone="#166534" />
+        <Tile label="Rejected / scrap" value={qty(sumOf(lines, "rejectedQty") + sumOf(lines, "scrapQty"))} tone="#991b1b" hint={`Rework ${qty(sumOf(lines, "reworkQty"))}`} />
       </div>
-      <h4 style={h4}>Items and progress</h4>
-      <Table headers={["#", "Item", "Operation", "Rate", "Input", "Sent", "With worker", "Back (processed)", "Accepted", "Rejected", "Rework", "Scrap"]} minWidth={1000}>
-        {d.lines.map((l) => (
-          <tr key={l.id}>
-            <Td>{l.lineNo}</Td><Td>{l.itemCode}<div style={{ fontSize: 11, color: "#64748b" }}>{l.category}</div></Td><Td>{l.operationName}</Td>
-            <Td right>{money(l.rate)} <div style={{ fontSize: 10, color: "#64748b" }}>{l.rateBasis}</div></Td>
-            <Td right>{qty(l.inputQty)}</Td><Td right>{qty(l.dispatchedQty)}</Td><Td right>{qty(l.pendingWithWorker)}</Td><Td right>{qty(l.receivedQty)}</Td>
-            <Td right>{qty(l.acceptedQty)}</Td><Td right>{qty(l.rejectedQty)}</Td><Td right>{qty(l.reworkQty)} <div style={{ fontSize: 10, color: "#64748b" }}>pending {qty(l.reworkPending)}</div></Td><Td right>{qty(l.scrapQty)}</Td>
-          </tr>
-        ))}
-      </Table>
-      <h4 style={h4}>Challans (dispatch)</h4>
-      {d.challans.length === 0 ? <Empty text="Nothing dispatched yet." /> : (
-        <Table headers={["Challan", "Date", "Qty", "Returned", "Status", "E-way bill", "Actions"]} minWidth={700}>
-          {d.challans.map((c) => (
-            <tr key={c.id}>
-              <Td>{c.challanNumber}{c.reworkDispatch && <div style={{ fontSize: 10, color: "#854d0e" }}>rework</div>}</Td><Td>{dateText(c.challanDate)}</Td><Td right>{qty(c.totalQty)}</Td><Td right>{qty(c.returnedQty)}</Td>
-              <Td><Badge map={CHALLAN_STYLE} value={c.status} /></Td><Td>{c.ewayBillNo || "—"}</Td>
-              <Td><button style={{ ...btn(), padding: "2px 8px" }} onClick={() => openPrint(c.id)}>Print</button>
-                {c.status === "POSTED" && ["APPROVER", "ADMIN"].includes(user.role) && <button style={{ ...btn(), padding: "2px 8px", marginLeft: 4 }} onClick={() => cancelChallan(c)}>Reverse</button>}</Td>
-            </tr>
-          ))}
-        </Table>
+      {awaiting > 0 && (
+        <div style={{ marginTop: 12, background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 10, padding: "10px 14px", fontSize: 13, color: "#92400e" }}>
+          {awaiting} receipt{awaiting > 1 ? "s are" : " is"} waiting for inspection. <button style={{ ...btn("primary"), marginLeft: 8 }} onClick={() => setTab("received")}>Go to received material</button>
+        </div>
       )}
-      <h4 style={h4}>Receipts</h4>
-      {d.receipts.length === 0 ? <Empty text="No receipts yet." /> : (
-        <Table headers={["Receipt", "Date", "Delivery note", "Quantity", "Inspection"]} minWidth={600}>
-          {d.receipts.map((r) => <tr key={r.id}><Td>{r.receiptNumber}</Td><Td>{dateText(r.receiptDate)}</Td><Td>{r.deliveryNoteNo || "—"}</Td><Td right>{qty(r.receivedQty)}</Td>
-            <Td>{num(r.pendingInspectionLines) > 0 ? `${r.pendingInspectionLines} line(s) pending` : "Done"}</Td></tr>)}
-        </Table>
+      <Tabs value={tab} onChange={setTab} tabs={[
+        { key: "items", label: "Items", count: lines.length },
+        { key: "sent", label: "Sent to worker", count: d.challans.length },
+        { key: "received", label: "Received & inspected", count: d.receipts.length },
+        { key: "details", label: "Order details" },
+        { key: "history", label: "History", count: (d.history || []).length + d.ledger.length }
+      ]} />
+      {tab === "items" && lines.map((l) => (
+        <LineCard key={l.id} title={`${l.lineNo}. ${l.itemCode} ${l.itemName || ""}`} sub={`${l.operationName} · ${l.category || ""} · Rate ${money(l.rate)} ${l.rateBasis || ""}`}
+          facts={[{ label: "Ordered", value: qty(l.inputQty) }, { label: "Sent", value: qty(l.dispatchedQty), tone: "#3730a3" }, { label: "With worker", value: qty(l.pendingWithWorker), tone: "#854d0e" },
+            { label: "Received back", value: qty(l.receivedQty), tone: "#166534" }]}>
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 4 }}>Sent {qty(l.dispatchedQty)} of {qty(l.inputQty)}</div>
+            <Bar value={l.dispatchedQty} total={l.inputQty} color="#6366f1" />
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", margin: "8px 0 4px" }}>Back {qty(l.receivedQty)} of {qty(l.dispatchedQty)} sent</div>
+            <Bar value={l.receivedQty} total={l.dispatchedQty} color="#16a34a" />
+          </div>
+          <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "flex-start" }}>
+            <div><div style={{ fontSize: 11, fontWeight: 700, color: "#64748b" }}>Inspection result</div></div>
+            {[["Accepted", l.acceptedQty, "#166534"], ["Rejected", l.rejectedQty, "#991b1b"], ["Rework", l.reworkQty, "#854d0e"], ["Scrap", l.scrapQty, "#475569"]].map(([label, v, tone]) => (
+              <div key={label}><div style={{ fontSize: 11, color: "#64748b" }}>{label}</div><div style={{ fontSize: 15, fontWeight: 800, color: tone }}>{qty(v)}</div></div>
+            ))}
+            {num(l.reworkPending) > 0 && <div><div style={{ fontSize: 11, color: "#64748b" }}>Rework to re-send</div><div style={{ fontSize: 15, fontWeight: 800, color: "#854d0e" }}>{qty(l.reworkPending)}</div></div>}
+          </div>
+        </LineCard>
+      ))}
+      {tab === "sent" && (
+        <>
+          {canSend && <div style={{ marginBottom: 10 }}><button style={{ ...btn("primary"), fontSize: 14, padding: "9px 18px" }} onClick={() => setScreenForm("challan")}>+ Send more material</button></div>}
+          {d.challans.length === 0 ? <Empty text="Nothing has been sent to the job worker yet." /> : (
+            <Table headers={["Challan", "Date", "Quantity sent", "Came back", "Status", "E-way bill", ""]} minWidth={700}>
+              {d.challans.map((c) => (
+                <tr key={c.id}>
+                  <Td><b>{c.challanNumber}</b>{c.reworkDispatch && <div style={{ fontSize: 10, color: "#854d0e" }}>rework</div>}</Td><Td>{dateText(c.challanDate)}</Td><Td right>{qty(c.totalQty)}</Td><Td right>{qty(c.returnedQty)}</Td>
+                  <Td><Badge map={CHALLAN_STYLE} value={c.status} /></Td><Td>{c.ewayBillNo || "—"}</Td>
+                  <Td><button style={{ ...btn(), padding: "3px 10px" }} onClick={() => openPrint(c.id)}>Print</button>
+                    {c.status === "POSTED" && ["APPROVER", "ADMIN"].includes(user.role) && <button style={{ ...btn(), padding: "3px 10px", marginLeft: 4 }} onClick={() => cancelChallan(c)}>Reverse</button>}</Td>
+                </tr>
+              ))}
+            </Table>
+          )}
+          {printing && <div style={{ fontSize: 11, color: "#64748b", marginTop: 6 }}>Opening print view…</div>}
+        </>
       )}
-      <h4 style={h4}>Stock ledger for this order</h4>
-      {d.ledger.length === 0 ? <Empty text="No movements yet." /> : (
-        <Table headers={["When", "Item", "Movement", "Qty (+ out / − back)", "Balance with worker", "Reference"]} minWidth={700}>
-          {d.ledger.map((x) => <tr key={x.id}><Td>{formatDisplayDate(x.createdAt)}</Td><Td>{x.category}</Td><Td>{x.movementType}</Td><Td right>{qty(x.qty)}</Td><Td right>{qty(x.balanceAfter)}</Td><Td>{x.referenceNo}</Td></tr>)}
-        </Table>
+      {tab === "received" && (
+        <>
+          {canReceive && <div style={{ marginBottom: 10 }}><button style={{ ...btn("primary"), fontSize: 14, padding: "9px 18px" }} onClick={() => setScreenForm("receipt")}>+ Receive material back</button></div>}
+          {d.receipts.length === 0 ? <Empty text="Nothing has come back from the job worker yet." /> : (
+            <Table headers={["Receipt", "Date", "Delivery note", "Quantity received", "Inspection", ""]} minWidth={650}>
+              {d.receipts.map((r) => {
+                const st = inspectionOf(r.pendingInspectionLines);
+                return (
+                  <tr key={r.id}>
+                    <Td><b>{r.receiptNumber}</b></Td><Td>{dateText(r.receiptDate)}</Td><Td>{r.deliveryNoteNo || "—"}</Td><Td right>{qty(r.receivedQty)}</Td>
+                    <Td><Badge map={INSPECT_STYLE} value={st} />{st === "PENDING" && <div style={{ fontSize: 10, color: "#92400e" }}>{r.pendingInspectionLines} line(s) left</div>}</Td>
+                    <Td><button style={{ ...btn(st === "PENDING" ? "primary" : "ghost"), padding: "3px 12px" }} onClick={() => setInspectId(r.id)}>{st === "PENDING" ? "Inspect" : "View"}</button></Td>
+                  </tr>
+                );
+              })}
+            </Table>
+          )}
+        </>
       )}
-      <h4 style={h4}>Approval history</h4>
-      {(d.history || []).length === 0 ? <Empty text="No activity." /> : (
-        <Table headers={["When", "Action", "From → To", "By (role)", "Comments"]} minWidth={600}>
-          {d.history.map((h) => <tr key={h.id}><Td>{formatDisplayDate(h.actedAt)}</Td><Td>{h.action}</Td><Td>{h.fromStatus || "—"} → {h.toStatus || "—"}</Td><Td>{h.actor} ({h.actorRole})</Td><Td>{h.comments || "—"}</Td></tr>)}
-        </Table>
+      {tab === "details" && (
+        <div style={grid4}>
+          <KV label="Job worker" value={d.workerName} />
+          <KV label="Source store" value={d.sourceDepartment} />
+          <KV label="Requesting department" value={d.requestingDepartment} />
+          <KV label="Estimated charges (per rate contract)" value={money(d.estimatedCharges)} />
+          <KV label="Payment terms" value={d.paymentTerms} />
+          <KV label="Expected completion" value={dateText(d.expectedCompletionDate)} />
+          <KV label="Quality specifications" value={d.qualitySpecs} />
+          <KV label="Delivery terms" value={d.deliveryTerms} />
+          <KV label="Remarks" value={d.remarks} />
+        </div>
       )}
-      {printing && <div style={{ fontSize: 11, color: "#64748b" }}>Opening print view…</div>}
+      {tab === "history" && (
+        <>
+          <h4 style={{ ...h4, marginTop: 0 }}>Approvals and actions</h4>
+          {(d.history || []).length === 0 ? <Empty text="No activity yet." /> : (
+            <Table headers={["When", "What happened", "Status change", "By (role)", "Comments"]} minWidth={600}>
+              {d.history.map((h) => <tr key={h.id}><Td>{formatDisplayDate(h.actedAt)}</Td><Td>{h.action}</Td><Td>{h.fromStatus || "—"} → {h.toStatus || "—"}</Td><Td>{h.actor} ({h.actorRole})</Td><Td>{h.comments || "—"}</Td></tr>)}
+            </Table>
+          )}
+          <h4 style={h4}>Material movements with the worker</h4>
+          {d.ledger.length === 0 ? <Empty text="No movements yet." /> : (
+            <Table headers={["When", "Item", "Movement", "Quantity", "Balance with worker", "Reference"]} minWidth={700}>
+              {d.ledger.map((x) => <tr key={x.id}><Td>{formatDisplayDate(x.createdAt)}</Td><Td>{x.category}</Td><Td>{x.movementType}</Td><Td right>{qty(x.qty)}</Td><Td right>{qty(x.balanceAfter)}</Td><Td>{x.referenceNo}</Td></tr>)}
+            </Table>
+          )}
+        </>
+      )}
       {screenForm === "challan" && <ChallanForm user={user} order={d} onClose={() => setScreenForm(null)}
-        onSaved={(c, msg) => { setScreenForm(null); flash(msg); load(); onChanged(); }} />}
+        onSaved={(c, msg) => { setScreenForm(null); setTab("sent"); flash(msg); load(); onChanged(); }} />}
       {screenForm === "receipt" && <ReceiptForm user={user} order={d} challans={d.challans} onClose={() => setScreenForm(null)}
-        onSaved={(r, msg) => { setScreenForm(null); flash(msg); load(); onChanged(); }} />}
+        onSaved={(r, msg) => { setScreenForm(null); setTab("received"); flash(msg); load(); onChanged(); }} />}
+      {inspectId && <ReceiptDetail id={inspectId} user={user} flash={flash} onClose={() => setInspectId(null)} onChanged={() => { load(); onChanged(); }} />}
+      {ask && <ReasonModal title={ask.title} confirmLabel={ask.confirmLabel} onCancel={() => setAsk(null)} onConfirm={(text) => { const run = ask.run; setAsk(null); run(text); }} />}
     </Modal>
   );
 }
 
 function OrdersScreen({ user, filter, workers, locations, operations, categories, items, indents, flash }) {
   const [q, setQ] = useState("");
-  const [status, setStatus] = useState(filter.status || "");
-  const [overdue, setOverdue] = useState(filter.overdue || "");
+  const [status, setStatus] = useState(filter.overdue ? "OVERDUE" : filter.status || "");
   const [page, setPage] = useState(0);
   const [data, setData] = useState({ content: [], totalElements: 0, totalPages: 0 });
   const [error, setError] = useState("");
   const [creating, setCreating] = useState(null);
   const [detailId, setDetailId] = useState(null);
   const [tick, setTick] = useState(0);
-  useEffect(() => { setStatus(filter.status || ""); setOverdue(filter.overdue || ""); }, [filter]);
-  useEffect(() => { setPage(0); }, [q, status, overdue]);
+  const counts = useStatusCounts("/orders", user, tick);
+  useEffect(() => { setStatus(filter.overdue ? "OVERDUE" : filter.status || ""); }, [filter]);
+  useEffect(() => { setPage(0); }, [q, status]);
   useEffect(() => {
     const params = new URLSearchParams({ page: String(page), size: "20" });
     if (q) params.set("q", q);
-    if (status) params.set("status", status);
-    if (overdue) params.set("overdue", overdue);
+    if (status === "OVERDUE") params.set("overdue", "true"); else if (status) params.set("status", status);
     api("GET", `/orders?${params}`, user).then((d) => { setData(d); setError(""); }).catch((e) => setError(e.message));
-  }, [user, q, status, overdue, page, tick]);
+  }, [user, q, status, page, tick]);
   const onChanged = () => setTick((t) => t + 1);
+  const order = ["PENDING_APPROVAL", "APPROVED", "IN_PROGRESS", "PARTIALLY_RECEIVED", "COMPLETED", "DRAFT", "REJECTED", "CLOSED", "CANCELLED"];
+  const chips = [{ key: "", label: "All", count: counts ? counts._all : null },
+    ...order.map((k) => ({ key: k, label: ORDER_STYLE[k].label, count: counts ? counts[k] || 0 : null, tone: ORDER_STYLE[k].fg })),
+    { key: "OVERDUE", label: "Overdue", count: counts ? counts._overdue || 0 : null, tone: "#991b1b" }];
   return (
     <div>
+      <ScreenIntro title="Step 2 · Job Work Orders" text="An order says which material goes to which job worker, for which operation. Open an order to send material, receive it back and inspect it."
+        action={<button style={{ ...btn("primary"), fontSize: 13, padding: "7px 18px" }} onClick={() => setCreating({ indent: null })}>+ New job work order</button>} />
       {error && <Banner kind="error">{error}</Banner>}
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10, alignItems: "flex-end" }}>
-        <div style={{ width: 260 }}><Field label="Search"><input style={inp} placeholder="Order no., worker or item" value={q} onChange={(e) => setQ(e.target.value)} /></Field></div>
-        <div style={{ width: 200 }}><Field label="Status"><select style={inp} value={status} onChange={(e) => setStatus(e.target.value)}><option value="">All</option>{Object.entries(ORDER_STYLE).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select></Field></div>
-        <div style={{ width: 170 }}><Field label="Overdue"><select style={inp} value={overdue} onChange={(e) => setOverdue(e.target.value)}><option value="">All</option><option value="true">Past return date</option></select></Field></div>
-        <div style={{ marginLeft: "auto" }}><button style={btn("primary")} onClick={() => setCreating({ indent: null })}>+ New job work order</button></div>
-      </div>
-      <Table headers={["Order no.", "Date", "Job worker", "Items", "Input qty", "With worker", "Est. charges", "Return by", "Status", "Next step"]} minWidth={1150}>
-        {data.content.length === 0 && <tr><Td>No orders match.</Td></tr>}
+      <Chips options={chips} value={status} onChange={setStatus} />
+      <div style={{ width: 320, marginBottom: 10 }}><input style={inp} placeholder="Search by order no., job worker or item" value={q} onChange={(e) => setQ(e.target.value)} /></div>
+      <Table headers={["Order no.", "Date", "Job worker", "Items", "Progress", "Return by", "Status", "What happens next", ""]} minWidth={1150}>
+        {data.content.length === 0 && <tr><Td>No orders here.</Td></tr>}
         {data.content.map((r) => (
-          <tr key={r.id} style={{ background: r.overdue ? "#fef2f2" : "transparent" }}>
-            <Td><button onClick={() => setDetailId(r.id)} style={{ border: "none", background: "none", color: "#2563eb", fontWeight: 700, cursor: "pointer", padding: 0 }}>{r.jwoNumber}</button></Td>
-            <Td>{dateText(r.jwoDate)}</Td><Td>{r.workerName}</Td><Td>{r.items}</Td><Td right>{qty(r.inputTotal)}</Td><Td right>{qty(r.pendingWithWorker)}</Td>
-            <Td right>{money(r.estimatedCharges)}</Td><Td>{dateText(r.expectedReturnDate)}{r.overdue && <div style={{ fontSize: 10, color: "#991b1b", fontWeight: 700 }}>Overdue</div>}</Td>
-            <Td><Badge map={ORDER_STYLE} value={r.status} /></Td><Td>{ORDER_NEXT_STEP[r.status] || "—"}</Td>
+          <tr key={r.id} onClick={() => setDetailId(r.id)} style={{ background: r.overdue ? "#fef2f2" : "transparent", cursor: "pointer" }}>
+            <Td><b style={{ color: "#2563eb" }}>{r.jwoNumber}</b></Td>
+            <Td>{dateText(r.jwoDate)}</Td><Td>{r.workerName}</Td><Td>{r.items}</Td>
+            <Td>
+              <div style={{ minWidth: 150 }}>
+                <div style={{ fontSize: 10, color: "#64748b" }}>Sent {qty(r.dispatchedTotal)} of {qty(r.inputTotal)}</div><Bar value={r.dispatchedTotal} total={r.inputTotal} color="#6366f1" height={6} />
+                <div style={{ fontSize: 10, color: "#64748b", marginTop: 4 }}>Back {qty(r.receivedTotal)} of {qty(r.dispatchedTotal)}</div><Bar value={r.receivedTotal} total={r.dispatchedTotal} color="#16a34a" height={6} />
+              </div>
+            </Td>
+            <Td>{dateText(r.expectedReturnDate)}{r.overdue && <div style={{ fontSize: 10, color: "#991b1b", fontWeight: 700 }}>Overdue</div>}</Td>
+            <Td><Badge map={ORDER_STYLE} value={r.status} /></Td>
+            <Td>{ORDER_NEXT_STEP[r.status] || "—"}<div style={{ fontSize: 10, color: "#64748b" }}>{ORDER_WHO[r.status] && ORDER_WHO[r.status] !== "—" ? `By: ${ORDER_WHO[r.status]}` : ""}</div></Td>
+            <Td><button style={{ ...btn("primary"), padding: "4px 12px" }} onClick={(e) => { e.stopPropagation(); setDetailId(r.id); }}>Open</button></Td>
           </tr>
         ))}
       </Table>
@@ -1309,6 +1640,67 @@ function OrdersScreen({ user, filter, workers, locations, operations, categories
         onSaved={(d, msg) => { setCreating(null); flash(msg); onChanged(); setDetailId(d.id); }} />}
       {detailId && <OrderDetail id={detailId} user={user} flash={flash} onChanged={onChanged} onClose={() => setDetailId(null)}
         locations={locations} workers={workers} operations={operations} categories={categories} items={items} indents={indents} />}
+    </div>
+  );
+}
+
+// Loads one order and opens the send or receive page straight away (used by the Send and Receive work lists).
+function QuickOrderForm({ id, kind, user, onClose, onDone }) {
+  const [d, setD] = useState(null);
+  const [error, setError] = useState("");
+  useEffect(() => { api("GET", `/orders/${id}`, user).then(setD).catch((e) => setError(e.message)); }, [id, user]);
+  if (!d) return <Modal page title="Job work order" onClose={onClose}>{error ? <Banner kind="error">{error}</Banner> : <Empty text="Loading…" />}</Modal>;
+  return kind === "send"
+    ? <ChallanForm user={user} order={d} onClose={onClose} onSaved={onDone} />
+    : <ReceiptForm user={user} order={d} challans={d.challans} onClose={onClose} onSaved={onDone} />;
+}
+
+// The orders that can be worked on today: approved or in progress, merged from the status lists.
+function useOpenOrders(user, tick) {
+  const [rows, setRows] = useState(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    Promise.all(["APPROVED", "IN_PROGRESS", "PARTIALLY_RECEIVED"].map((s) => api("GET", `/orders?status=${s}&size=200`, user).then((d) => d.content || [])))
+      .then((parts) => { setRows(parts.flat().sort((a, b) => String(a.expectedReturnDate || "9999").localeCompare(String(b.expectedReturnDate || "9999")))); setError(""); })
+      .catch((e) => setError(e.message));
+  }, [user, tick]);
+  return { rows, error };
+}
+
+function WorkList({ kind, user, flash }) {
+  const [tick, setTick] = useState(0);
+  const [openId, setOpenId] = useState(null);
+  const { rows, error } = useOpenOrders(user, tick);
+  const isSend = kind === "send";
+  const canAct = ["STORE", "ADMIN"].includes(user.role);
+  const list = (rows || []).filter((r) => (isSend ? num(r.inputTotal) - num(r.dispatchedTotal) > 0 || num(r.reworkPendingTotal) > 0 : num(r.pendingWithWorker) > 0));
+  return (
+    <div>
+      <ScreenIntro title={isSend ? "Step 3 · Send Material" : "Step 4 · Receive Material"}
+        text={isSend ? "Approved orders that still have material to send to a job worker. Press Send material, enter the quantity and a delivery challan is created."
+          : "Orders where material is still with a job worker. Press Receive material when something comes back. It then goes to Step 5, Inspection."} />
+      {error && <Banner kind="error">{error}</Banner>}
+      {!canAct && <Banner kind="warn">You are acting as {user.role}. Only the STORE role can {isSend ? "send" : "receive"} material. Change the role at the top right.</Banner>}
+      {!rows ? <Empty text="Loading…" /> : list.length === 0 ? (
+        <div style={{ background: "#f8fafc", border: "1px dashed #cbd5e1", borderRadius: 10, padding: 24, textAlign: "center", color: "#64748b", fontSize: 14 }}>
+          {isSend ? "Nothing is waiting to be sent. Approve a job work order first." : "No material is with any job worker right now."}
+        </div>
+      ) : (
+        <Table headers={isSend ? ["Order no.", "Job worker", "Items", "Ordered", "Already sent", "Left to send", "Return by", "Status", ""]
+          : ["Order no.", "Job worker", "Items", "Sent", "Received back", "Still with worker", "Return by", "Status", ""]} minWidth={1000}>
+          {list.map((r) => (
+            <tr key={r.id} style={{ background: r.overdue ? "#fef2f2" : "transparent" }}>
+              <Td><b>{r.jwoNumber}</b></Td><Td>{r.workerName}</Td><Td>{r.items}</Td>
+              {isSend ? <><Td right>{qty(r.inputTotal)}</Td><Td right>{qty(r.dispatchedTotal)}</Td><Td right><b style={{ color: "#1d4ed8" }}>{qty(num(r.inputTotal) - num(r.dispatchedTotal))}</b></Td></>
+                : <><Td right>{qty(r.dispatchedTotal)}</Td><Td right>{qty(r.receivedTotal)}</Td><Td right><b style={{ color: "#854d0e" }}>{qty(r.pendingWithWorker)}</b></Td></>}
+              <Td>{dateText(r.expectedReturnDate)}{r.overdue && <div style={{ fontSize: 10, color: "#991b1b", fontWeight: 700 }}>Overdue</div>}</Td>
+              <Td><Badge map={ORDER_STYLE} value={r.status} /></Td>
+              <Td><button disabled={!canAct} title={canAct ? "" : "Needs the STORE role"} style={{ ...btn("primary"), padding: "6px 14px", opacity: canAct ? 1 : 0.5 }} onClick={() => setOpenId(r.id)}>{isSend ? "Send material" : "Receive material"}</button></Td>
+            </tr>
+          ))}
+        </Table>
+      )}
+      {openId && <QuickOrderForm id={openId} kind={kind} user={user} onClose={() => setOpenId(null)} onDone={(x, msg) => { setOpenId(null); flash(msg); setTick((t) => t + 1); }} />}
     </div>
   );
 }
@@ -1338,7 +1730,7 @@ function ChallansScreen({ user, flash, refs, onChanged }) {
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10, alignItems: "flex-end" }}>
         <div style={{ width: 280 }}><Field label="Search"><input style={inp} placeholder="Challan no., order or worker" value={q} onChange={(e) => setQ(e.target.value)} /></Field></div>
         <div style={{ width: 180 }}><Field label="Status"><select style={inp} value={status} onChange={(e) => setStatus(e.target.value)}><option value="">All</option>{Object.entries(CHALLAN_STYLE).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select></Field></div>
-        <div style={{ marginLeft: "auto", fontSize: 12, color: "#64748b" }}>Challans are created from an order: open the order and choose Dispatch material.</div>
+        <div style={{ marginLeft: "auto", fontSize: 12, color: "#64748b" }}>This is a register. To make a challan, use Step 3 · Send Material.</div>
       </div>
       <Table headers={["Challan no.", "Date", "Order", "Job worker", "Qty", "Transporter / vehicle", "E-way bill", "Status"]} minWidth={900}>
         {data.content.length === 0 && <tr><Td>No challans match.</Td></tr>}
@@ -1370,55 +1762,80 @@ function ReceiptDetail({ id, user, onClose, flash, onChanged }) {
       await api("POST", `/receipt-lines/${line.receiptLineId}/inspect`, user, {
         acceptedQty: num(f.acc), rejectedQty: num(f.rej), reworkQty: num(f.rew), scrapQty: num(f.scr), defectCode: f.defect || null, remarks: f.remarks || null
       });
-      flash(`Line ${line.lineNo} inspected: accepted stock released to store, rejects to Rejection Store.`);
+      flash(`Item ${line.itemCode} inspected and saved.`);
       load(); onChanged();
     } catch (e) { flash(e.message, true); }
   };
-  if (!d) return <Modal title="Receipt" onClose={onClose}>{error ? <Banner kind="error">{error}</Banner> : <Empty text="Loading…" />}</Modal>;
+  if (!d) return <Modal page title="Receipt" onClose={onClose} backLabel="Back">{error ? <Banner kind="error">{error}</Banner> : <Empty text="Loading…" />}</Modal>;
+  const lines = d.lines || [];
+  const pending = lines.filter((l) => l.inspectionStatus === "PENDING").length;
   return (
-    <Modal title={`${d.receiptNumber} · ${d.jwoNumber}`} onClose={onClose} width={1000}>
+    <Modal page title={`${d.receiptNumber} · ${d.jwoNumber}`} onClose={onClose} backLabel="Back" badge={<Badge map={INSPECT_STYLE} value={pending > 0 ? "PENDING" : "DONE"} />}>
       {error && <Banner kind="error">{error}</Banner>}
-      <div style={grid4}>
-        <KV label="Receipt date" value={dateText(d.receiptDate)} />
-        <KV label="Job worker" value={d.workerName} />
-        <KV label="Delivery note" value={d.deliveryNoteNo} />
-        <KV label="Challan" value={d.challanNumber} />
-        <KV label="Received by" value={d.receivedBy} />
+      <div style={{ fontSize: 12, color: "#64748b", marginBottom: 10 }}>
+        From {d.workerName} · received {dateText(d.receiptDate)} by {d.receivedBy || "—"}{d.deliveryNoteNo ? ` · delivery note ${d.deliveryNoteNo}` : ""}{d.challanNumber ? ` · against ${d.challanNumber}` : ""}
       </div>
-      <h4 style={h4}>Inspection (Quality Hold → store / rejection store / rework)</h4>
-      <Table headers={["Line", "Item", "Received", "Inspection", "Accepted", "Rejected", "Rework", "Scrap", "Defect / remarks", ""]} minWidth={1000}>
-        {d.lines.map((l) => {
-          const f = forms[l.receiptLineId] || {};
-          const setF = (k, v) => setForms((x) => ({ ...x, [l.receiptLineId]: { ...(x[l.receiptLineId] || {}), [k]: v } }));
-          const pending = l.inspectionStatus === "PENDING";
-          return (
-            <tr key={l.receiptLineId}>
-              <Td>{l.lineNo}</Td><Td>{l.itemCode}</Td><Td right>{qty(l.qtyReceived)}</Td>
-              <Td>{l.inspectionStatus === "INSPECTED" ? <span style={{ color: "#166534", fontWeight: 700 }}>Inspected</span> : <span style={{ color: "#854d0e", fontWeight: 700 }}>Pending</span>}</Td>
-              {pending ? (
-                <>
-                  <Td><input type="number" min="0" step="0.01" style={{ ...inp, width: 80 }} value={f.acc || ""} onChange={(e) => setF("acc", e.target.value)} /></Td>
-                  <Td><input type="number" min="0" step="0.01" style={{ ...inp, width: 80 }} value={f.rej || ""} onChange={(e) => setF("rej", e.target.value)} /></Td>
-                  <Td><input type="number" min="0" step="0.01" style={{ ...inp, width: 80 }} value={f.rew || ""} onChange={(e) => setF("rew", e.target.value)} /></Td>
-                  <Td><input type="number" min="0" step="0.01" style={{ ...inp, width: 80 }} value={f.scr || ""} onChange={(e) => setF("scr", e.target.value)} /></Td>
-                  <Td><input style={{ ...inp, width: 150 }} placeholder="Defect code" value={f.defect || ""} onChange={(e) => setF("defect", e.target.value)} />
-                    <input style={{ ...inp, width: 150, marginTop: 4 }} placeholder="Remarks" value={f.remarks || ""} onChange={(e) => setF("remarks", e.target.value)} /></Td>
-                  <Td><button style={btn("primary")} onClick={() => inspect(l)}>Save</button></Td>
-                </>
-              ) : (
-                <>
-                  <Td right>{qty(l.acceptedQty)}</Td><Td right>{qty(l.rejectedQty)}</Td><Td right>{qty(l.reworkQty)}</Td><Td right>{qty(l.scrapQty)}</Td>
-                  <Td>{l.defectCode || "—"} {l.inspectionRemarks ? `· ${l.inspectionRemarks}` : ""}<div style={{ fontSize: 10, color: "#64748b" }}>{l.inspectedBy || ""}</div></Td><Td>—</Td>
-                </>
-              )}
-            </tr>
-          );
-        })}
-      </Table>
-      <div style={{ fontSize: 11, color: "#64748b", marginTop: 6 }}>Accepted + rejected + rework + scrap must equal the received quantity. A line can be inspected once.</div>
-      <h4 style={h4}>History</h4>
+      <div style={{ background: pending > 0 ? "#eff6ff" : "#f0fdf4", border: `2px solid ${pending > 0 ? "#93c5fd" : "#86efac"}`, borderRadius: 12, padding: "14px 16px", marginBottom: 14 }}>
+        <div style={{ fontSize: 11, fontWeight: 800, color: pending > 0 ? "#1d4ed8" : "#166534", letterSpacing: 0.6 }}>{pending > 0 ? "YOUR TURN · INSPECTION" : "INSPECTION COMPLETE"}</div>
+        <div style={{ fontSize: 16, fontWeight: 700, color: "#0f172a", marginTop: 4 }}>
+          {pending > 0 ? `${pending} item${pending > 1 ? "s" : ""} left to inspect. Split each received quantity into accepted, rejected, rework and scrap. The four must add up to the quantity received.`
+            : "Every item on this receipt has been inspected."}
+        </div>
+      </div>
+      <div style={tileGrid}>
+        <Tile label="Received" value={qty(sumOf(lines, "qtyReceived"))} />
+        <Tile label="Accepted" value={qty(sumOf(lines, "acceptedQty"))} tone="#166534" />
+        <Tile label="Rejected" value={qty(sumOf(lines, "rejectedQty"))} tone="#991b1b" />
+        <Tile label="Rework" value={qty(sumOf(lines, "reworkQty"))} tone="#854d0e" />
+        <Tile label="Scrap" value={qty(sumOf(lines, "scrapQty"))} tone="#475569" />
+      </div>
+      <h4 style={{ ...h4, fontSize: 15 }}>Items</h4>
+      {lines.map((l) => {
+        const f = forms[l.receiptLineId] || {};
+        const setF = (k) => (v) => setForms((x) => ({ ...x, [l.receiptLineId]: { ...(x[l.receiptLineId] || {}), [k]: v } }));
+        const isPending = l.inspectionStatus === "PENDING";
+        const received = num(l.qtyReceived);
+        const used = num(f.acc) + num(f.rej) + num(f.rew) + num(f.scr);
+        const left = Math.round((received - used) * 1000) / 1000;
+        const needsDefect = num(f.rej) + num(f.rew) + num(f.scr) > 0;
+        return (
+          <LineCard key={l.receiptLineId} title={`${l.lineNo}. ${l.itemCode}`} sub={l.operationName || ""}
+            facts={[{ label: "Received", value: qty(l.qtyReceived) }, { label: "Inspection", value: <Badge map={INSPECT_STYLE} value={isPending ? "PENDING" : "DONE"} /> }]}>
+            {isPending ? (
+              <>
+                <QtyBox label="Accepted" value={f.acc} fill={Math.max(0, num(left) + num(f.acc))} fillLabel="Rest" onChange={setF("acc")} width={100} />
+                <QtyBox label="Rejected" value={f.rej} onChange={setF("rej")} width={100} />
+                <QtyBox label="Rework" value={f.rew} onChange={setF("rew")} width={100} />
+                <QtyBox label="Scrap" value={f.scr} onChange={setF("scr")} width={100} />
+                <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 190 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b" }}>Defect code {needsDefect ? "(needed)" : "(if any)"}</span>
+                  <input style={inp} placeholder="e.g. DIM-01" value={f.defect || ""} onChange={(e) => setF("defect")(e.target.value)} />
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 190 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b" }}>Remarks</span>
+                  <input style={inp} value={f.remarks || ""} onChange={(e) => setF("remarks")(e.target.value)} />
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, justifyContent: "flex-end" }}>
+                  <span style={{ fontSize: 12, fontWeight: 800, color: left === 0 ? "#166534" : "#92400e" }}>{left === 0 ? "✓ Adds up to the received quantity" : left > 0 ? `${qty(left)} still to allocate` : `${qty(-left)} too much`}</span>
+                  <button style={{ ...btn("primary"), padding: "8px 18px", opacity: left === 0 ? 1 : 0.5 }} disabled={left !== 0} onClick={() => inspect(l)}>Save inspection</button>
+                </div>
+              </>
+            ) : (
+              <>
+                {[["Accepted", l.acceptedQty, "#166534"], ["Rejected", l.rejectedQty, "#991b1b"], ["Rework", l.reworkQty, "#854d0e"], ["Scrap", l.scrapQty, "#475569"]].map(([label, v, tone]) => (
+                  <div key={label}><div style={{ fontSize: 11, color: "#64748b" }}>{label}</div><div style={{ fontSize: 16, fontWeight: 800, color: tone }}>{qty(v)}</div></div>
+                ))}
+                <div><div style={{ fontSize: 11, color: "#64748b" }}>Defect / remarks</div><div style={{ fontSize: 13 }}>{l.defectCode || "—"}{l.inspectionRemarks ? ` · ${l.inspectionRemarks}` : ""}</div></div>
+                <div><div style={{ fontSize: 11, color: "#64748b" }}>Inspected by</div><div style={{ fontSize: 13 }}>{l.inspectedBy || "—"}</div></div>
+              </>
+            )}
+          </LineCard>
+        );
+      })}
+      <div style={{ fontSize: 12, color: "#64748b" }}>{DEFECTS_NOTE} An item can be inspected only once.</div>
+      <h4 style={{ ...h4, fontSize: 15 }}>History</h4>
       {(d.history || []).length === 0 ? <Empty text="No activity." /> : (
-        <Table headers={["When", "Action", "By (role)", "Detail"]} minWidth={500}>
+        <Table headers={["When", "What happened", "By (role)", "Detail"]} minWidth={500}>
           {d.history.map((h) => <tr key={h.id}><Td>{formatDisplayDate(h.actedAt)}</Td><Td>{h.action}</Td><Td>{h.actor} ({h.actorRole})</Td><Td>{h.comments || "—"}</Td></tr>)}
         </Table>
       )}
@@ -1431,34 +1848,45 @@ function ReceiptsScreen({ user, filter, flash }) {
   const [inspection, setInspection] = useState(filter.inspection || "");
   const [page, setPage] = useState(0);
   const [data, setData] = useState({ content: [], totalElements: 0, totalPages: 0 });
+  const [all, setAll] = useState(null);
   const [error, setError] = useState("");
   const [detailId, setDetailId] = useState(null);
   const [tick, setTick] = useState(0);
   useEffect(() => { setInspection(filter.inspection || ""); }, [filter]);
   useEffect(() => { setPage(0); }, [q, inspection]);
   useEffect(() => {
+    api("GET", "/receipts?size=200", user).then((d) => setAll(d.content || [])).catch(() => setAll(null));
+  }, [user, tick]);
+  useEffect(() => {
     const params = new URLSearchParams({ page: String(page), size: "20" });
     if (q) params.set("q", q);
     if (inspection) params.set("inspection", inspection);
     api("GET", `/receipts?${params}`, user).then((d) => { setData(d); setError(""); }).catch((e) => setError(e.message));
   }, [user, q, inspection, page, tick]);
+  const waiting = all ? all.filter((r) => num(r.pendingInspectionLines) > 0).length : null;
+  const chips = [{ key: "", label: "All", count: all ? all.length : null },
+    { key: "PENDING", label: "Awaiting inspection", count: waiting, tone: "#92400e" },
+    { key: "DONE", label: "Inspected", count: all ? all.length - waiting : null, tone: "#166534" }];
   return (
     <div>
+      <ScreenIntro title="Step 5 · Inspection" text="Material that came back from a job worker is checked here. Open a receipt and split each quantity into accepted, rejected, rework and scrap." />
       {error && <Banner kind="error">{error}</Banner>}
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10, alignItems: "flex-end" }}>
-        <div style={{ width: 280 }}><Field label="Search"><input style={inp} placeholder="Receipt no., order or worker" value={q} onChange={(e) => setQ(e.target.value)} /></Field></div>
-        <div style={{ width: 200 }}><Field label="Inspection"><select style={inp} value={inspection} onChange={(e) => setInspection(e.target.value)}><option value="">All</option><option value="PENDING">Awaiting inspection</option><option value="DONE">Inspected</option></select></Field></div>
-      </div>
-      <Table headers={["Receipt no.", "Date", "Order", "Job worker", "Qty received", "Awaiting inspection", "Received by"]} minWidth={860}>
-        {data.content.length === 0 && <tr><Td>No receipts match.</Td></tr>}
-        {data.content.map((r) => (
-          <tr key={r.id}>
-            <Td><button onClick={() => setDetailId(r.id)} style={{ border: "none", background: "none", color: "#2563eb", fontWeight: 700, cursor: "pointer", padding: 0 }}>{r.receiptNumber}</button></Td>
-            <Td>{dateText(r.receiptDate)}</Td><Td>{r.jwoNumber}</Td><Td>{r.workerName}</Td><Td right>{qty(r.receivedQty)}</Td>
-            <Td>{num(r.pendingInspectionLines) > 0 ? <span style={{ color: "#854d0e", fontWeight: 700 }}>{r.pendingInspectionLines} line(s)</span> : <span style={{ color: "#166534" }}>Done</span>}</Td>
-            <Td>{r.receivedBy}</Td>
-          </tr>
-        ))}
+      <Chips options={chips} value={inspection} onChange={setInspection} />
+      <div style={{ width: 320, marginBottom: 10 }}><input style={inp} placeholder="Search by receipt no., order or job worker" value={q} onChange={(e) => setQ(e.target.value)} /></div>
+      <Table headers={["Receipt no.", "Date", "Order", "Job worker", "Qty received", "Inspection", "Received by", ""]} minWidth={900}>
+        {data.content.length === 0 && <tr><Td>No receipts here.</Td></tr>}
+        {data.content.map((r) => {
+          const st = inspectionOf(r.pendingInspectionLines);
+          return (
+            <tr key={r.id} onClick={() => setDetailId(r.id)} style={{ cursor: "pointer" }}>
+              <Td><b style={{ color: "#2563eb" }}>{r.receiptNumber}</b></Td>
+              <Td>{dateText(r.receiptDate)}</Td><Td>{r.jwoNumber}</Td><Td>{r.workerName}</Td><Td right>{qty(r.receivedQty)}</Td>
+              <Td><Badge map={INSPECT_STYLE} value={st} />{st === "PENDING" && <div style={{ fontSize: 10, color: "#92400e" }}>{r.pendingInspectionLines} item(s) left</div>}</Td>
+              <Td>{r.receivedBy}</Td>
+              <Td><button style={{ ...btn(st === "PENDING" ? "primary" : "ghost"), padding: "4px 12px" }} onClick={(e) => { e.stopPropagation(); setDetailId(r.id); }}>{st === "PENDING" ? "Inspect" : "View"}</button></Td>
+            </tr>
+          );
+        })}
       </Table>
       <Pager page={page} totalPages={data.totalPages} total={data.totalElements} onPage={setPage} />
       {detailId && <ReceiptDetail id={detailId} user={user} flash={flash} onClose={() => setDetailId(null)} onChanged={() => setTick((t) => t + 1)} />}
@@ -1574,9 +2002,9 @@ function ReconOrderDetail({ id, user, onClose, flash, onChanged }) {
   const [requesting, setRequesting] = useState(false);
   const load = useCallback(() => api("GET", `/reconciliation/orders/${id}`, user).then(setD).catch((e) => setError(e.message)), [id, user]);
   useEffect(() => { load(); }, [load]);
-  if (!d) return <Modal title="Reconciliation" onClose={onClose}>{error ? <Banner kind="error">{error}</Banner> : <Empty text="Loading…" />}</Modal>;
+  if (!d) return <Modal page title="Reconciliation" onClose={onClose}>{error ? <Banner kind="error">{error}</Banner> : <Empty text="Loading…" />}</Modal>;
   return (
-    <Modal title={`Reconciliation — ${d.jwoNumber} · ${d.workerName}`} onClose={onClose} width={1200}
+    <Modal page title={`Reconciliation — ${d.jwoNumber} · ${d.workerName}`} onClose={onClose} width={1200}
       footer={<><button style={btn()} onClick={onClose}>Close</button><button style={btn("primary")} onClick={() => setRequesting(true)}>Request adjustment</button></>}>
       {error && <Banner kind="error">{error}</Banner>}
       <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10, flexWrap: "wrap" }}>
@@ -1813,6 +2241,8 @@ function ReportsScreen({ user, flash }) {
     api("GET", "/workers?size=200", user).then((d) => setWorkers(d.content)).catch(() => {});
   }, [user]);
   const current = catalogue.find((c) => c.key === key);
+  // A column is numeric when any row holds a number: header and every cell under it (even an empty "—") align right.
+  const numericCols = new Set(report ? report.columns.filter((c) => report.rows.some((r) => typeof r[c] === "number")) : []);
   const run = async () => {
     setError(""); setLoading(true);
     try {
@@ -1865,8 +2295,8 @@ function ReportsScreen({ user, flash }) {
           <div style={{ overflowX: "auto", border: "1px solid #e2e8f0", borderRadius: 8 }}>
             <div style={{ fontSize: 12, color: "#64748b", padding: "6px 8px" }}>{report.rows.length} row(s)</div>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-              <thead><tr style={{ background: "#f8fafc" }}>{report.columns.map((c) => <th key={c} style={{ textAlign: isNumericHeader(c) || report.rows.some((r) => typeof r[c] === "number") ? "right" : "left", padding: "7px 8px", borderBottom: "1px solid #e2e8f0", whiteSpace: "nowrap" }}>{c}</th>)}</tr></thead>
-              <tbody>{report.rows.map((r, i) => <tr key={i}>{report.columns.map((c) => <Td key={c} right={typeof r[c] === "number"}>{typeof r[c] === "number" ? qty(r[c]) : typeof r[c] === "boolean" ? (r[c] ? "Yes" : "No") : (r[c] === null || r[c] === undefined || r[c] === "" ? "—" : String(r[c]))}</Td>)}</tr>)}</tbody>
+              <thead><tr style={{ background: "#f8fafc" }}>{report.columns.map((c) => <th key={c} style={{ textAlign: numericCols.has(c) ? "right" : "left", padding: "7px 8px", borderBottom: "1px solid #e2e8f0", whiteSpace: "nowrap" }}>{c}</th>)}</tr></thead>
+              <tbody>{report.rows.map((r, i) => <tr key={i}>{report.columns.map((c) => <Td key={c} right={numericCols.has(c)}>{typeof r[c] === "number" ? qty(r[c]) : typeof r[c] === "boolean" ? (r[c] ? "Yes" : "No") : (r[c] === null || r[c] === undefined || r[c] === "" ? "—" : String(r[c]))}</Td>)}</tr>)}</tbody>
             </table>
           </div>
         ))}
@@ -1914,42 +2344,44 @@ export function JobWorkPage({ screen = "dashboard", onBackToHome, onOpenSidebar,
 
   const tabBtn = (key, label) => (
     <button onClick={() => goTo(key, {})}
-      style={{ background: current === key ? "#3b82f6" : "rgba(255,255,255,0.08)", color: "#fff", border: "none", borderRadius: 6, padding: "6px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+      style={{ ...btn(current === key ? "primary" : "ghost"), fontSize: 13, padding: "7px 12px" }}>
       {label}
     </button>
   );
 
   return (
-    <div style={{ height: "100%", maxHeight: "100%", display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden", background: "#f1f5f9", borderRadius: 12, border: "1px solid #e2e8f0" }}>
+    <div style={{ height: "100%", maxHeight: "100%", display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden", background: "#f1f5f9", borderRadius: 0, border: "none" }}>
       {toast && <div style={{ position: "fixed", top: 24, right: 24, zIndex: 2000, background: toast.isError ? "#dc2626" : "#10b981", color: "#fff", padding: "12px 18px", borderRadius: 10, fontWeight: 700, fontSize: 13, boxShadow: "0 10px 30px rgba(0,0,0,0.2)", maxWidth: 460 }}>{toast.message}</div>}
 
-      <div style={{ flexShrink: 0, background: "#1e293b", borderBottom: "1px solid #334155", padding: "8px 18px 8px 44px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, color: "#fff" }}>
+      <div style={{ flexShrink: 0, background: "#fff", borderBottom: "1px solid #e2e8f0", padding: "9px 18px 9px 44px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginRight: 8 }}>
-            <div style={{ background: "#b45309", width: 28, height: 28, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: 11 }}>JW</div>
-            <span style={{ fontSize: 14, fontWeight: 800 }}>Job Work</span>
-          </div>
-          {SCREENS.map((s) => <React.Fragment key={s.key}>{tabBtn(s.key, s.label)}</React.Fragment>)}
+          {STEP_SCREENS.map((s) => <React.Fragment key={s.key}>{tabBtn(s.key, s.label)}</React.Fragment>)}
+          <span style={{ color: "#e2e8f0", margin: "0 4px", fontSize: 18 }}>|</span>
+          <select value={OTHER_SCREENS.some((o) => o.key === current) ? current : ""} onChange={(e) => e.target.value && goTo(e.target.value, {})}
+            style={{ ...btn(), padding: "7px 12px", fontSize: 13, background: OTHER_SCREENS.some((o) => o.key === current) ? "#1e293b" : "#fff", color: OTHER_SCREENS.some((o) => o.key === current) ? "#fff" : "#334155" }}>
+            <option value="" style={{ color: "#0f172a" }}>More: workers, ledger, reports…</option>
+            {OTHER_SCREENS.map((o) => <option key={o.key} value={o.key} style={{ color: "#0f172a" }}>{o.label}</option>)}
+          </select>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
-          <span style={{ color: "#94a3b8" }}>Acting as</span>
-          <input style={{ ...inp, width: 150, padding: "4px 8px" }} value={user.name} onChange={(e) => setUser({ ...user, name: e.target.value })} />
-          <select style={{ ...inp, width: 130, padding: "4px 8px" }} value={user.role} onChange={(e) => setUser({ ...user, role: e.target.value })}>{ROLES.map((r) => <option key={r} value={r}>{r}</option>)}</select>
-          <button onClick={onOpenSidebar} style={{ background: "rgba(255,255,255,0.08)", color: "#fff", border: "none", borderRadius: 6, padding: "5px 10px", fontSize: 12, cursor: "pointer" }}>{sidebarOpen ? "Hide menu" : "Menu"}</button>
-          <span onClick={onBackToHome} style={{ cursor: "pointer", color: "#60a5fa", textDecoration: "underline", marginLeft: 6 }}>Home</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 600, color: "#64748b", flexWrap: "wrap" }}>
+          <span onClick={onBackToHome} style={{ cursor: "pointer", color: "#2563eb", textDecoration: "underline" }}>Purchase</span>
+          <span>›</span><span>Job Work</span><span>›</span>
+          <span style={{ color: "#0f172a", fontWeight: 700 }}>{SCREENS.find((s) => s.key === current)?.label}</span>
+          <span style={{ color: "#e2e8f0", margin: "0 4px", fontSize: 18 }}>|</span>
+          <input title="Your name" style={{ ...inp, width: 130, padding: "5px 8px" }} value={user.name} onChange={(e) => setUser({ ...user, name: e.target.value })} />
+          <select title="Your role" style={{ ...inp, width: 120, padding: "5px 8px" }} value={user.role} onChange={(e) => setUser({ ...user, role: e.target.value })}>{ROLES.map((r) => <option key={r} value={r}>{r}</option>)}</select>
+          <button onClick={onOpenSidebar} style={{ ...btn(), padding: "5px 12px" }}>{sidebarOpen ? "Hide menu" : "Menu"}</button>
         </div>
       </div>
 
-      <div style={{ flex: 1, minHeight: 0, padding: 0, display: "flex", flexDirection: "column", boxSizing: "border-box" }}>
-        <div style={{ width: "100%", flex: 1, minHeight: 0, display: "flex", flexDirection: "column", boxSizing: "border-box", background: "#fff", border: "none", borderRadius: 0, padding: 16, overflowY: "auto" }}>
-          <div style={{ fontSize: 12, color: "#64748b", marginBottom: 10 }}>
-            Purchase › Job Work › <b style={{ color: "#0f172a" }}>{SCREENS.find((s) => s.key === current)?.label}</b>
-            <span style={{ marginLeft: 12 }}>Job worker balances are tracked in the worker ledger. Store stock is not checked or moved here.</span>
-          </div>
+      <div style={{ flex: 1, minHeight: 0, padding: 0, display: "flex", flexDirection: "column", boxSizing: "border-box", position: "relative" }}>
+        <div style={{ width: "100%", flex: 1, minHeight: 0, display: "flex", flexDirection: "column", boxSizing: "border-box", background: "#fff", border: "none", borderRadius: 0, padding: "12px 18px", overflowY: "auto" }}>
           {current === "dashboard" && <DashboardScreen user={user} goTo={goTo} flash={flash} />}
           {current === "workers" && <WorkersScreen user={user} flash={flash} />}
           {current === "indents" && <IndentsScreen user={user} filter={filter} locations={refs.locations} operations={refs.operations} categories={refs.categories} items={refs.items} workers={refs.workers} flash={flash} onOpenOrder={openOrderFromIndent} />}
           {current === "orders" && <OrdersScreen user={user} filter={filter} workers={refs.workers} locations={refs.locations} operations={refs.operations} categories={refs.categories} items={refs.items} indents={refs.indents} flash={flash} />}
+          {current === "send" && <WorkList kind="send" user={user} flash={flash} />}
+          {current === "receive" && <WorkList kind="receive" user={user} flash={flash} />}
           {current === "challans" && <ChallansScreen user={user} flash={flash} refs={refs} />}
           {current === "receipts" && <ReceiptsScreen user={user} filter={filter} flash={flash} />}
           {current === "ledger" && <LedgerScreen user={user} workers={refs.workers} />}
@@ -1957,11 +2389,15 @@ export function JobWorkPage({ screen = "dashboard", onBackToHome, onOpenSidebar,
           {current === "reports" && <ReportsScreen user={user} flash={flash} />}
           {current === "operations" && <OperationsScreen user={user} flash={flash} onChanged={loadRefs} />}
         </div>
-      </div>
-
       {orderForm && <OrderForm user={user} workers={refs.workers} locations={refs.locations} operations={refs.operations} categories={refs.categories} items={refs.items} indents={refs.indents}
         fromIndent={orderFromIndent} onClose={() => { setOrderForm(false); setOrderFromIndent(null); }}
         onSaved={(d, msg) => { setOrderForm(false); setOrderFromIndent(null); flash(msg); setFilter({}); setCurrent("orders"); }} />}
+      </div>
+      <div style={{ flexShrink: 0, background: "#1e293b", color: "#cbd5e1", padding: "7px 18px", fontSize: 12, fontWeight: 600, display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <span>Job Work · {SCREENS.find((s) => s.key === current)?.label}</span>
+        <span>Acting as {user.name} ({user.role})</span>
+      </div>
+
     </div>
   );
 }

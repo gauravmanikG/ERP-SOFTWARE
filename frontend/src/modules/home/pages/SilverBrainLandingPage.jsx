@@ -14,7 +14,8 @@ export function SilverBrainLandingPage({
   const [hoveredModule, setHoveredModule] = useState(null);
   const [drawerCoords, setDrawerCoords] = useState({ top: 0, left: 240 });
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [notificationCount, setNotificationCount] = useState(3);
+  // The backend has no notifications service yet, so there is nothing unread to count.
+  const notificationCount = 0;
   const [showNotificationPopup, setShowNotificationPopup] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
   const closeTimerRef = useRef(null);
@@ -30,15 +31,6 @@ export function SilverBrainLandingPage({
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
-  }, []);
-
-  // Fetch unread notifications count from backend API if available
-  useEffect(() => {
-    const api = import.meta.env.VITE_API_URL || "";
-    fetch(`${api}/api/notifications/unread-count`)
-      .then((r) => (r.ok ? r.json() : { count: 3 }))
-      .then((d) => setNotificationCount(Number(d.count) || 3))
-      .catch(() => setNotificationCount(3));
   }, []);
 
   const handleMouseEnter = (mod, event) => {
