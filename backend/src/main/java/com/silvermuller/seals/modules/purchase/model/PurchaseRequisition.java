@@ -18,6 +18,8 @@ public class PurchaseRequisition {
     private LocalDate requiredDate;
     private String requisitioner;
     private String department;
+    /** Read-only for clients: the Department Master row of department, set by the server when the PR is saved. */
+    private Long departmentId;
     private String store;
     @JsonAlias({"preferred_vendor", "preferredVendor", "vendor"})
     private String preferredVendor;
@@ -64,6 +66,9 @@ public class PurchaseRequisition {
 
     public String getRequisitioner() { return requisitioner; }
     public void setRequisitioner(String requisitioner) { this.requisitioner = requisitioner; }
+
+    public Long getDepartmentId() { return departmentId; }
+    public void setDepartmentId(Long departmentId) { this.departmentId = departmentId; }
 
     public String getDepartment() { return department; }
     public void setDepartment(String department) { this.department = department; }

@@ -399,11 +399,13 @@ public class PurchaseRequisitionService {
         if (dept.isEmpty()) {
             throw new IllegalArgumentException("Select a department from the Department Master.");
         }
-        Integer deptCount = jdbc.queryForObject(
-                "SELECT COUNT(*) FROM public.department_master WHERE department_name = ?", Integer.class, dept);
-        if (deptCount == null || deptCount == 0) {
+        List<Long> deptIds = jdbc.queryForList(
+                "SELECT id FROM public.department_master WHERE department_name = ?", Long.class, dept);
+        if (deptIds.isEmpty()) {
             throw new IllegalArgumentException("Department " + dept + " is not in the Department Master.");
         }
+        pr.setDepartment(dept);
+        pr.setDepartmentId(deptIds.get(0));
         List<PurchaseRequisitionItem> items = pr.getItems() == null ? List.of() : pr.getItems();
         if (items.isEmpty() && "Pending Approval".equals(pr.getStatus())) {
             throw new IllegalArgumentException("Add at least one item before submitting the PR for approval.");
@@ -411,14 +413,19 @@ public class PurchaseRequisitionService {
         for (PurchaseRequisitionItem it : items) {
             String code = it.getItemCode() == null ? "" : it.getItemCode().trim();
             if (code.isEmpty()) throw new IllegalArgumentException("Every PR line needs an item from the Item Master.");
-            // Same item resolution as PO by PR: part number first, then old code. The PR line takes the item's
-            // purchase UoM from the Item Master; the UoM chosen on the form is used only when the item has none.
+            // Same item resolution as PO by PR and the purchase_order_items trigger (item_master_id_for_code): part
+            // number first, then old code, then the lowest id. The resolved row is stored on the line (item_id).
+            // The PR line takes the item's purchase UoM from the Item Master; the UoM chosen on the form is used
+            // only when the item has none.
             List<Map<String, Object>> master = jdbc.queryForList(
-                    "SELECT COALESCE(NULLIF(TRIM(purchased_uom), ''), NULLIF(TRIM(uom), '')) AS purchase_uom FROM public.item_master " +
-                    "WHERE sms_new_part_no = ? OR old_code = ? ORDER BY (sms_new_part_no = ?) DESC, id LIMIT 1", code, code, code);
+                    "SELECT id, COALESCE(NULLIF(TRIM(purchased_uom), ''), NULLIF(TRIM(uom), '')) AS purchase_uom FROM public.item_master " +
+                    "WHERE sms_new_part_no = ? OR old_code = ? ORDER BY (sms_new_part_no IS NOT DISTINCT FROM ?) DESC, id LIMIT 1",
+                    code, code, code);
             if (master.isEmpty()) {
                 throw new IllegalArgumentException("Item " + code + " is not in the Item Master.");
             }
+            it.setItemCode(code);
+            it.setItemId(((Number) master.get(0).get("id")).longValue());
             Object purchaseUom = master.get(0).get("purchase_uom");
             if (purchaseUom != null) {
                 it.setUom(purchaseUom.toString());
@@ -462,12 +469,12 @@ public class PurchaseRequisitionService {
 
         if (isUpdate) {
             jdbc.update(
-                "UPDATE purchase_requisitions SET pr_date = ?, required_date = ?, requisitioner = ?, department = ?, " +
+                "UPDATE purchase_requisitions SET pr_date = ?, required_date = ?, requisitioner = ?, department = ?, department_id = ?, " +
                 "store = ?, preferred_vendor = ?, priority = ?, requirement_type = ?, procurement_method = ?, " +
                 "purpose = ?, remarks = ?, status = ?, pr_type = ?, cost_center = ?, project_reference = ?, cancellation_reason = ?, updated_at = NOW() WHERE id = ?",
                 pr.getPrDate() != null ? Date.valueOf(pr.getPrDate()) : Date.valueOf(LocalDate.now()),
                 pr.getRequiredDate() != null ? Date.valueOf(pr.getRequiredDate()) : Date.valueOf(LocalDate.now().plusDays(7)),
-                pr.getRequisitioner(), pr.getDepartment(), pr.getStore(), pr.getPreferredVendor(), pr.getPriority(),
+                pr.getRequisitioner(), pr.getDepartment(), pr.getDepartmentId(), pr.getStore(), pr.getPreferredVendor(), pr.getPriority(),
                 pr.getRequirementType(), pr.getProcurementMethod(), pr.getPurpose(), pr.getRemarks(),
                 pr.getStatus() != null ? pr.getStatus() : "Draft",
                 pr.getPrType() != null ? pr.getPrType() : "Direct Material",
@@ -486,8 +493,8 @@ public class PurchaseRequisitionService {
                 PreparedStatement ps = conn.prepareStatement(
                     "INSERT INTO purchase_requisitions (pr_number, pr_date, required_date, requisitioner, department, store, " +
                     "preferred_vendor, priority, requirement_type, procurement_method, purpose, remarks, status, " +
-                    "pr_type, cost_center, project_reference, cancellation_reason, created_by, created_at) " +
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())",
+                    "pr_type, cost_center, project_reference, cancellation_reason, created_by, department_id, created_at) " +
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())",
                     Statement.RETURN_GENERATED_KEYS
                 );
                 ps.setString(1, pr.getPrNumber());
@@ -508,6 +515,7 @@ public class PurchaseRequisitionService {
                 ps.setString(16, pr.getProjectReference());
                 ps.setString(17, pr.getCancellationReason());
                 ps.setString(18, pr.getCreatedBy() != null ? pr.getCreatedBy() : "User");
+                ps.setLong(19, pr.getDepartmentId());
                 return ps;
             }, kh);
             Number n = null;
@@ -532,10 +540,10 @@ public class PurchaseRequisitionService {
                 BigDecimal total = it.getEstTotal() != null ? it.getEstTotal() : req.multiply(rate);
 
                 jdbc.update(
-                    "INSERT INTO purchase_requisition_items (pr_id, pr_number, item_code, item_name, description, category, uom, req_qty, " +
+                    "INSERT INTO purchase_requisition_items (pr_id, pr_number, item_code, item_id, item_name, description, category, uom, req_qty, " +
                     "ordered_qty, remaining_qty, est_rate, est_total, remarks, hsn_code, drawing_no, manufacturer_brand, required_by_date) " +
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    prId, pr.getPrNumber(), it.getItemCode(), it.getItemName(), it.getDescription(),
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    prId, pr.getPrNumber(), it.getItemCode(), it.getItemId(), it.getItemName(), it.getDescription(),
                     it.getCategory() != null ? it.getCategory() : "FG",
                     it.getUom() != null ? it.getUom() : "PCS", req, ord, rem, rate, total, it.getRemarks(),
                     it.getHsnCode(), it.getDrawingNo(), it.getManufacturerBrand(),
@@ -549,10 +557,9 @@ public class PurchaseRequisitionService {
     }
 
     /**
-     * Shared ordered-quantity helper used by the legacy paths (manual change, proposal approval, clubbing
-     * fallback, legacy PO cancellation). A positive change locks the matching PR lines and refuses it if it
-     * would exceed the requisitioned quantity; a negative change releases quantity and cannot take
-     * ordered_qty below zero.
+     * Ordered-quantity helper for the legacy PO cancellation path (POs without PR allocations). A positive
+     * change locks the matching PR lines and refuses it if it would exceed the requisitioned quantity; a negative
+     * change releases quantity and cannot take ordered_qty below zero.
      */
     @Transactional
     public void updateItemOrderedQty(String prNumber, String itemCode, BigDecimal deltaOrdered) {
@@ -696,6 +703,7 @@ public class PurchaseRequisitionService {
         if (rd != null) pr.setRequiredDate(rd.toLocalDate());
         pr.setRequisitioner(rs.getString("requisitioner"));
         pr.setDepartment(rs.getString("department"));
+        pr.setDepartmentId(rs.getObject("department_id") == null ? null : rs.getLong("department_id"));
         pr.setStore(rs.getString("store"));
         pr.setPreferredVendor(rs.getString("preferred_vendor"));
         pr.setPriority(rs.getString("priority"));
@@ -730,6 +738,7 @@ public class PurchaseRequisitionService {
         it.setPrId(rs.getLong("pr_id"));
         it.setPrNumber(rs.getString("pr_number"));
         it.setItemCode(rs.getString("item_code"));
+        it.setItemId(rs.getObject("item_id") == null ? null : rs.getLong("item_id"));
         it.setItemName(rs.getString("item_name"));
         it.setDescription(rs.getString("description"));
         try {
@@ -766,14 +775,16 @@ public class PurchaseRequisitionService {
             long id = ids.get(0);
             assertNoPoByPrAllocationsForPrId(id);
             assertNothingOrderedOrDrafted(id);
+            assertNoSourcingDocuments(prNumber, id);
             jdbc.update("DELETE FROM purchase_requisition_items WHERE pr_id = ?", id);
             jdbc.update("DELETE FROM purchase_requisitions WHERE id = ?", id);
         }
     }
 
     /**
-     * Refuses a manual change to ordered quantity (the ordered-qty endpoint) for a PR line that PO by PR has
-     * allocated. Pass itemCode null to check every line of the PR.
+     * Refuses a change to ordered quantity outside PO allocations for a PR line that has PO allocations.
+     * Pass itemCode null to check every line of the PR. (The manual ordered-qty endpoint was removed: it changed
+     * ordered_qty with no PO behind it.)
      */
     public void assertNoPoByPrAllocations(String prNumber, String itemCode) {
         Integer n = itemCode == null
@@ -782,6 +793,20 @@ public class PurchaseRequisitionService {
         if (n != null && n > 0) {
             throw new ConflictException("PR " + prNumber + (itemCode == null ? "" : " / " + itemCode)
                     + " has purchase orders raised through PO by PR. Its ordered quantity is managed by that flow and cannot be changed manually.");
+        }
+    }
+
+    /** RFQs, vendor quotations and POs reference the PR with foreign keys; a PR they use is kept. */
+    private void assertNoSourcingDocuments(String prNumber, long prId) {
+        Integer n = jdbc.queryForObject(
+                "SELECT (SELECT COUNT(*) FROM public.rfq_headers WHERE pr_number = ?) + " +
+                "(SELECT COUNT(*) FROM public.rfq_items WHERE pr_number = ?) + " +
+                "(SELECT COUNT(*) FROM public.vendor_quotations WHERE pr_id = ?) + " +
+                "(SELECT COUNT(*) FROM public.purchase_orders WHERE pr_number = ?)",
+                Integer.class, prNumber, prNumber, prId, prNumber);
+        if (n != null && n > 0) {
+            throw new ConflictException("PR " + prNumber + " is referenced by an RFQ, a vendor quotation or a purchase order, so it cannot be deleted. "
+                    + "Cancel the PR instead.");
         }
     }
 

@@ -4,6 +4,8 @@ import java.math.BigDecimal;
 
 public class PurchaseItemLine {
     private String itemCode;
+    /** Item Master id of the line when the PO path knows it (PO by PR: the PR line's item). Read by the purchase_order_items trigger. */
+    private Long itemId;
     private String itemName;
     private String description;
     private String category;
@@ -84,6 +86,9 @@ public class PurchaseItemLine {
 
     public BigDecimal getIgstAmount() { return igstAmount != null ? igstAmount : BigDecimal.ZERO; }
     public void setIgstAmount(BigDecimal igstAmount) { this.igstAmount = igstAmount; }
+
+    public Long getItemId() { return itemId; }
+    public void setItemId(Long itemId) { this.itemId = itemId; }
 
     public String getItemCode() { return itemCode; }
     public void setItemCode(String itemCode) { this.itemCode = itemCode; }

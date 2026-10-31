@@ -845,6 +845,9 @@ public class JobWorkService {
                 "o.id, o.jwo_number, o.jwo_date, o.status, o.expected_return_date, o.estimated_charges, o.created_by, w.legal_name AS worker_name, "
                         + "(SELECT STRING_AGG(l.item_code, ', ') FROM public.job_work_order_lines l WHERE l.jwo_id = o.id) AS items, "
                         + "(SELECT COALESCE(SUM(l.input_qty),0) FROM public.job_work_order_lines l WHERE l.jwo_id = o.id) AS input_total, "
+                        + "(SELECT COALESCE(SUM(l.dispatched_qty),0) FROM public.job_work_order_lines l WHERE l.jwo_id = o.id) AS dispatched_total, "
+                        + "(SELECT COALESCE(SUM(l.received_qty),0) FROM public.job_work_order_lines l WHERE l.jwo_id = o.id) AS received_total, "
+                        + "(SELECT COALESCE(SUM(l.rework_qty - l.rework_redispatched_qty),0) FROM public.job_work_order_lines l WHERE l.jwo_id = o.id) AS rework_pending_total, "
                         + "(SELECT COALESCE(SUM(l.dispatched_qty + l.rework_redispatched_qty - l.received_qty - l.unused_returned_qty - l.written_off_qty),0) FROM public.job_work_order_lines l WHERE l.jwo_id = o.id) AS pending_with_worker, "
                         + "(o.expected_return_date < CURRENT_DATE AND o.status IN ('APPROVED','IN_PROGRESS','PARTIALLY_RECEIVED')) AS overdue", args, page, size);
     }

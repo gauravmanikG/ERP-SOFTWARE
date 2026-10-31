@@ -59,9 +59,11 @@ export default function PoRegisterScreen({ user, flash }) {
     loadDetail(poNumber);
   };
 
-  // Cancellation is offered only when nothing has been received against this PO.
+  // Cancellation is offered only when nothing has been received against this PO. Older POs linked to their PR lines
+  // are cancelled the same way, releasing exactly what their allocations hold.
   const receivedTotal = detail ? detail.allocations.reduce((s, a) => s + Number(a.receivedQty || 0), 0) : 0;
-  const cancellable = detail && detail.origin === "PO_BY_PR" && detail.status !== "CANCELLED" && receivedTotal === 0;
+  const linkedToPr = detail && (detail.origin === "PO_BY_PR" || (detail.origin === "LEGACY" && detail.allocations.length > 0));
+  const cancellable = linkedToPr && detail.status !== "CANCELLED" && receivedTotal === 0;
   const cancelBlockedReason = !detail ? "" : detail.status === "CANCELLED"
     ? "This PO is already cancelled."
     : receivedTotal > 0

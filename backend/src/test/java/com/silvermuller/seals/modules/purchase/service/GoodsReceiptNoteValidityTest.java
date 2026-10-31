@@ -1,6 +1,5 @@
 package com.silvermuller.seals.modules.purchase.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.silvermuller.seals.modules.purchase.model.GoodsReceiptNote;
 import com.silvermuller.seals.modules.purchase.model.GoodsReceiptNoteItem;
 import com.silvermuller.seals.modules.purchase.model.PurchaseOrder;
@@ -33,7 +32,7 @@ class GoodsReceiptNoteValidityTest {
         jdbc = mock(JdbcTemplate.class);
         purchaseService = mock(PurchaseProcessingService.class);
         grnService = new GoodsReceiptNoteService(jdbc,
-                mock(com.silvermuller.seals.modules.purchase.newpo.ReceiptAttributionService.class), purchaseService, new ObjectMapper());
+                mock(com.silvermuller.seals.modules.purchase.newpo.ReceiptAttributionService.class), purchaseService);
     }
 
     private static PurchaseOrder po(String poNumber, String validityDate) {

@@ -1,8 +1,6 @@
 package com.silvermuller.seals.modules.purchase.service;
 
 import com.silvermuller.seals.modules.purchase.servicepo.ServicePoService;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.silvermuller.seals.modules.purchase.dto.PurchaseItemLine;
 import com.silvermuller.seals.modules.purchase.model.GoodsReceiptNote;
 import com.silvermuller.seals.modules.purchase.model.GoodsReceiptNoteItem;
@@ -15,8 +13,6 @@ import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.silvermuller.seals.common.exception.ConflictException;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -25,8 +21,6 @@ import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.sql.Timestamp;
 import java.time.LocalDate;
-import java.time.OffsetDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 @Service
@@ -34,18 +28,15 @@ public class GoodsReceiptNoteService {
 
     private final JdbcTemplate jdbc;
     private final PurchaseProcessingService purchaseProcessingService;
-    private final ObjectMapper objectMapper;
 
     private final com.silvermuller.seals.modules.purchase.newpo.ReceiptAttributionService receiptAttribution;
 
     public GoodsReceiptNoteService(JdbcTemplate jdbc,
                                   com.silvermuller.seals.modules.purchase.newpo.ReceiptAttributionService receiptAttribution,
-                                  PurchaseProcessingService purchaseProcessingService,
-                                  ObjectMapper objectMapper) {
+                                  PurchaseProcessingService purchaseProcessingService) {
         this.jdbc = jdbc;
         this.receiptAttribution = receiptAttribution;
         this.purchaseProcessingService = purchaseProcessingService;
-        this.objectMapper = objectMapper;
     }
 
     private final RowMapper<GoodsReceiptNote> grnRowMapper = (rs, rowNum) -> {
@@ -127,13 +118,19 @@ public class GoodsReceiptNoteService {
     public List<GoodsReceiptNote> getAllGoodsReceiptNotes() {
         List<GoodsReceiptNote> list = jdbc.query(
             "SELECT * FROM goods_receipt_notes ORDER BY id DESC", grnRowMapper);
-        for (GoodsReceiptNote grn : list) {
-            List<GoodsReceiptNoteItem> items = jdbc.query(
-                "SELECT * FROM goods_receipt_note_items WHERE grn_id = ? ORDER BY id ASC",
-                grnItemRowMapper, grn.getId());
-            grn.setItems(items);
-        }
+        attachItems(list, jdbc.query("SELECT * FROM goods_receipt_note_items ORDER BY grn_id, id", grnItemRowMapper));
         return list;
+    }
+
+    /** Gives each GRN its lines (already in line order) from one query, instead of one query per GRN. */
+    private static void attachItems(List<GoodsReceiptNote> grns, List<GoodsReceiptNoteItem> items) {
+        Map<Long, List<GoodsReceiptNoteItem>> byGrn = new HashMap<>();
+        for (GoodsReceiptNoteItem it : items) {
+            byGrn.computeIfAbsent(it.getGrnId(), k -> new ArrayList<>()).add(it);
+        }
+        for (GoodsReceiptNote grn : grns) {
+            grn.setItems(byGrn.getOrDefault(grn.getId(), new ArrayList<>()));
+        }
     }
 
     public Optional<GoodsReceiptNote> getGoodsReceiptNoteById(Long id) {
@@ -151,12 +148,9 @@ public class GoodsReceiptNoteService {
     public List<GoodsReceiptNote> getGoodsReceiptNotesByPoNumber(String poNumber) {
         List<GoodsReceiptNote> list = jdbc.query(
             "SELECT * FROM goods_receipt_notes WHERE po_number = ? ORDER BY id DESC", grnRowMapper, poNumber);
-        for (GoodsReceiptNote grn : list) {
-            List<GoodsReceiptNoteItem> items = jdbc.query(
-                "SELECT * FROM goods_receipt_note_items WHERE grn_id = ? ORDER BY id ASC",
-                grnItemRowMapper, grn.getId());
-            grn.setItems(items);
-        }
+        attachItems(list, jdbc.query(
+            "SELECT gi.* FROM goods_receipt_note_items gi JOIN goods_receipt_notes g ON g.id = gi.grn_id WHERE g.po_number = ? ORDER BY gi.grn_id, gi.id",
+            grnItemRowMapper, poNumber));
         return list;
     }
 
@@ -173,6 +167,12 @@ public class GoodsReceiptNoteService {
                 "SELECT po_number, string_agg(DISTINCT pr_number, ', ' ORDER BY pr_number) AS prs FROM public.po_pr_allocations GROUP BY po_number")) {
             prsByPo.put(String.valueOf(r.get("po_number")), String.valueOf(r.get("prs")));
         }
+        // Accepted quantity per PO and item from POSTED GRNs, read once for every PO.
+        Map<String, BigDecimal> acceptedByPoItem = new HashMap<>();
+        jdbc.query(
+            "SELECT gi.po_number, gi.item_code, SUM(gi.accepted_qty) AS qty FROM goods_receipt_note_items gi " +
+            "JOIN goods_receipt_notes g ON g.id = gi.grn_id WHERE g.status = 'POSTED' GROUP BY gi.po_number, gi.item_code",
+            rs -> { acceptedByPoItem.put(rs.getString("po_number") + "\u0000" + rs.getString("item_code"), rs.getBigDecimal("qty")); });
 
         for (PurchaseOrder po : allOrders) {
             if ("CANCELLED".equalsIgnoreCase(po.getStatus()) || "COMPLETED".equalsIgnoreCase(po.getStatus())) continue;
@@ -186,13 +186,7 @@ public class GoodsReceiptNoteService {
                 BigDecimal ordered = line.getQuantity() != null ? line.getQuantity() : BigDecimal.ZERO;
                 poTotalOrdered = poTotalOrdered.add(ordered);
 
-                // Calculate cumulative accepted/received qty from POSTED GRNs for this PO and Item
-                BigDecimal received = jdbc.queryForObject(
-                    "SELECT COALESCE(SUM(accepted_qty), 0) FROM goods_receipt_note_items " +
-                    "WHERE po_number = ? AND item_code = ? AND grn_id IN (SELECT id FROM goods_receipt_notes WHERE status = 'POSTED')",
-                    BigDecimal.class, po.getPoNumber(), line.getItemCode()
-                );
-                if (received == null) received = BigDecimal.ZERO;
+                BigDecimal received = acceptedByPoItem.getOrDefault(po.getPoNumber() + "\u0000" + line.getItemCode(), BigDecimal.ZERO);
                 poTotalReceived = poTotalReceived.add(received);
 
                 BigDecimal balance = ordered.subtract(received);
@@ -276,6 +270,7 @@ public class GoodsReceiptNoteService {
         if (grn.getItems() == null || grn.getItems().isEmpty()) {
             throw new IllegalArgumentException("At least one line item is required in the GRN.");
         }
+        assertLineQuantities(grn, isPost);
 
         // PO validity: an expired PO blocks saving and posting. Checked before any GRN number, row or stock write.
         purchaseProcessingService.getPurchaseOrder(grn.getPoNumber()).ifPresent(po ->
@@ -283,12 +278,28 @@ public class GoodsReceiptNoteService {
 
         // Service POs never use the GRN workflow (no receipt, no stock update). Standard PO numbers pass through.
         ServicePoService.assertNotServicePo(jdbc, grn.getPoNumber());
-        // A posted GRN is a record: it cannot be edited or posted again.
+        // From here the PO row is locked: another GRN or a cancellation of this PO waits until this transaction ends,
+        // so the over-receipt check below always sees every GRN posted before it.
+        lockReceivablePo(grn);
+        // Every GRN line must be a line of its PO (also a foreign key: goods_receipt_note_items -> purchase_order_items).
+        assertLinesOnPo(grn);
+        // A posted GRN is a record: it cannot be edited or posted again. A draft stays with the PO it was started for.
+        String storedGrnNumber = null;
         if (grn.getId() != null) {
-            List<String> current = jdbc.queryForList("SELECT status FROM goods_receipt_notes WHERE id = ? FOR UPDATE", String.class, grn.getId());
-            if (!current.isEmpty() && "POSTED".equals(current.get(0))) {
+            List<Map<String, Object>> current = jdbc.queryForList(
+                    "SELECT status, po_number, grn_number FROM goods_receipt_notes WHERE id = ? FOR UPDATE", grn.getId());
+            if (current.isEmpty()) {
+                throw new IllegalArgumentException("GRN " + grn.getId() + " was not found.");
+            }
+            if ("POSTED".equals(current.get(0).get("status"))) {
                 throw new ConflictException("GRN " + grn.getId() + " is already posted and cannot be changed or posted again.");
             }
+            String draftPo = (String) current.get(0).get("po_number");
+            if (!grn.getPoNumber().equals(draftPo)) {
+                throw new ConflictException("Draft GRN " + current.get(0).get("grn_number") + " belongs to PO " + draftPo
+                        + " and cannot be moved to PO " + grn.getPoNumber() + ". Start a new GRN for that PO.");
+            }
+            storedGrnNumber = (String) current.get(0).get("grn_number");
         }
         // Retry protection: one posted GRN per PO and vendor challan. A repeated submission is refused, not posted twice.
         if (isPost) {
@@ -304,15 +315,7 @@ public class GoodsReceiptNoteService {
 
         // The server owns GRN numbers: a new GRN always takes the next sequence number (a number typed or
         // pre-fetched by the client is ignored), and a saved draft keeps the number it was stored with.
-        if (grn.getId() == null) {
-            grn.setGrnNumber(reserveGrnNumber());
-        } else {
-            List<String> stored = jdbc.queryForList("SELECT grn_number FROM goods_receipt_notes WHERE id = ?", String.class, grn.getId());
-            if (stored.isEmpty()) {
-                throw new IllegalArgumentException("GRN " + grn.getId() + " was not found.");
-            }
-            grn.setGrnNumber(stored.get(0));
-        }
+        grn.setGrnNumber(grn.getId() == null ? reserveGrnNumber() : storedGrnNumber);
         if (grn.getGrnDate() == null) {
             grn.setGrnDate(LocalDate.now());
         }
@@ -498,6 +501,7 @@ public class GoodsReceiptNoteService {
             // Receipt attribution to PR allocations is written in this same transaction (rolled back with the GRN).
             receiptAttribution.attributePostedGrn(grnId, grn.getPoNumber());
             updatePurchaseOrderStatusFromGrn(grn.getPoNumber());
+            purchaseProcessingService.syncScheduleReceipts(grn.getPoNumber());
         }
 
         return getGoodsReceiptNoteById(grnId).orElse(grn);
@@ -505,93 +509,117 @@ public class GoodsReceiptNoteService {
 
     /**
      * Recalculates the PO status from the POSTED receipts and writes it to purchase_orders in the same
-     * transaction as the GRN. The cached PO copy is updated only after commit, so a rolled-back GRN
-     * cannot leave a status in memory that the database does not have.
+     * transaction as the GRN, so a rolled-back GRN leaves the status as it was.
      */
     private void updatePurchaseOrderStatusFromGrn(String poNumber) {
-        Optional<PurchaseOrder> cached = purchaseProcessingService.getPurchaseOrder(poNumber);
-        List<PurchaseItemLine> poLines = cached.map(PurchaseOrder::getItems).orElseGet(() -> loadPoLinesFromDb(poNumber));
-        if (poLines == null) return;
+        List<Map<String, Object>> lines = jdbc.queryForList(
+            "SELECT poi.quantity, COALESCE(SUM(gi.accepted_qty) FILTER (WHERE g.status = 'POSTED'), 0) AS accepted " +
+            "FROM public.purchase_order_items poi " +
+            "LEFT JOIN public.goods_receipt_note_items gi ON gi.po_number = poi.po_number AND gi.item_code = poi.item_code " +
+            "LEFT JOIN public.goods_receipt_notes g ON g.id = gi.grn_id " +
+            "WHERE poi.po_number = ? GROUP BY poi.id, poi.quantity", poNumber);
+        if (lines.isEmpty()) return;
 
         BigDecimal totalOrdered = BigDecimal.ZERO;
         boolean allLinesFullyReceived = true;
         boolean anyLineReceived = false;
-
-        for (PurchaseItemLine line : poLines) {
-            BigDecimal ord = line.getQuantity() != null ? line.getQuantity() : BigDecimal.ZERO;
+        for (Map<String, Object> line : lines) {
+            BigDecimal ord = line.get("quantity") != null ? (BigDecimal) line.get("quantity") : BigDecimal.ZERO;
+            BigDecimal totalRec = (BigDecimal) line.get("accepted");
             totalOrdered = totalOrdered.add(ord);
-
-            BigDecimal totalRec = jdbc.queryForObject(
-                "SELECT COALESCE(SUM(accepted_qty), 0) FROM goods_receipt_note_items " +
-                "WHERE po_number = ? AND item_code = ? AND grn_id IN (SELECT id FROM goods_receipt_notes WHERE status = 'POSTED')",
-                BigDecimal.class, poNumber, line.getItemCode()
-            );
-            if (totalRec == null) totalRec = BigDecimal.ZERO;
-
-            if (totalRec.compareTo(BigDecimal.ZERO) > 0) {
-                anyLineReceived = true;
-            }
-            if (totalRec.compareTo(ord) < 0) {
-                allLinesFullyReceived = false;
-            }
+            if (totalRec.signum() > 0) anyLineReceived = true;
+            if (totalRec.compareTo(ord) < 0) allLinesFullyReceived = false;
         }
 
         // Only accepted quantity moves the PO. With nothing accepted yet (for example a fully rejected delivery),
         // the PO keeps its current status: rejected goods neither advance nor close it.
         String newStatus;
-        if (allLinesFullyReceived && totalOrdered.compareTo(BigDecimal.ZERO) > 0) {
+        if (allLinesFullyReceived && totalOrdered.signum() > 0) {
             newStatus = "COMPLETED"; // all accepted quantity received
         } else if (anyLineReceived) {
             newStatus = "PARTIALLY RECEIVED";
         } else {
             return;
         }
-
         jdbc.update("UPDATE purchase_orders SET status = ?, updated_at = NOW() WHERE po_number = ?", newStatus, poNumber);
+    }
 
-        Runnable applyToCache = () -> cached.ifPresentOrElse(
-                po -> po.setStatus(newStatus),
-                purchaseProcessingService::loadOrdersFromDb);
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
-            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                @Override
-                public void afterCommit() {
-                    applyToCache.run();
+    /**
+     * Checks the quantities of every line before anything is read or written: no negative quantity, each PO item at
+     * most once (two lines of one item would each pass the over-receipt check on their own), and a posted GRN must
+     * receive something.
+     */
+    private static void assertLineQuantities(GoodsReceiptNote grn, boolean isPost) {
+        Set<String> seen = new HashSet<>();
+        BigDecimal totalReceived = BigDecimal.ZERO;
+        for (GoodsReceiptNoteItem it : grn.getItems()) {
+            if (it == null) {
+                throw new IllegalArgumentException("A GRN line is empty.");
+            }
+            String code = it.getItemCode();
+            if (code != null && !seen.add(code)) {
+                throw new IllegalArgumentException("Item " + code + " appears on more than one GRN line. Enter each PO item on one line.");
+            }
+            BigDecimal[] quantities = {it.getChallanQty(), it.getReceivedQty(), it.getAcceptedQty(), it.getRejectedQty(), it.getPendingInspectionQty()};
+            for (BigDecimal q : quantities) {
+                if (q != null && q.signum() < 0) {
+                    throw new IllegalArgumentException("Quantities for item " + code + " cannot be negative.");
                 }
-            });
-        } else {
-            applyToCache.run();
+            }
+            BigDecimal inspected = nz(it.getAcceptedQty()).add(nz(it.getRejectedQty())).add(nz(it.getPendingInspectionQty()));
+            totalReceived = totalReceived.add(inspected.signum() > 0 ? inspected : nz(it.getReceivedQty()));
+        }
+        if (isPost && totalReceived.signum() == 0) {
+            throw new IllegalArgumentException("Nothing was received on this GRN, so it cannot be posted.");
         }
     }
 
-    /** Ordered quantity of one item on the PO, read from purchase_orders (never from the client). */
-    private BigDecimal serverPoQty(String poNumber, String itemCode) {
-        List<PurchaseItemLine> lines = loadPoLinesFromDb(poNumber);
-        if (lines == null) {
+    private static BigDecimal nz(BigDecimal value) {
+        return value != null ? value : BigDecimal.ZERO;
+    }
+
+    /**
+     * Locks the PO row until the transaction ends and refuses a PO that does not exist or is cancelled. The GRN header
+     * takes its PO facts (date, PR, vendor) from the PO itself, so a GRN can never name a different vendor than its PO.
+     */
+    private void lockReceivablePo(GoodsReceiptNote grn) {
+        String poNumber = grn.getPoNumber();
+        List<Map<String, Object>> rows = jdbc.queryForList(
+                "SELECT status, po_date, pr_number, vendor_code, vendor_name, vendor_gstin FROM public.purchase_orders WHERE po_number = ? FOR UPDATE",
+                poNumber);
+        if (rows.isEmpty()) {
             throw new IllegalArgumentException("PO " + poNumber + " was not found.");
         }
-        BigDecimal total = BigDecimal.ZERO;
-        boolean found = false;
-        for (PurchaseItemLine l : lines) {
-            if (itemCode != null && itemCode.equals(l.getItemCode())) {
-                found = true;
-                if (l.getQuantity() != null) total = total.add(l.getQuantity());
-            }
+        Map<String, Object> po = rows.get(0);
+        if ("CANCELLED".equalsIgnoreCase((String) po.get("status"))) {
+            throw new ConflictException("PO " + poNumber + " is cancelled; nothing can be received against it. The GRN was not saved.");
         }
-        if (!found) {
-            throw new IllegalArgumentException("Item " + itemCode + " is not on PO " + poNumber + ". The GRN was not posted.");
-        }
-        return total;
+        grn.setPoDate((String) po.get("po_date"));
+        grn.setPrNumber((String) po.get("pr_number"));
+        grn.setVendorCode((String) po.get("vendor_code"));
+        grn.setVendorName((String) po.get("vendor_name"));
+        grn.setVendorGstin((String) po.get("vendor_gstin"));
     }
 
-    /** Lines of a PO that is not in the in-memory cache, read from its purchase_orders row. Null if there is no such PO. */
-    private List<PurchaseItemLine> loadPoLinesFromDb(String poNumber) {
-        List<String> rows = jdbc.queryForList("SELECT details_json FROM purchase_orders WHERE po_number = ?", String.class, poNumber);
-        if (rows.isEmpty() || rows.get(0) == null) return null;
-        try {
-            return Arrays.asList(objectMapper.readValue(rows.get(0), PurchaseItemLine[].class));
-        } catch (Exception e) {
-            throw new IllegalStateException("Could not read the lines of PO " + poNumber + " from the database.", e);
+    /** Refuses a GRN with a line whose item is not on its PO. */
+    private void assertLinesOnPo(GoodsReceiptNote grn) {
+        String poNumber = grn.getPoNumber();
+        Set<String> onPo = new HashSet<>(jdbc.queryForList(
+                "SELECT item_code FROM public.purchase_order_items WHERE po_number = ?", String.class, poNumber));
+        for (GoodsReceiptNoteItem it : grn.getItems()) {
+            if (it.getItemCode() == null || !onPo.contains(it.getItemCode())) {
+                throw new IllegalArgumentException("Item " + it.getItemCode() + " is not on PO " + poNumber + ". The GRN was not saved.");
+            }
         }
+    }
+
+    /** Ordered quantity of one item on the PO, read from its PO line (never from the client). */
+    private BigDecimal serverPoQty(String poNumber, String itemCode) {
+        List<BigDecimal> qty = jdbc.queryForList(
+                "SELECT quantity FROM public.purchase_order_items WHERE po_number = ? AND item_code = ?", BigDecimal.class, poNumber, itemCode);
+        if (qty.isEmpty()) {
+            throw new IllegalArgumentException("Item " + itemCode + " is not on PO " + poNumber + ". The GRN was not posted.");
+        }
+        return qty.get(0);
     }
 }

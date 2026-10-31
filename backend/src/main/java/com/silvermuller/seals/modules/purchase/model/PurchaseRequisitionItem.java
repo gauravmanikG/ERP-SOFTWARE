@@ -13,6 +13,8 @@ public class PurchaseRequisitionItem {
     private String prNumber;
     @JsonAlias({"item_code", "itemCode"})
     private String itemCode;
+    /** Read-only for clients: the Item Master row the server resolved item_code to when the PR was saved. */
+    private Long itemId;
     @JsonAlias({"item_name", "itemName"})
     private String itemName;
     private String description;
@@ -66,6 +68,9 @@ public class PurchaseRequisitionItem {
 
     public String getPrNumber() { return prNumber; }
     public void setPrNumber(String prNumber) { this.prNumber = prNumber; }
+
+    public Long getItemId() { return itemId; }
+    public void setItemId(Long itemId) { this.itemId = itemId; }
 
     public String getItemCode() { return itemCode; }
     public void setItemCode(String itemCode) { this.itemCode = itemCode; }

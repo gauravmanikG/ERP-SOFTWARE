@@ -22,8 +22,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -47,13 +45,13 @@ public class PoByPrService {
     private static final String ORDERABLE_SQL = "pr.status IN ('Approved', 'Partially Ordered')";
 
     private static final String PR_LINE_SQL =
-            "SELECT pri.id, pri.pr_number, pr.pr_date, pri.item_code, pri.item_name, pri.uom, pri.category, pri.hsn_code, " +
+            "SELECT pri.id, pri.pr_number, pr.pr_date, pri.item_code, pri.item_id, pri.item_name, pri.uom, pri.category, pri.hsn_code, " +
             "pri.req_qty, pri.ordered_qty, pri.drafted_qty, pri.required_by_date, pr.status AS pr_status, pr.department, pr.requisitioner " +
             "FROM public.purchase_requisition_items pri " +
             "JOIN public.purchase_requisitions pr ON pr.id = pri.pr_id ";
 
     /** A PR line as read from the database. */
-    private record PrLine(long id, String prNumber, LocalDate prDate, String itemCode, String itemName, String uom,
+    private record PrLine(long id, String prNumber, LocalDate prDate, String itemCode, Long itemId, String itemName, String uom,
                           String category, String hsnCode, BigDecimal reqQty, BigDecimal orderedQty, BigDecimal draftedQty,
                           String requiredBy, String prStatus, String department, String requisitioner) {
         /** What can still be ordered: quantity reserved in a vendor draft belongs to that draft. */
@@ -167,7 +165,7 @@ public class PoByPrService {
         for (PrLine l : lines) {
             Map<String, Object> rate = null;
             if (vendorCode != null && !vendorCode.isBlank()) {
-                Optional<Long> itemMasterId = resolveItemMasterId(l.itemCode());
+                Optional<Long> itemMasterId = itemMasterIdOf(l);
                 if (itemMasterId.isPresent()) rate = rates.effectiveRate(vendorCode.trim(), itemMasterId.get(), asOf);
             }
             out.add(new EligiblePrLine(
@@ -496,12 +494,6 @@ public class PoByPrService {
         jdbc.update("INSERT INTO public.po_revisions (po_number, revision_number, changed_by, change_reason, changes_json) VALUES (?, ?, ?, ?, ?)",
                 po, rev == null ? 1 : rev, cancelledBy, why, changes);
 
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                purchaseProcessing.loadOrdersFromDb();
-            }
-        });
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("poNumber", po);
         result.put("status", "CANCELLED");
@@ -541,15 +533,6 @@ public class PoByPrService {
             // Same rule as every other reservation: the PR line is locked and checked, then the quantity is reserved.
             prService.reserveOrdered(a.prItemId(), a.qty());
         }
-
-        // The existing PO screens read an in-memory copy of purchase_orders. Refresh it once the
-        // transaction has committed, so the new PO is visible there and to GRN.
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                purchaseProcessing.loadOrdersFromDb();
-            }
-        });
         return new CreatedPo(poNumber, poId, plan.po());
     }
 
@@ -633,7 +616,7 @@ public class PoByPrService {
         for (Map.Entry<String, BigDecimal> e : qtyByItem.entrySet()) {
             String itemCode = e.getKey();
             PrLine any = firstLineByItem.get(itemCode);
-            Long itemMasterId = resolveItemMasterId(itemCode).orElseThrow(() ->
+            Long itemMasterId = itemMasterIdOf(any).orElseThrow(() ->
                     new NewPoException(HttpStatus.UNPROCESSABLE_ENTITY, "Item " + itemCode + " is not in the Item Master."));
 
             Map<String, Object> rate = rates.effectiveRate(vendorCode, itemMasterId, poDate);
@@ -660,6 +643,7 @@ public class PoByPrService {
 
             PurchaseItemLine line = new PurchaseItemLine();
             line.setItemCode(itemCode);
+            line.setItemId(itemMasterId);
             line.setItemName(any.itemName());
             line.setDescription(any.itemName());
             line.setCategory(any.category());
@@ -781,16 +765,21 @@ public class PoByPrService {
     private PrLine toPrLine(java.sql.ResultSet rs) throws java.sql.SQLException {
         java.sql.Date d = rs.getDate("pr_date");
         return new PrLine(rs.getLong("id"), rs.getString("pr_number"), d == null ? null : d.toLocalDate(),
-                rs.getString("item_code"), rs.getString("item_name"), rs.getString("uom"), rs.getString("category"),
+                rs.getString("item_code"), rs.getObject("item_id") == null ? null : rs.getLong("item_id"), rs.getString("item_name"), rs.getString("uom"), rs.getString("category"),
                 rs.getString("hsn_code"), rs.getBigDecimal("req_qty"), rs.getBigDecimal("ordered_qty"),
                 rs.getBigDecimal("drafted_qty"), rs.getString("required_by_date"), rs.getString("pr_status"), rs.getString("department"),
                 rs.getString("requisitioner"));
     }
 
+    /** The Item Master row stored on the PR line when it was saved; PR lines saved before that resolve by code. */
+    private Optional<Long> itemMasterIdOf(PrLine line) {
+        return line.itemId() != null ? Optional.of(line.itemId()) : resolveItemMasterId(line.itemCode());
+    }
+
     private Optional<Long> resolveItemMasterId(String itemCode) {
         List<Long> ids = jdbc.queryForList(
                 "SELECT id FROM public.item_master WHERE sms_new_part_no = ? OR old_code = ? " +
-                "ORDER BY (sms_new_part_no = ?) DESC, id LIMIT 1", Long.class, itemCode, itemCode, itemCode);
+                "ORDER BY (sms_new_part_no IS NOT DISTINCT FROM ?) DESC, id LIMIT 1", Long.class, itemCode, itemCode, itemCode);
         return ids.isEmpty() ? Optional.empty() : Optional.of(ids.get(0));
     }
 

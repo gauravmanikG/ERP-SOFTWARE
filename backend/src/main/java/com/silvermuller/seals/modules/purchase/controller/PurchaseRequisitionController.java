@@ -5,7 +5,6 @@ import com.silvermuller.seals.modules.purchase.service.PurchaseRequisitionServic
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 
@@ -52,18 +51,6 @@ public class PurchaseRequisitionController {
         String user = body.getOrDefault("user", "Authorizer");
         prService.updateStatus(prNumber, status, reason, user);
         return ResponseEntity.ok(Map.of("success", true, "prNumber", prNumber, "status", status));
-    }
-
-    @PutMapping("/{prNumber}/items/{itemCode}/ordered-qty")
-    public ResponseEntity<Map<String, Object>> updateOrderedQty(
-            @PathVariable String prNumber,
-            @PathVariable String itemCode,
-            @RequestBody Map<String, Object> body) {
-        Object deltaObj = body.get("deltaOrderedQty");
-        BigDecimal delta = deltaObj != null ? new BigDecimal(deltaObj.toString()) : BigDecimal.ZERO;
-        prService.assertNoPoByPrAllocations(prNumber, itemCode);
-        prService.updateItemOrderedQty(prNumber, itemCode, delta);
-        return ResponseEntity.ok(Map.of("success", true, "prNumber", prNumber, "itemCode", itemCode));
     }
 
     @DeleteMapping("/{prNumber}")

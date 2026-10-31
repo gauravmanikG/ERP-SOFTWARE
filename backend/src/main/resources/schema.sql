@@ -680,7 +680,6 @@ CREATE INDEX IF NOT EXISTS idx_po_rev_num ON public.po_revisions(po_number);
 -- Planned PO Delivery Schedule Lines
 CREATE TABLE IF NOT EXISTS public.purchase_order_delivery_schedules (
     id BIGSERIAL PRIMARY KEY,
-    po_id BIGINT,
     po_number VARCHAR(50) NOT NULL,
     item_code VARCHAR(100) NOT NULL,
     lot_number INT NOT NULL DEFAULT 1,
@@ -701,7 +700,6 @@ CREATE INDEX IF NOT EXISTS idx_po_sched_item ON public.purchase_order_delivery_s
 -- Planned PO Commercial Payment Milestones
 CREATE TABLE IF NOT EXISTS public.purchase_order_payment_milestones (
     id BIGSERIAL PRIMARY KEY,
-    po_id BIGINT,
     po_number VARCHAR(50) NOT NULL,
     milestone_sequence INT NOT NULL DEFAULT 1,
     milestone_title VARCHAR(150) NOT NULL,
@@ -1762,6 +1760,100 @@ CREATE TABLE IF NOT EXISTS public.procurement_audit_log (
   created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_proc_audit_ref ON public.procurement_audit_log(entity_ref);
+
+-- =============================================================================
+-- Purchase data integrity: keys the database can enforce (2026-10-31)
+-- Constraints on tables that already exist on older databases are added by data migrations
+-- 2026-10-31-10 to -15 (StartupDataMigrations), which check the existing rows first.
+-- =============================================================================
+
+-- PO lines as rows. purchase_orders.details_json stays the document the PO screens read and write; this table is
+-- kept identical to it by the trigger trg_purchase_order_items_sync (migration 2026-10-31-10), one row per item code.
+-- GRN lines, PR allocations and delivery lots reference (po_number, item_code) here with foreign keys.
+-- Never written by application code.
+CREATE TABLE IF NOT EXISTS public.purchase_order_items (
+  id              BIGSERIAL PRIMARY KEY,
+  po_number       VARCHAR(50)  NOT NULL REFERENCES public.purchase_orders(po_number) ON DELETE CASCADE,
+  line_no         INT          NOT NULL,
+  item_code       VARCHAR(100) NOT NULL,
+  item_id         BIGINT       REFERENCES public.item_master(id),
+  item_name       TEXT,
+  uom             VARCHAR(50),
+  hsn_code        VARCHAR(50),
+  quantity        NUMERIC      NOT NULL,
+  unit_rate       NUMERIC,
+  taxable_amount  NUMERIC,
+  tax_amount      NUMERIC,
+  line_total      NUMERIC,
+  CONSTRAINT uq_po_items_po_item UNIQUE (po_number, item_code)
+);
+CREATE INDEX IF NOT EXISTS idx_po_items_item_id ON public.purchase_order_items(item_id);
+
+-- The Item Master row a PR line was raised for. item_code alone is ambiguous: sms_new_part_no and old_code are not unique.
+ALTER TABLE public.purchase_requisition_items ADD COLUMN IF NOT EXISTS item_id BIGINT REFERENCES public.item_master(id);
+CREATE INDEX IF NOT EXISTS idx_pr_items_item_id ON public.purchase_requisition_items(item_id);
+
+-- The Department Master row of a PR. department keeps the name as it was when the PR was saved.
+ALTER TABLE public.purchase_requisitions ADD COLUMN IF NOT EXISTS department_id BIGINT REFERENCES public.department_master(id);
+CREATE INDEX IF NOT EXISTS idx_pr_department_id ON public.purchase_requisitions(department_id);
+
+-- TRUE for allocations that link a PO raised before PO by PR existed to the PR lines it ordered (migration
+-- 2026-10-31-14). Those POs had no vendor rate, so rate_id is NULL only on these rows.
+ALTER TABLE public.po_pr_allocations ADD COLUMN IF NOT EXISTS legacy BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- Optional PO commercial terms, one row per PO (PO by PR and Direct PO). The code columns reference the master_*
+-- tables (created by MasterDataSchema); those foreign keys are added by migration 2026-10-31-11.
+CREATE TABLE IF NOT EXISTS public.purchase_order_terms (
+  po_number                 VARCHAR(50) PRIMARY KEY
+                            CONSTRAINT fk_po_terms_po REFERENCES public.purchase_orders(po_number) ON DELETE CASCADE,
+  mode_of_payment_code      VARCHAR(20),
+  payment_terms_code        VARCHAR(20),
+  credit_period_basis_code  VARCHAR(20),
+  freight_option_code       VARCHAR(20),
+  freight_amount            NUMERIC(15,2),
+  dispatch_through          TEXT,
+  delivery_required         DATE,
+  currency                  VARCHAR(10),
+  conversion_rate           NUMERIC(12,4),
+  insurance                 TEXT,
+  terms_conditions          TEXT,
+  test_certificate          TEXT,
+  packing_instructions      TEXT,
+  transporter               TEXT,
+  bankers                   TEXT,
+  warranty                  TEXT,
+  kind_attention            TEXT,
+  dispatch_to               TEXT,
+  bill_to                   TEXT,
+  created_at                TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Item lookups by code (PR save, PO by PR, Sourcing, Direct PO) and foreign-key columns that had no index.
+CREATE INDEX IF NOT EXISTS idx_item_master_part_no ON public.item_master(sms_new_part_no);
+CREATE INDEX IF NOT EXISTS idx_item_master_old_code ON public.item_master(old_code);
+CREATE INDEX IF NOT EXISTS idx_po_pr_alloc_rate ON public.po_pr_allocations(rate_id);
+CREATE INDEX IF NOT EXISTS idx_po_pr_alloc_draft_alloc ON public.po_pr_allocations(draft_allocation_id);
+CREATE INDEX IF NOT EXISTS idx_vendor_item_rates_item ON public.vendor_item_rates(item_id);
+CREATE INDEX IF NOT EXISTS idx_vquot_items_pr_item ON public.vendor_quotation_items(pr_item_id);
+CREATE INDEX IF NOT EXISTS idx_vquot_items_item ON public.vendor_quotation_items(item_id);
+CREATE INDEX IF NOT EXISTS idx_vquot_vendor_id ON public.vendor_quotations(vendor_id);
+CREATE INDEX IF NOT EXISTS idx_vquot_pr_id ON public.vendor_quotations(pr_id);
+CREATE INDEX IF NOT EXISTS idx_vquot_parent ON public.vendor_quotations(parent_quotation_id);
+CREATE INDEX IF NOT EXISTS idx_po_source_quote_id ON public.purchase_orders(source_quotation_id);
+CREATE INDEX IF NOT EXISTS idx_capital_po_lines_pr_item ON public.capital_po_lines(pr_item_id);
+CREATE INDEX IF NOT EXISTS idx_capital_po_sched_line ON public.capital_po_schedules(line_id);
+CREATE INDEX IF NOT EXISTS idx_capital_po_rcpt_lines_po_line ON public.capital_po_receipt_lines(po_line_id);
+CREATE INDEX IF NOT EXISTS idx_asset_master_po_line ON public.asset_master(capital_po_line_id);
+CREATE INDEX IF NOT EXISTS idx_capital_po_validity_po ON public.capital_po_validity_history(capital_po_id);
+CREATE INDEX IF NOT EXISTS idx_capital_po_att_line ON public.capital_po_attachments(line_id);
+CREATE INDEX IF NOT EXISTS idx_capital_po_att_receipt ON public.capital_po_attachments(receipt_id);
+CREATE INDEX IF NOT EXISTS idx_service_po_inv_po ON public.service_po_invoices(service_po_id);
+CREATE INDEX IF NOT EXISTS idx_service_po_inv_acceptance ON public.service_po_invoices(acceptance_id);
+CREATE INDEX IF NOT EXISTS idx_service_po_validity_po ON public.service_po_validity_history(service_po_id);
+CREATE INDEX IF NOT EXISTS idx_po_terms_mode_of_payment ON public.purchase_order_terms(mode_of_payment_code);
+CREATE INDEX IF NOT EXISTS idx_po_terms_payment_terms ON public.purchase_order_terms(payment_terms_code);
+CREATE INDEX IF NOT EXISTS idx_po_terms_credit_basis ON public.purchase_order_terms(credit_period_basis_code);
+CREATE INDEX IF NOT EXISTS idx_po_terms_freight ON public.purchase_order_terms(freight_option_code);
 
 -- =============================================================================
 -- Item master groups and subgroups (Other Item Master > Groups & Subgroups)

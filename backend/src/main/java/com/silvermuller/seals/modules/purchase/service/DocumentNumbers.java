@@ -8,7 +8,7 @@ import java.util.Locale;
 
 /**
  * Document numbers for the purchase flow: PREFIX-YEAR-NNNNN, for example PR-2026-00043, PO-2026-00219,
- * GRN-2026-00025, DRAFT-2026-001, JWO-2026-00001. The year is the year the document is created in, and the counter starts again at 1
+ * GRN-2026-00025, DRAFT-2026-001, RFQ-2026-00016, QT-2026-0001, JWO-2026-00001. The year is the year the document is created in, and the counter starts again at 1
  * every new year (PO-2027-00001).
  *
  * The counter for (document type, year) lives in document_number_counters and is incremented with one atomic
@@ -24,6 +24,9 @@ public final class DocumentNumbers {
         PO("PO", "purchase_orders", "po_number", 5),
         GRN("GRN", "goods_receipt_notes", "grn_number", 5),
         DRAFT("DRAFT", "po_drafts", "draft_number", 3),
+        RFQ("RFQ", "rfq_headers", "rfq_number", 5),
+        // Quotation revisions add "-R<n>" to the number; only the base numbers count for the sequence.
+        QT("QT", "vendor_quotations", "quotation_number", 4),
         // Job work documents
         JWI("JWI", "job_work_indents", "indent_number", 5),
         JWO("JWO", "job_work_orders", "jwo_number", 5),

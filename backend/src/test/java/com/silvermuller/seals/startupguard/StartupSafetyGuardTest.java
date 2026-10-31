@@ -40,7 +40,6 @@ class StartupSafetyGuardTest {
             "State-checked DDL, fill-NULL backfill and a forward-only sequence; never overwrites values.",
             "modules/masters/MasterDataSchema.java",
             "CREATE TABLE IF NOT EXISTS and DO NOTHING defaults; the app only soft-deletes these entries, so none reappears.",
-            "modules/masters/PurchaseOrderTermsService.java", "CREATE TABLE IF NOT EXISTS only.",
             "modules/inventory/service/ItemGroupService.java",
             "Default groups/subgroups seeded once per database through SeedRegistry; deleted ones stay deleted.",
             "modules/purchase/service/PurchaseRequisitionService.java", "Demo PR seeding is disabled (returns immediately).",

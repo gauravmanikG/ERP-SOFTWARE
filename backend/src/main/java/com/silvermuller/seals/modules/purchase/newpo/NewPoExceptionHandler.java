@@ -1,5 +1,6 @@
 package com.silvermuller.seals.modules.purchase.newpo;
 
+import com.silvermuller.seals.modules.purchase.controller.PurchaseProcessingController;
 import com.silvermuller.seals.modules.purchase.newpo.VendorRateService.NewPoException;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
@@ -17,7 +18,8 @@ import java.util.Map;
  * which would otherwise turn them into 500s.
  */
 @Order(Ordered.HIGHEST_PRECEDENCE)
-@RestControllerAdvice(assignableTypes = {NewPoController.class, PoByPrController.class, DirectPoController.class, ProcurementReportController.class, SourcingController.class})
+@RestControllerAdvice(assignableTypes = {NewPoController.class, PoByPrController.class, DirectPoController.class, ProcurementReportController.class,
+        SourcingController.class, PurchaseProcessingController.class})
 public class NewPoExceptionHandler {
 
     @ExceptionHandler(NewPoException.class)

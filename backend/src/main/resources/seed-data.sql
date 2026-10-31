@@ -26,6 +26,7 @@ WHERE EXISTS (SELECT 1 FROM public.app_seed_registry)
 ON CONFLICT (seed_key) DO NOTHING;
 
 -- seed-policy: once user-managed defaults: seeded once per database, a row the user renames or deletes is not put back
+-- (department_name and dept_code are both unique: a default whose name or code is already taken is skipped)
 WITH seed (dept_code, dept_number, department_name, process_sequence, category, status) AS (VALUES
   ('DPT-001', 1, 'Store', 1.0, 'Material Store', 'ACTIVE'),
   ('DPT-016', 16, 'Rejection Store', 16.0, 'Rejection', 'ACTIVE'),
@@ -50,7 +51,7 @@ added AS (
   INSERT INTO public.department_master (dept_code, dept_number, department_name, process_sequence, category, status)
   SELECT s.dept_code, s.dept_number, s.department_name, s.process_sequence, s.category, s.status FROM seed s
   WHERE NOT EXISTS (SELECT 1 FROM public.app_seed_registry r WHERE r.seed_key = 'department_master:' || s.department_name::text)
-  ON CONFLICT (department_name) DO NOTHING
+  ON CONFLICT DO NOTHING
 )
 INSERT INTO public.app_seed_registry (seed_key, policy)
 SELECT 'department_master:' || s.department_name::text, 'once' FROM seed s
