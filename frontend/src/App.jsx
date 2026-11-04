@@ -7,6 +7,8 @@ import { OtherItemMasterPage } from "./modules/engineering/pages/OtherItemMaster
 import { SupplierMasterPage } from "./modules/purchase/pages/SupplierMasterPage";
 import { CustomerMasterPage } from "./modules/crm/pages/CustomerMasterPage";
 import { DepartmentMasterPage } from "./modules/settings/pages/DepartmentMasterPage";
+import { UsersPage } from "./modules/settings/pages/UsersPage";
+import { RbacPage } from "./modules/settings/pages/RbacPage";
 import { MachineMasterPage } from "./modules/maintenance/pages/MachineMasterPage";
 import { PurchaseRequisitionPage } from "./modules/purchase/pages/PurchaseRequisitionPage";
 import { ServicePurchaseOrderPage } from "./modules/purchase/pages/ServicePurchaseOrderPage";
@@ -17,6 +19,9 @@ import { MastersPage } from "./modules/masters/MastersPage";
 import { VendorQuotationsPage } from "./modules/purchase/pages/VendorQuotationsPage";
 import { GoodsReceiptNotePage } from "./modules/purchase/pages/GoodsReceiptNotePage";
 import { RequestForQuotationPage } from "./modules/purchase/pages/RequestForQuotationPage";
+import { useCurrentUser } from "./modules/auth/AuthGate";
+import { canOpenPage } from "./modules/auth/access";
+import { AccessDenied } from "./modules/auth/AccessDenied";
 
 export default function App() {
   const [currentView, setCurrentView] = useState("home"); // "home" | "item-master" | "item-master-other" | "supplier-master" | "customer-master" | "department-master" | "machine-master" | "purchase-requisition" | "purchase-orders" | "purchase-processing" | "po-approval" | "vendor-quotations" | "rfq" | "grn" | "operations"
@@ -25,6 +30,7 @@ export default function App() {
   const [jobWorkScreen, setJobWorkScreen] = useState("dashboard");
   const [newPoScreen, setNewPoScreen] = useState("vendor-rates");
   const [mastersScreen, setMastersScreen] = useState("mode-of-payment");
+  const [rbacUser, setRbacUser] = useState(null); // user selected on the Users screen for Access Control
 
   const handleNavigateToPage = (targetPage) => {
     let page = targetPage;
@@ -46,6 +52,12 @@ export default function App() {
       setSidebarOpen(false);
     } else if (page === "department-master") {
       setCurrentView("department-master");
+      setSidebarOpen(false);
+    } else if (page === "users") {
+      setCurrentView("users");
+      setSidebarOpen(false);
+    } else if (page === "rbac") {
+      setCurrentView("rbac");
       setSidebarOpen(false);
     } else if (page === "machine-master") {
       setCurrentView("machine-master");
@@ -99,12 +111,23 @@ export default function App() {
     setCurrentView("home");
   };
 
+  // Screen-level access: whatever route led here, a screen this user may not open is never mounted.
+  const me = useCurrentUser();
+  const pageKey =
+    currentView === "masters" ? `masters-${mastersScreen}`
+      : currentView === "new-po" ? `new-po-${newPoScreen}`
+        : currentView === "job-work" ? `job-work-${jobWorkScreen}`
+          : currentView;
+  const view = canOpenPage(me, pageKey) ? currentView : "denied";
+
   const isFullscreenMaster =
     currentView === "item-master" ||
     currentView === "item-master-other" ||
     currentView === "supplier-master" ||
     currentView === "customer-master" ||
     currentView === "department-master" ||
+    currentView === "users" ||
+    currentView === "rbac" ||
     currentView === "machine-master" ||
     currentView === "purchase-requisition" ||
     currentView === "vendor-quotations" ||
@@ -154,7 +177,7 @@ export default function App() {
 
       {/* 3. Main Screen View Area */}
       <div style={{ flex: 1, position: "relative", minHeight: 0, overflow: isFullscreenMaster ? "hidden" : "visible" }}>
-        {currentView === "item-master" && (
+        {view === "item-master" && (
           <ItemMasterFormPage
             onBackToHome={handleBackToHome}
             onOpenSidebar={() => setSidebarOpen((v) => !v)}
@@ -163,7 +186,7 @@ export default function App() {
           />
         )}
 
-        {currentView === "item-master-other" && (
+        {view === "item-master-other" && (
           <OtherItemMasterPage
             onBackToHome={handleBackToHome}
             onOpenSidebar={() => setSidebarOpen((v) => !v)}
@@ -172,7 +195,7 @@ export default function App() {
           />
         )}
 
-        {currentView === "supplier-master" && (
+        {view === "supplier-master" && (
           <SupplierMasterPage
             onBackToHome={handleBackToHome}
             onOpenSidebar={() => setSidebarOpen((v) => !v)}
@@ -181,7 +204,7 @@ export default function App() {
           />
         )}
 
-        {currentView === "customer-master" && (
+        {view === "customer-master" && (
           <CustomerMasterPage
             onBackToHome={handleBackToHome}
             onOpenSidebar={() => setSidebarOpen((v) => !v)}
@@ -190,7 +213,7 @@ export default function App() {
           />
         )}
 
-        {currentView === "department-master" && (
+        {view === "department-master" && (
           <DepartmentMasterPage
             onBackToHome={handleBackToHome}
             onOpenSidebar={() => setSidebarOpen((v) => !v)}
@@ -199,7 +222,42 @@ export default function App() {
           />
         )}
 
-        {currentView === "machine-master" && (
+        {view === "users" && (
+          <UsersPage
+            onBackToHome={handleBackToHome}
+            onOpenSidebar={() => setSidebarOpen((v) => !v)}
+            sidebarOpen={sidebarOpen}
+            onOpenAccess={(u) => {
+              setRbacUser({ id: u.id, name: u.name });
+              setCurrentView("rbac");
+              setSidebarOpen(false);
+            }}
+          />
+        )}
+
+        {view === "rbac" && rbacUser && (
+          <RbacPage
+            user={rbacUser}
+            onBack={() => setCurrentView("users")}
+            onBackToHome={handleBackToHome}
+            onOpenSidebar={() => setSidebarOpen((v) => !v)}
+          />
+        )}
+
+        {view === "rbac" && !rbacUser && (
+          <UsersPage
+            onBackToHome={handleBackToHome}
+            onOpenSidebar={() => setSidebarOpen((v) => !v)}
+            sidebarOpen={sidebarOpen}
+            onOpenAccess={(u) => {
+              setRbacUser({ id: u.id, name: u.name });
+              setCurrentView("rbac");
+              setSidebarOpen(false);
+            }}
+          />
+        )}
+
+        {view === "machine-master" && (
           <MachineMasterPage
             onBackToHome={handleBackToHome}
             onOpenSidebar={() => setSidebarOpen((v) => !v)}
@@ -208,7 +266,7 @@ export default function App() {
           />
         )}
 
-        {currentView === "purchase-requisition" && (
+        {view === "purchase-requisition" && (
           <PurchaseRequisitionPage
             onBackToHome={handleBackToHome}
             onOpenSidebar={() => setSidebarOpen((v) => !v)}
@@ -217,7 +275,7 @@ export default function App() {
           />
         )}
 
-        {currentView === "job-work" && (
+        {view === "job-work" && (
           <JobWorkPage
             screen={jobWorkScreen}
             onBackToHome={handleBackToHome}
@@ -225,7 +283,7 @@ export default function App() {
             sidebarOpen={sidebarOpen}
           />
         )}
-        {currentView === "new-po" && (
+        {view === "new-po" && (
           <NewPurchaseOrderPage
             screen={newPoScreen}
             onNavigate={handleNavigateToPage}
@@ -235,7 +293,7 @@ export default function App() {
           />
         )}
 
-        {currentView === "masters" && (
+        {view === "masters" && (
           <MastersPage
             screen={mastersScreen}
             onBackToHome={handleBackToHome}
@@ -244,7 +302,7 @@ export default function App() {
           />
         )}
 
-        {currentView === "capital-po" && (
+        {view === "capital-po" && (
           <CapitalPurchaseOrderPage
             onBackToHome={handleBackToHome}
             onOpenSidebar={() => setSidebarOpen((v) => !v)}
@@ -253,7 +311,7 @@ export default function App() {
           />
         )}
 
-        {currentView === "service-po" && (
+        {view === "service-po" && (
           <ServicePurchaseOrderPage
             onBackToHome={handleBackToHome}
             onOpenSidebar={() => setSidebarOpen((v) => !v)}
@@ -262,7 +320,7 @@ export default function App() {
           />
         )}
 
-        {currentView === "vendor-quotations" && (
+        {view === "vendor-quotations" && (
           <VendorQuotationsPage
             onBackToHome={handleBackToHome}
             onOpenSidebar={() => setSidebarOpen((v) => !v)}
@@ -271,7 +329,7 @@ export default function App() {
           />
         )}
 
-        {currentView === "rfq" && (
+        {view === "rfq" && (
           <RequestForQuotationPage
             onBackToHome={handleBackToHome}
             onOpenSidebar={() => setSidebarOpen((v) => !v)}
@@ -280,7 +338,7 @@ export default function App() {
           />
         )}
 
-        {currentView === "grn" && (
+        {view === "grn" && (
           <GoodsReceiptNotePage
             onBackToHome={handleBackToHome}
             onOpenSidebar={() => setSidebarOpen((v) => !v)}
@@ -289,7 +347,9 @@ export default function App() {
           />
         )}
 
-        {currentView === "home" && (
+        {view === "denied" && <AccessDenied onBackToHome={handleBackToHome} />}
+
+        {view === "home" && (
           <SilverBrainLandingPage
             onNavigateToPage={handleNavigateToPage}
             hideHeader={true}

@@ -1,6 +1,8 @@
 import { formatDisplayDate, formatDisplayDateTime } from "../../../shared/utils/dateFormat";
-import { useState, useEffect, useRef, createElement } from "react";
-import { MODULES_LIST, ModuleIcons } from "../../../shared/layout/modulesData";
+import { useState, useEffect, useRef, useMemo, createElement } from "react";
+import { ModuleIcons } from "../../../shared/layout/modulesData";
+import { useCurrentUser } from "../../auth/AuthGate";
+import { visibleModules } from "../../auth/access";
 
 // Keeps a flyout inside the window: its top is clamped and its height fills only the space below it.
 const fitTop = (desired, min = 72) => Math.max(min, Math.min(desired, window.innerHeight - 260));
@@ -12,6 +14,8 @@ export function SilverBrainLandingPage({
   hideSidebar = false
 }) {
   const [hoveredModule, setHoveredModule] = useState(null);
+  const me = useCurrentUser();
+  const MODULES_LIST = useMemo(() => visibleModules(me), [me]); // only modules/screens this user may open
   const [drawerCoords, setDrawerCoords] = useState({ top: 0, left: 240 });
   const [currentTime, setCurrentTime] = useState(new Date());
   // The backend has no notifications service yet, so there is nothing unread to count.

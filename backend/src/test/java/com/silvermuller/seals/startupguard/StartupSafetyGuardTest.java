@@ -44,7 +44,9 @@ class StartupSafetyGuardTest {
             "Default groups/subgroups seeded once per database through SeedRegistry; deleted ones stay deleted.",
             "modules/purchase/service/PurchaseRequisitionService.java", "Demo PR seeding is disabled (returns immediately).",
             "modules/purchase/service/VendorQuotationService.java",
-            "Business rule: marks quotations past valid_until as Expired; demo seeding is disabled.");
+            "Business rule: marks quotations past valid_until as Expired; demo seeding is disabled.",
+            "modules/admin/AdminSeeder.java",
+            "Seeds built-in roles, default permission templates and bootstrap users once per database via SeedRegistry; INSERT-only.");
 
     @Test
     void everyStartupHookHasBeenReviewed() throws IOException {

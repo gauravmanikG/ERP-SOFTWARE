@@ -14,6 +14,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.time.OffsetDateTime;
@@ -135,6 +136,15 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
     public ResponseEntity<Map<String, Object>> handleMediaType(HttpMediaTypeNotSupportedException ex) {
         return simple(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "Unsupported Media Type", "Send the request body as application/json.");
+    }
+
+    /** Explicit HTTP status raised by the code (e.g. auth guards returning 401/403); keep its status and reason. */
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<Map<String, Object>> handleResponseStatus(ResponseStatusException ex) {
+        HttpStatus status = HttpStatus.resolve(ex.getStatusCode().value());
+        if (status == null) status = HttpStatus.INTERNAL_SERVER_ERROR;
+        return simple(status, status.getReasonPhrase(),
+                ex.getReason() != null ? ex.getReason() : status.getReasonPhrase());
     }
 
     /** Anything unexpected: logged in full on the server, and the client gets a reference instead of internal details. */

@@ -1915,3 +1915,81 @@ CREATE TABLE IF NOT EXISTS public.app_seed_registry (
 
 -- Databases created before the master -> item_master consolidation are brought in line by data migrations
 -- 2026-10-25-06 and -07 (StartupDataMigrations): job-work columns re-pointed to item_master, old tables dropped.
+
+-- =============================================================================
+-- Users, roles and access control (Settings -> Users / Access Control).
+-- Reference data (roles, default role permissions, bootstrap users) is seeded once
+-- per database by AdminSeeder through SeedRegistry. Passwords are bcrypt hashes
+-- produced by pgcrypto crypt()/gen_salt('bf'); plaintext is never stored.
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS public.app_role (
+  id            BIGSERIAL PRIMARY KEY,
+  code          VARCHAR(50) NOT NULL UNIQUE,     -- stable key, e.g. purchase_manager
+  name          VARCHAR(120) NOT NULL,
+  description   TEXT,
+  is_system     BOOLEAN NOT NULL DEFAULT FALSE,  -- built-in role, not deletable in the UI
+  wildcard      BOOLEAN NOT NULL DEFAULT FALSE,  -- full access to everything (Developer, Super Admin)
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.app_user (
+  id                   BIGSERIAL PRIMARY KEY,
+  name                 VARCHAR(150) NOT NULL,
+  email                VARCHAR(190) NOT NULL UNIQUE,  -- login id
+  password_hash        TEXT NOT NULL,                 -- pgcrypto bcrypt hash
+  role_id              BIGINT REFERENCES public.app_role(id),
+  status               VARCHAR(10) NOT NULL DEFAULT 'ACTIVE',  -- ACTIVE | INACTIVE
+  department           VARCHAR(150),
+  designation          VARCHAR(150),
+  employee_id          VARCHAR(60),
+  phone                VARCHAR(40),
+  approval_limit       NUMERIC(18,2),
+  must_change_password BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_login_at        TIMESTAMPTZ
+);
+
+-- Default permission template per role; the grid starts from these.
+CREATE TABLE IF NOT EXISTS public.role_permission (
+  role_id         BIGINT NOT NULL REFERENCES public.app_role(id) ON DELETE CASCADE,
+  permission_key  VARCHAR(120) NOT NULL,  -- module.entity:action, e.g. purchase.pr:approve
+  PRIMARY KEY (role_id, permission_key)
+);
+
+-- Per-user overrides on top of the role template. allowed=TRUE grants, allowed=FALSE revokes.
+-- A missing row means "inherit from the role".
+CREATE TABLE IF NOT EXISTS public.user_permission (
+  user_id         BIGINT NOT NULL REFERENCES public.app_user(id) ON DELETE CASCADE,
+  permission_key  VARCHAR(120) NOT NULL,
+  allowed         BOOLEAN NOT NULL,
+  PRIMARY KEY (user_id, permission_key)
+);
+
+-- Opaque login sessions. The client sends the token as Authorization: Bearer <token>.
+CREATE TABLE IF NOT EXISTS public.app_user_session (
+  token        VARCHAR(64) PRIMARY KEY,
+  user_id      BIGINT NOT NULL REFERENCES public.app_user(id) ON DELETE CASCADE,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at   TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_user_session_user ON public.app_user_session(user_id);
+
+-- Audit of who changed whose access / account.
+CREATE TABLE IF NOT EXISTS public.permission_audit (
+  id              BIGSERIAL PRIMARY KEY,
+  actor_user_id   BIGINT,
+  actor_name      VARCHAR(150),
+  target_user_id  BIGINT,
+  target_name     VARCHAR(150),
+  action          VARCHAR(60) NOT NULL,   -- USER_CREATED, USER_UPDATED, STATUS_CHANGED, PASSWORD_RESET, PERMISSIONS_SAVED, LOGIN
+  detail          TEXT,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_permission_audit_target ON public.permission_audit(target_user_id);
+
+-- Profile picture: a small, client-resized image stored as a data URL (data:image/jpeg;base64,...).
+ALTER TABLE public.app_user ADD COLUMN IF NOT EXISTS photo TEXT;
+-- Super Admin "view password": a pgcrypto pgp_sym_encrypt copy of the password, keyed by APP_PASSWORD_VIEW_KEY.
+-- Login still verifies only the bcrypt password_hash. NULL for passwords set before this column existed.
+ALTER TABLE public.app_user ADD COLUMN IF NOT EXISTS password_enc BYTEA;

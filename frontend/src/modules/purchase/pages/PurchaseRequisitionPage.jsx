@@ -1,5 +1,7 @@
 import { setHandoff, getHandoff, removeHandoff } from "../../../shared/utils/handoffStore";
 import { loadUser } from "../newpo/api";
+import { useCurrentUser } from "../../auth/AuthGate";
+import { can } from "../../auth/access";
 import { formatDisplayDate, formatDisplayDateTime } from "../../../shared/utils/dateFormat";
 import DateInput from "../../../shared/components/DateInput";
 import SearchableSelect from "../../../shared/components/SearchableSelect";
@@ -251,6 +253,15 @@ export function PurchaseRequisitionPage({
   sidebarOpen,
   onNavigate
 }) {
+  // What the signed-in user may do here; buttons they lack are hidden (the server enforces the same rules).
+  const me = useCurrentUser();
+  const canCreatePr = can(me, "purchase.pr:create");
+  const canEditPr = can(me, "purchase.pr:edit");
+  const canDeletePr = can(me, "purchase.pr:delete");
+  const canApprovePr = can(me, "purchase.pr:approve");
+  const canRejectPr = can(me, "purchase.pr:reject");
+  const canStartRfq = can(me, "purchase.rfq:create");                // RFQ button opens the RFQ screen
+  const canStartPo = can(me, "purchase.clubbed_demand:view");        // PO button opens Clubbed Demand
   const purchaseRequisitionPage6Resize = useResizableColumns("purchase-requisition-page-6", PURCHASE_REQUISITION_PAGE_6_COLUMNS);
   const purchaseRequisitionPage5Resize = useResizableColumns("purchase-requisition-page-5", PURCHASE_REQUISITION_PAGE_5_COLUMNS);
   const purchaseRequisitionPage4Resize = useResizableColumns("purchase-requisition-page-4", PURCHASE_REQUISITION_PAGE_4_COLUMNS);
@@ -1331,7 +1342,7 @@ export function PurchaseRequisitionPage({
           {/* Left Action Buttons */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             {/* + New Purchase Requisition Button */}
-            <button
+            {canCreatePr && <button
               onClick={handleOpenCreateModal}
               id="btn-new-pr"
               style={{
@@ -1352,10 +1363,10 @@ export function PurchaseRequisitionPage({
             >
               <span style={{ fontSize: 15, fontWeight: 900 }}>+</span>
               <span>New Purchase Requisition</span>
-            </button>
+            </button>}
 
             {/* Edit PR Button */}
-            <button
+            {canEditPr && <button
               onClick={handleEditSelected}
               id="btn-edit-pr"
               style={{
@@ -1371,7 +1382,7 @@ export function PurchaseRequisitionPage({
               }}
             >
               Edit PR
-            </button>
+            </button>}
 
             {/* View Detail Button */}
             <button
@@ -1393,7 +1404,7 @@ export function PurchaseRequisitionPage({
             </button>
 
             {/* Delete PR Button */}
-            <button
+            {canDeletePr && <button
               onClick={handleDeleteSelected}
               id="btn-delete-pr"
               style={{
@@ -1409,7 +1420,7 @@ export function PurchaseRequisitionPage({
               }}
             >
               Delete PR
-            </button>
+            </button>}
 
             <span style={{ color: "#e2e8f0", margin: "0 4px", fontSize: 18 }}>|</span>
 
@@ -2075,7 +2086,7 @@ export function PurchaseRequisitionPage({
                           </button>
 
                           {/* Edit Action (Editable if not fully converted to PO) */}
-                          {!isPrLocked(pr) && (
+                          {canEditPr && !isPrLocked(pr) && (
                             <button
                               onClick={() => handleOpenEditModal(pr)}
                               title="Edit Requisition"
@@ -2097,7 +2108,7 @@ export function PurchaseRequisitionPage({
                           )}
 
                           {/* Delete Action (Draft or Rejected) */}
-                          {(pr.status === "Draft" || pr.status === "Rejected") && (
+                          {canDeletePr && (pr.status === "Draft" || pr.status === "Rejected") && (
                             <button
                               onClick={() => setDeletePrTarget(pr)}
                               title="Delete Requisition"
@@ -2118,10 +2129,10 @@ export function PurchaseRequisitionPage({
                             </button>
                           )}
 
-                          {/* Pending Approval: Quick Approve / Reject */}
+                          {/* Pending Approval: Quick Approve / Reject (only for users allowed to decide) */}
                           {pr.status === "Pending Approval" && (
                             <>
-                              <button
+                              {canApprovePr && <button
                                 onClick={() => handleApprovePr(pr)}
                                 title="Approve PR"
                                 style={{
@@ -2138,8 +2149,8 @@ export function PurchaseRequisitionPage({
                                 }}
                               >
                                 <Check size={13} />
-                              </button>
-                              <button
+                              </button>}
+                              {canRejectPr && <button
                                 onClick={() => {
                                   setRejectingPrTarget(pr);
                                   setRejectionReasonText("");
@@ -2159,14 +2170,14 @@ export function PurchaseRequisitionPage({
                                 }}
                               >
                                 <X size={13} />
-                              </button>
+                              </button>}
                             </>
                           )}
 
                           {/* Connection 1 & 2: Approved / Partially Ordered Actions */}
                           {(pr.status === "Approved" || pr.status === "Partially Ordered") && (
                             <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                              {method === "Competitive Quotation" && (
+                              {canStartRfq && method === "Competitive Quotation" && (
                                 <button
                                   onClick={() => handleCreateRfqFromPr(pr)}
                                   title="Create RFQ / Request Quotations from Vendors"
@@ -2188,7 +2199,7 @@ export function PurchaseRequisitionPage({
                                   <span>RFQ</span>
                                 </button>
                               )}
-                              <button
+                              {canStartPo && <button
                                 onClick={() => handleProcessPoFromPr(pr)}
                                 title="Process Purchase Order Proposal"
                                 style={{
@@ -2207,7 +2218,7 @@ export function PurchaseRequisitionPage({
                               >
                                 <ShoppingCart size={12} />
                                 <span>PO</span>
-                              </button>
+                              </button>}
                             </div>
                           )}
                         </div>
@@ -3686,7 +3697,7 @@ export function PurchaseRequisitionPage({
               </button>
 
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                {!isPrLocked(detailPr) && (
+                {canEditPr && !isPrLocked(detailPr) && (
                   <button
                     onClick={() => handleOpenEditModal(detailPr)}
                     style={{
@@ -3709,7 +3720,7 @@ export function PurchaseRequisitionPage({
                 )}
                 {detailPr.status === "Pending Approval" && (
                   <>
-                    <button
+                    {canApprovePr && <button
                       onClick={() => handleApprovePr(detailPr)}
                       style={{
                         background: "#059669",
@@ -3723,8 +3734,8 @@ export function PurchaseRequisitionPage({
                       }}
                     >
                       Approve PR
-                    </button>
-                    <button
+                    </button>}
+                    {canRejectPr && <button
                       onClick={() => {
                         setRejectingPrTarget(detailPr);
                         setRejectionReasonText("");
@@ -3741,7 +3752,7 @@ export function PurchaseRequisitionPage({
                       }}
                     >
                       Reject PR
-                    </button>
+                    </button>}
                   </>
                 )}
 

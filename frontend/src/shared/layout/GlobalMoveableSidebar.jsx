@@ -1,5 +1,7 @@
-import { useState, useEffect, useRef } from "react";
-import { MODULES_LIST, ModuleIcons } from "./modulesData";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { ModuleIcons } from "./modulesData";
+import { useCurrentUser } from "../../modules/auth/AuthGate";
+import { visibleModules } from "../../modules/auth/access";
 
 // Keeps a flyout inside the window: its top is clamped and its height fills only the space below it.
 const fitTop = (desired, min = 72) => Math.max(min, Math.min(desired, window.innerHeight - 260));
@@ -14,6 +16,8 @@ export function GlobalMoveableSidebar({
   onNavigate
 }) {
   const [hoveredModule, setHoveredModule] = useState(null);
+  const me = useCurrentUser();
+  const MODULES_LIST = useMemo(() => visibleModules(me), [me]); // only modules/screens this user may open
   const [drawerCoords, setDrawerCoords] = useState({ top: 0, left: 260 });
   const [searchQuery, setSearchQuery] = useState("");
   const closeTimerRef = useRef(null);

@@ -328,7 +328,9 @@ export const MODULES_LIST = [
     name: "Settings",
     iconKey: "Settings",
     submodules: [
-      { name: "Departments", targetPage: "department-master", ready: true }
+      { name: "Departments", targetPage: "department-master", ready: true },
+      { name: "Users", targetPage: "users", ready: true },
+      { name: "Access Control", targetPage: "rbac", ready: true }
     ]
   }
 ];

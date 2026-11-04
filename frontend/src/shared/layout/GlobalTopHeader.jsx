@@ -1,7 +1,25 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { LogOut, Camera } from "lucide-react";
+import * as adminApi from "../../modules/settings/admin/api";
+import { fileToProfilePhoto } from "../../modules/auth/profilePhoto";
 import { formatDisplayDate, formatDisplayDateTime } from "../utils/dateFormat";
 import { ModuleIcons } from "./modulesData";
 import ThemeToggle from "../components/ThemeToggle";
+import { useCurrentUser } from "../../modules/auth/AuthGate";
+
+// A stable color for a user's initials avatar, picked from their name so the same
+// person always gets the same color (no per-user photo exists in this system).
+const AVATAR_PALETTE = ["#c51f28", "#0f766e", "#1d4ed8", "#7c3aed", "#b45309", "#0e7490"];
+function avatarColor(name) {
+  let h = 0;
+  for (let i = 0; i < (name || "").length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  return AVATAR_PALETTE[h % AVATAR_PALETTE.length];
+}
+function initialsOf(name) {
+  const parts = (name || "").trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  return (parts[0][0] + (parts[1]?.[0] || "")).toUpperCase();
+}
 
 export function GlobalTopHeader({
   sidebarOpen,
@@ -15,6 +33,28 @@ export function GlobalTopHeader({
   // The backend has no notifications service yet, so there is nothing unread to count.
   const notificationCount = 0;
   const [showNotificationPopup, setShowNotificationPopup] = useState(false);
+  const me = useCurrentUser();
+  const displayName = me?.name || "—";
+  const displayRole = me?.roleName || me?.roleCode || "—";
+  const photoInputRef = useRef(null);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [avatarHover, setAvatarHover] = useState(false);
+
+  const onPickPhoto = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow choosing the same file again later
+    if (!file) return;
+    setPhotoBusy(true);
+    try {
+      const photo = await fileToProfilePhoto(file);
+      const saved = await adminApi.updateMyPhoto(photo);
+      me?.updateUser?.({ photo: saved?.photo ?? photo });
+    } catch (err) {
+      window.alert(err.message || "Could not update the profile picture.");
+    } finally {
+      setPhotoBusy(false);
+    }
+  };
 
   // Live ticking date and time every 1 second
   useEffect(() => {
@@ -233,8 +273,9 @@ export function GlobalTopHeader({
       {/* ========================================================= */}
       <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
         
-        {/* 1. USER PROFILE: KIRAN BHALLA */}
+        {/* 1. USER PROFILE: the signed-in user, read from the session (AuthGate) */}
         <div
+          title={me?.email || ""}
           style={{
             display: "flex",
             alignItems: "center",
@@ -247,18 +288,49 @@ export function GlobalTopHeader({
           }}
         >
           <div style={{ position: "relative" }}>
-            <img
-              src="/avatar-kiran-bhalla.jpg"
-              alt="Kiran Bhalla"
+            {/* Click the avatar to change your own profile picture */}
+            <button
+              type="button"
+              onClick={() => photoInputRef.current?.click()}
+              disabled={photoBusy}
+              title="Change profile picture"
+              onMouseEnter={() => setAvatarHover(true)}
+              onMouseLeave={() => setAvatarHover(false)}
               style={{
                 width: 36,
                 height: 36,
+                padding: 0,
                 borderRadius: "50%",
-                objectFit: "cover",
-                display: "block",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                overflow: "hidden",
+                position: "relative",
+                cursor: photoBusy ? "wait" : "pointer",
+                background: me?.photo ? "#ffffff" : avatarColor(displayName),
+                color: "#ffffff",
+                fontSize: 13,
+                fontWeight: 800,
                 border: "2px solid #e2e8f0",
-                boxShadow: "0 1px 3px rgba(0,0,0,0.08)"
+                boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+                userSelect: "none"
               }}
+            >
+              {me?.photo
+                ? <img src={me.photo} alt={displayName} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                : initialsOf(displayName)}
+              {(avatarHover || photoBusy) && (
+                <span style={{ position: "absolute", inset: 0, background: "rgba(15,23,42,0.55)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <Camera size={14} color="#ffffff" />
+                </span>
+              )}
+            </button>
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              style={{ display: "none" }}
+              onChange={onPickPhoto}
             />
             {/* Online indicator dot */}
             <span
@@ -281,10 +353,14 @@ export function GlobalTopHeader({
                 fontWeight: 700,
                 color: "#0f172a",
                 margin: 0,
-                lineHeight: 1.2
+                lineHeight: 1.2,
+                maxWidth: 150,
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis"
               }}
             >
-              Kiran Bhalla
+              {displayName}
             </p>
             <p
               style={{
@@ -294,10 +370,24 @@ export function GlobalTopHeader({
                 margin: 0
               }}
             >
-              Admin &bull;{" "}
+              {displayRole} &bull;{" "}
               <span style={{ color: "#10b981", fontWeight: 700 }}>Online</span>
             </p>
           </div>
+          {me?.signOut && (
+            <button
+              onClick={me.signOut}
+              title="Sign out"
+              style={{
+                border: "none", background: "transparent", color: "#94a3b8", cursor: "pointer",
+                display: "flex", alignItems: "center", padding: 4, marginLeft: 2, borderRadius: 6
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = "#c51f28"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = "#94a3b8"; }}
+            >
+              <LogOut size={15} />
+            </button>
+          )}
         </div>
 
         {/* Divider | */}

@@ -1,5 +1,7 @@
 package com.silvermuller.seals.modules.purchase.controller;
 
+import com.silvermuller.seals.modules.admin.security.AdminGuard;
+import com.silvermuller.seals.modules.admin.security.CurrentUser;
 import com.silvermuller.seals.modules.purchase.dto.*;
 import com.silvermuller.seals.modules.purchase.model.VendorQuotation;
 import com.silvermuller.seals.modules.purchase.model.VendorQuotationComment;
@@ -19,9 +21,22 @@ import java.util.Map;
 public class VendorQuotationController {
 
     private final VendorQuotationService quotationService;
+    private final AdminGuard guard;
 
-    public VendorQuotationController(VendorQuotationService quotationService) {
+    /** Target status -> permissions that may set it (any one is enough). Case-insensitive, like the service. */
+    static String[] permissionsForStatus(String status) {
+        return switch (status.trim().toLowerCase(java.util.Locale.ROOT)) {
+            case "submitted for review" -> new String[] { "purchase.quotation:submit" };
+            case "under evaluation" -> new String[] { "purchase.quotation:approve", "purchase.quotation:reject" };
+            case "selected for purchase" -> new String[] { "purchase.quotation:approve" };
+            case "rejected" -> new String[] { "purchase.quotation:reject" };
+            default -> new String[] { "purchase.quotation:edit" };
+        };
+    }
+
+    public VendorQuotationController(VendorQuotationService quotationService, AdminGuard guard) {
         this.quotationService = quotationService;
+        this.guard = guard;
     }
 
     /**
@@ -107,16 +122,19 @@ public class VendorQuotationController {
      */
     @PostMapping("/{id}/status")
     public ResponseEntity<?> updateStatus(
+            @RequestHeader(value = "Authorization", required = false) String authz,
             @PathVariable Long id,
             @RequestBody Map<String, String> body) {
+        String status = body.get("status");
+        if (status == null || status.trim().isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Status field is required."));
+        }
+        // the permission depends on the target status; the decision is recorded under the signed-in user
+        CurrentUser actor = guard.requireAny(authz, permissionsForStatus(status.trim()));
         try {
-            String status = body.get("status");
-            if (status == null || status.trim().isEmpty()) {
-                return ResponseEntity.badRequest().body(Map.of("error", "Status field is required."));
-            }
             String justification = body.get("justification");
             String evaluationNotes = body.get("evaluationNotes");
-            String user = body.getOrDefault("user", "Authorized Reviewer");
+            String user = actor.name();
 
             VendorQuotation updated = quotationService.updateStatus(id, status, justification, evaluationNotes, user);
             return ResponseEntity.ok(updated);
