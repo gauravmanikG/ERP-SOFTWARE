@@ -96,6 +96,9 @@ export function GlobalTopHeader({
     if (currentView === "customer-master") {
       return { module: "CRM & Sales", screen: "Customer Master Directory" };
     }
+    if (currentView === "documentation") {
+      return { module: "Documentation", screen: "Guides, Backend, Flowcharts & Live System" };
+    }
     if (currentView === "department-master") {
       return { module: "Settings & Administration", screen: "Department Master Directory" };
     }

@@ -1,5 +1,6 @@
 package com.silvermuller.seals.modules.purchase.service;
 
+import com.silvermuller.seals.modules.admin.security.RequestActor;
 import com.silvermuller.seals.modules.purchase.servicepo.ServicePoService;
 import com.silvermuller.seals.modules.purchase.dto.PurchaseItemLine;
 import com.silvermuller.seals.modules.purchase.model.GoodsReceiptNote;
@@ -391,6 +392,10 @@ public class GoodsReceiptNoteService {
         if (grn.getCreatedBy() == null || grn.getCreatedBy().trim().isEmpty()) {
             grn.setCreatedBy(grn.getReceivedBy());
         }
+        // Who saved / posted this GRN is the signed-in user (Received By stays the store person named on the form).
+        String actor = RequestActor.nameOr(grn.getCreatedBy());
+        boolean wasNew = grn.getId() == null;
+        if (wasNew) grn.setCreatedBy(actor);
 
         Long grnId = grn.getId();
         if (grnId == null) {
@@ -469,7 +474,7 @@ public class GoodsReceiptNoteService {
                 grn.getTotalPendingQty(),
                 grn.getTotalValue(),
                 grn.getRemarks(),
-                grn.getReceivedBy(),
+                actor,
                 grnId
             );
             jdbc.update("DELETE FROM goods_receipt_note_items WHERE grn_id = ?", grnId);
@@ -495,6 +500,14 @@ public class GoodsReceiptNoteService {
                 it.getRemarks()
             );
         }
+
+        Map<String, Object> auditDetails = new java.util.LinkedHashMap<>();
+        auditDetails.put("poNumber", grn.getPoNumber());
+        if (grn.getVendorChallanNo() != null) auditDetails.put("challan", grn.getVendorChallanNo().trim());
+        auditDetails.put("accepted", grn.getTotalAcceptedQty());
+        auditDetails.put("rejected", grn.getTotalRejectedQty());
+        if (grn.getReceivedBy() != null && !grn.getReceivedBy().isBlank()) auditDetails.put("receivedBy", grn.getReceivedBy().trim());
+        ProcurementAudit.record(jdbc, "GRN", grn.getGrnNumber(), isPost ? "POSTED" : (wasNew ? "SAVED_DRAFT" : "DRAFT_UPDATED"), actor, auditDetails);
 
         // IF POSTED: UPDATE PO RECEIVED STATUS ACCURATELY
         if (isPost) {

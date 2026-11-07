@@ -493,6 +493,12 @@ public class PoByPrService {
         }
         jdbc.update("INSERT INTO public.po_revisions (po_number, revision_number, changed_by, change_reason, changes_json) VALUES (?, ?, ?, ?, ?)",
                 po, rev == null ? 1 : rev, cancelledBy, why, changes);
+        Map<String, Object> auditDetails = new LinkedHashMap<>();
+        auditDetails.put("from", status);
+        auditDetails.put("to", "CANCELLED");
+        auditDetails.put("reason", why);
+        auditDetails.put("releasedQty", releasedTotal.toPlainString());
+        com.silvermuller.seals.modules.purchase.service.ProcurementAudit.record(jdbc, "PO", po, "CANCELLED", cancelledBy, auditDetails);
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("poNumber", po);

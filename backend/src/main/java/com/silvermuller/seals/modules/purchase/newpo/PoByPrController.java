@@ -1,5 +1,6 @@
 package com.silvermuller.seals.modules.purchase.newpo;
 
+import com.silvermuller.seals.modules.admin.security.RequestActor;
 import com.silvermuller.seals.modules.purchase.newpo.PoByPrDtos.CreatePoRequest;
 import com.silvermuller.seals.modules.purchase.newpo.PoByPrDtos.CreatedPo;
 import com.silvermuller.seals.modules.purchase.newpo.PoByPrDtos.EligiblePrLine;
@@ -72,7 +73,7 @@ public class PoByPrController {
     public Map<String, Object> cancelPo(@PathVariable String poNumber,
                                         @RequestBody(required = false) Map<String, String> body,
                                         @RequestHeader(value = "X-User-Name", required = false) String user) {
-        return service.cancel(poNumber, user, body == null ? null : body.get("reason"));
+        return service.cancel(poNumber, RequestActor.nameOr(user), body == null ? null : body.get("reason"));
     }
 
     @GetMapping("/prs/{prNumber}/lines")
@@ -89,6 +90,6 @@ public class PoByPrController {
     @PostMapping("/purchase-orders")
     public ResponseEntity<CreatedPo> create(@RequestBody CreatePoRequest body,
                                             @RequestHeader(value = "X-User-Name", required = false) String user) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(service.create(body, user));
+        return ResponseEntity.status(HttpStatus.CREATED).body(service.create(body, RequestActor.nameOr(user)));
     }
 }

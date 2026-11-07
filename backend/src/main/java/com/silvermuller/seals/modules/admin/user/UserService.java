@@ -46,6 +46,7 @@ public class UserService {
         if (name.isBlank() || email.isBlank()) throw new IllegalArgumentException("Name and email are required.");
         requireCompanyEmail(email);
         if (password.length() < 8) throw new IllegalArgumentException("Password must be at least 8 characters.");
+        requireUniqueName(name, null);
 
         Long roleId = num(body, "roleId");
         try {
@@ -57,7 +58,7 @@ public class UserService {
                     str(body, "employeeId"), str(body, "phone"), decimal(body, "approvalLimit"),
                     ProfilePhoto.validated(rawStr(body, "photo")));
         } catch (DuplicateKeyException e) {
-            throw new IllegalArgumentException("A user with email '" + email + "' already exists.");
+            throw duplicate(e, name, "A user with email '" + email + "' already exists.");
         }
         Long id = jdbc.queryForObject("SELECT id FROM public.app_user WHERE lower(email) = lower(?)", Long.class, email.trim());
         vault.store(id, password);
@@ -71,6 +72,7 @@ public class UserService {
         String email = str(body, "email");
         if (name.isBlank() || email.isBlank()) throw new IllegalArgumentException("Name and email are required.");
         requireCompanyEmail(email);
+        requireUniqueName(name, id);
         try {
             jdbc.update("UPDATE public.app_user SET name = ?, email = ?, role_id = ?, status = ?, department = ?, "
                     + "designation = ?, employee_id = ?, phone = ?, approval_limit = ?, updated_at = now() WHERE id = ?",
@@ -78,7 +80,7 @@ public class UserService {
                     str(body, "department"), str(body, "designation"), str(body, "employeeId"),
                     str(body, "phone"), decimal(body, "approvalLimit"), id);
         } catch (DuplicateKeyException e) {
-            throw new IllegalArgumentException("Another user already uses email '" + email + "'.");
+            throw duplicate(e, name, "Another user already uses email '" + email + "'.");
         }
         if (body.containsKey("photo")) { // absent = keep the current picture; null/"" = remove it
             jdbc.update("UPDATE public.app_user SET photo = ? WHERE id = ?",
@@ -167,6 +169,22 @@ public class UserService {
                 + "VALUES (?, ?, ?, ?, ?, ?)",
                 actor == null ? null : actor.id(), actor == null ? "system" : actor.name(),
                 targetId, targetName, action, detail);
+    }
+
+    /** User names are unique (case-insensitive) because the activity trail records each step under the name. */
+    private void requireUniqueName(String name, Long excludeId) {
+        Boolean taken = jdbc.queryForObject("SELECT EXISTS(SELECT 1 FROM public.app_user WHERE lower(btrim(name)) = lower(btrim(?)) "
+                + "AND (?::bigint IS NULL OR id <> ?::bigint))", Boolean.class, name, excludeId, excludeId);
+        if (Boolean.TRUE.equals(taken)) {
+            throw new IllegalArgumentException("Another user is already named '" + name + "'. User names must be unique.");
+        }
+    }
+
+    /** A save that raced past requireUniqueName hits uq_app_user_name_ci; any other duplicate is the email. */
+    private static IllegalArgumentException duplicate(DuplicateKeyException e, String name, String emailMessage) {
+        String msg = String.valueOf(e.getMostSpecificCause().getMessage());
+        return new IllegalArgumentException(msg.contains("uq_app_user_name_ci")
+                ? "Another user is already named '" + name + "'. User names must be unique." : emailMessage);
     }
 
     private static String str(Map<String, Object> m, String k) {

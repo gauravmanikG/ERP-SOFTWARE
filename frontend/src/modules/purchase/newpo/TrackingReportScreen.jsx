@@ -5,6 +5,7 @@ import { trackingApi, departmentApi, lookupApi } from "./api";
 import { qty, money, downloadCsv, todayIso } from "./ui";
 import SearchableSelect from "../../../shared/components/SearchableSelect";
 import SearchSelect from "./SearchSelect";
+import { ActivityButton } from "../activity/ActivityTrail";
 import { Frame, FilterRow, Pill, Metric, SearchBox, Chip, Empty, ErrorLine, PagingFooter, usePaging, toolBtn, smallBtn, thS, thR, tdS, tdR, fieldInput, STAGE_META } from "./frame";
 import { useColumnFilters, filterRows, FilterCells, filterInputStyle } from "./ColumnFilters";
 
@@ -228,7 +229,7 @@ export default function TrackingReportScreen({ user, flash }) {
                     </td>
                     <td style={cS}>{r.department || "—"}</td>
                     <td style={{ ...cS, fontWeight: 700 }}>
-                      {r.prNumber}
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>{r.prNumber}<ActivityButton docRef={r.prNumber} label="" style={{ padding: "2px 5px" }} /></span>
                       {r.approvalStage !== "APPROVED" && <div style={{ fontSize: 10.5, color: "#94a3b8", fontWeight: 500 }}>{r.prStatus}</div>}
                     </td>
                     <td style={{ ...cS, whiteSpace: "normal", minWidth: 190 }}>

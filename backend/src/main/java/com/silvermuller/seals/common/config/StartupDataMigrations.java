@@ -582,6 +582,56 @@ public class StartupDataMigrations implements ApplicationRunner {
                         ALTER TABLE public.purchase_order_delivery_schedules ADD CONSTRAINT uq_po_sched_lot
                           UNIQUE (po_number, item_code, lot_number);
                       END IF;
+                    END $$"""),
+            new Migration("2026-11-04-17-append-only-audit-logs",
+                    "Makes procurement_audit_log (who did each purchase step) and permission_audit (who changed users and "
+                            + "access) append-only: UPDATE, DELETE and TRUNCATE are refused by triggers, so a step's actor and "
+                            + "time cannot be changed afterwards. On INSERT the database sets created_at to its own clock "
+                            + "(clock_timestamp), so no caller can supply or back-date the time, and steps saved in one "
+                            + "transaction keep their order. Changes no existing rows.",
+                    """
+                    DO $$
+                    DECLARE
+                      t text;
+                    BEGIN
+                      EXECUTE $fn$
+                        CREATE OR REPLACE FUNCTION public.audit_log_append_only() RETURNS trigger LANGUAGE plpgsql AS $body$
+                        BEGIN
+                          IF TG_OP = 'INSERT' THEN
+                            NEW.created_at := clock_timestamp();
+                            RETURN NEW;
+                          END IF;
+                          RAISE EXCEPTION 'The audit log %.% is append-only; % is not allowed.', TG_TABLE_SCHEMA, TG_TABLE_NAME, TG_OP
+                            USING ERRCODE = 'insufficient_privilege';
+                        END $body$
+                      $fn$;
+                      FOREACH t IN ARRAY ARRAY['procurement_audit_log', 'permission_audit'] LOOP
+                        EXECUTE format('DROP TRIGGER IF EXISTS trg_%s_server_time ON public.%I', t, t);
+                        EXECUTE format('CREATE TRIGGER trg_%s_server_time BEFORE INSERT ON public.%I '
+                                       'FOR EACH ROW EXECUTE FUNCTION public.audit_log_append_only()', t, t);
+                        EXECUTE format('DROP TRIGGER IF EXISTS trg_%s_no_change ON public.%I', t, t);
+                        EXECUTE format('CREATE TRIGGER trg_%s_no_change BEFORE UPDATE OR DELETE ON public.%I '
+                                       'FOR EACH ROW EXECUTE FUNCTION public.audit_log_append_only()', t, t);
+                        EXECUTE format('DROP TRIGGER IF EXISTS trg_%s_no_truncate ON public.%I', t, t);
+                        EXECUTE format('CREATE TRIGGER trg_%s_no_truncate BEFORE TRUNCATE ON public.%I '
+                                       'FOR EACH STATEMENT EXECUTE FUNCTION public.audit_log_append_only()', t, t);
+                      END LOOP;
+                    END $$"""),
+            new Migration("2026-11-04-18-unique-user-names",
+                    "Makes user names unique (ignoring case and surrounding spaces), because the activity trail records "
+                            + "each step under the user's name. Stops instead if two users already share a name, so nobody "
+                            + "is renamed silently; rename one in User Management and restart.",
+                    """
+                    DO $$
+                    DECLARE
+                      dup text;
+                    BEGIN
+                      SELECT string_agg(n, ', ') INTO dup FROM (
+                        SELECT min(name) AS n FROM public.app_user GROUP BY lower(btrim(name)) HAVING COUNT(*) > 1) d;
+                      IF dup IS NOT NULL THEN
+                        RAISE EXCEPTION 'These user names are used by more than one user: %. Rename them, then restart.', dup;
+                      END IF;
+                      CREATE UNIQUE INDEX IF NOT EXISTS uq_app_user_name_ci ON public.app_user (lower(btrim(name)));
                     END $$""")
     );
 

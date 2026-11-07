@@ -288,12 +288,14 @@ public class SourcingService {
         Map<String, Object> item = resolveItems(List.of(itemCode)).get(itemCode);
         if (item == null) throw unprocessable("Item " + itemCode + " is not in the Item Master.");
         long itemId = ((Number) item.get("id")).longValue();
+        // Same rule as the vendor list: linked in the Supplier Master, or has a rate for the item.
         Integer linked = jdbc.queryForObject(
-                "SELECT COUNT(*) FROM public.supplier_item WHERE supplier_id = ? AND item_id = ?", Integer.class,
-                ((Number) vendor.get("id")).longValue(), itemId);
+                "SELECT (SELECT COUNT(*) FROM public.supplier_item WHERE supplier_id = ? AND item_id = ?) + " +
+                "(SELECT COUNT(*) FROM public.vendor_item_rates WHERE supplier_code = ? AND item_id = ?)", Integer.class,
+                ((Number) vendor.get("id")).longValue(), itemId, vendorCode, itemId);
         if (linked == null || linked == 0) {
-            throw unprocessable(vendor.get("supplier_name") + " is not linked to " + itemCode
-                    + " in the Supplier Master. Add the item to the vendor's supplied items first.");
+            throw unprocessable(vendor.get("supplier_name") + " does not supply " + itemCode
+                    + ". Link the item in the Supplier Master or add a rate in the Vendor Rate Master first.");
         }
         if (rates.effectiveRate(vendorCode, itemId, LocalDate.now()) == null) {
             throw unprocessable("No rate for " + itemCode + " from " + vendor.get("supplier_name")
@@ -886,24 +888,33 @@ public class SourcingService {
     }
 
     /**
-     * Active vendors linked to each item in the Supplier Master, with the rate effective on asOf (null if none).
+     * Active vendors that supply each item, with the rate effective on asOf (null if none). A vendor supplies an item
+     * when it is linked in the Supplier Master OR has any rate for it in the Vendor Rate Master, so a rate entered in
+     * the Rate Master is enough to make the vendor selectable.
      * Per item: vendors with a rate first, cheapest first, then vendors without a rate by name.
      */
     private Map<Long, List<Map<String, Object>>> vendorOptions(List<Long> itemIds, LocalDate asOf) {
         Map<Long, List<Map<String, Object>>> out = new HashMap<>();
         if (itemIds.isEmpty()) return out;
-        List<Object> args = new ArrayList<>();
-        args.add(java.sql.Date.valueOf(asOf));
+        // Placeholder order follows the SQL text: item ids (supplier links), item ids (rates), then the as-of date.
+        List<Object> args = new ArrayList<>(itemIds);
         args.addAll(itemIds);
+        args.add(java.sql.Date.valueOf(asOf));
+        String in = marks(itemIds.size());
         for (Map<String, Object> r : jdbc.queryForList(
-                "SELECT si.item_id, s.supplier_code, s.supplier_name, s.gstin, s.state, s.payment_terms_id, " +
+                "SELECT sup.item_id, s.supplier_code, s.supplier_name, s.gstin, s.state, s.payment_terms_id, " +
                 "r.id AS rate_id, r.offered_unit_price, r.effective_from, r.created_at AS rate_created_at " +
-                "FROM public.supplier_item si JOIN public.supplier_master s ON s.id = si.supplier_id " +
+                "FROM (SELECT si.item_id, si.supplier_id FROM public.supplier_item si WHERE si.item_id IN (" + in + ") " +
+                "      UNION " +
+                "      SELECT r0.item_id, sm.id FROM public.vendor_item_rates r0 " +
+                "        JOIN public.supplier_master sm ON sm.supplier_code = r0.supplier_code " +
+                "       WHERE r0.item_id IN (" + in + ")) sup " +
+                "JOIN public.supplier_master s ON s.id = sup.supplier_id " +
                 "LEFT JOIN LATERAL (SELECT v.id, v.offered_unit_price, v.effective_from, v.created_at FROM public.vendor_item_rates v " +
-                "  WHERE v.supplier_code = s.supplier_code AND v.item_id = si.item_id AND v.effective_from <= ? " +
+                "  WHERE v.supplier_code = s.supplier_code AND v.item_id = sup.item_id AND v.effective_from <= ? " +
                 "  ORDER BY v.effective_from DESC, v.created_at DESC LIMIT 1) r ON TRUE " +
-                "WHERE s.status = 'ACTIVE' AND si.item_id IN (" + marks(itemIds.size()) + ") " +
-                "ORDER BY si.item_id, (r.offered_unit_price IS NULL), r.offered_unit_price, s.supplier_name",
+                "WHERE s.status = 'ACTIVE' " +
+                "ORDER BY sup.item_id, (r.offered_unit_price IS NULL), r.offered_unit_price, s.supplier_name",
                 args.toArray())) {
             out.computeIfAbsent(((Number) r.get("item_id")).longValue(), k -> new ArrayList<>()).add(r);
         }

@@ -73,7 +73,8 @@ public class AdminSeeder {
         Long roleId = jdbc.queryForObject("SELECT id FROM public.app_role WHERE code = ?", Long.class, roleCode);
         // seed-policy: once bootstrap login accounts; password is a bcrypt hash, seeded once per database
         jdbc.update("INSERT INTO public.app_user (name, email, password_hash, role_id, status, must_change_password) "
-                + "VALUES (?, ?, crypt(?, gen_salt('bf')), ?, 'ACTIVE', TRUE) ON CONFLICT (email) DO NOTHING",
+                // no conflict target: also skips when another user already holds this name (uq_app_user_name_ci)
+                + "VALUES (?, ?, crypt(?, gen_salt('bf')), ?, 'ACTIVE', TRUE) ON CONFLICT DO NOTHING",
                 name, email, BOOTSTRAP_PASSWORD, roleId);
     }
 }

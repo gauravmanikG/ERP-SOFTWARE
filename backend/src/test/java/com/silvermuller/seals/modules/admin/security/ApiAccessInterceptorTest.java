@@ -16,6 +16,8 @@ class ApiAccessInterceptorTest {
     @Test
     void onlyHealthLoginAndReadingSettingsAreOpen() {
         assertTrue(ApiAccessInterceptor.isOpen("GET", "/api/health"));
+        assertTrue(ApiAccessInterceptor.isOpen("GET", "/api/health/live"));
+        assertFalse(ApiAccessInterceptor.isOpen("GET", "/api/health/anything-else"));
         assertTrue(ApiAccessInterceptor.isOpen("POST", "/api/auth/login"));
         assertTrue(ApiAccessInterceptor.isOpen("GET", "/api/settings"));
         assertFalse(ApiAccessInterceptor.isOpen("PUT", "/api/settings/theme"));

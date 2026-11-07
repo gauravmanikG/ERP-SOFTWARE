@@ -850,6 +850,7 @@ export function ItemMasterFormPage({
       photo: "",
       newCode: "",
       oldCode: "",
+      description: "",
       product: "",
       segment: "",
       region: "",

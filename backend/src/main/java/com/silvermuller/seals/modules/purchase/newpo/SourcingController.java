@@ -1,5 +1,6 @@
 package com.silvermuller.seals.modules.purchase.newpo;
 
+import com.silvermuller.seals.modules.admin.security.RequestActor;
 import com.silvermuller.seals.modules.purchase.newpo.PoByPrDtos.PlannedPo;
 import com.silvermuller.seals.modules.purchase.newpo.SourcingDtos.AssignRequest;
 import com.silvermuller.seals.modules.purchase.newpo.SourcingDtos.ConvertRequest;
@@ -37,14 +38,14 @@ public class SourcingController {
     @PostMapping("/drafts/assign")
     public Map<String, Object> assign(@RequestBody AssignRequest body,
                                       @RequestHeader(value = "X-User-Name", required = false) String user) {
-        return service.assign(body, user);
+        return service.assign(body, RequestActor.nameOr(user));
     }
 
     /** Several items into vendor drafts at once; all succeed or none does. */
     @PostMapping("/drafts/assign-batch")
     public List<Map<String, Object>> assignBatch(@RequestBody List<AssignRequest> body,
                                                  @RequestHeader(value = "X-User-Name", required = false) String user) {
-        return service.assignBatch(body, user);
+        return service.assignBatch(body, RequestActor.nameOr(user));
     }
 
     @GetMapping("/drafts")
@@ -63,7 +64,7 @@ public class SourcingController {
     public Map<String, Object> release(@PathVariable String draftNumber,
                                        @RequestBody(required = false) ReleaseRequest body,
                                        @RequestHeader(value = "X-User-Name", required = false) String user) {
-        return service.release(draftNumber, body, user);
+        return service.release(draftNumber, body, RequestActor.nameOr(user));
     }
 
     @GetMapping("/drafts/{draftNumber}/conversion-lines")
@@ -80,7 +81,7 @@ public class SourcingController {
     @PostMapping("/drafts/{draftNumber}/convert")
     public ResponseEntity<Map<String, Object>> convert(@PathVariable String draftNumber, @RequestBody ConvertRequest body,
                                                        @RequestHeader(value = "X-User-Name", required = false) String user) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(service.convert(draftNumber, body, user));
+        return ResponseEntity.status(HttpStatus.CREATED).body(service.convert(draftNumber, body, RequestActor.nameOr(user)));
     }
 
     @GetMapping("/audit")

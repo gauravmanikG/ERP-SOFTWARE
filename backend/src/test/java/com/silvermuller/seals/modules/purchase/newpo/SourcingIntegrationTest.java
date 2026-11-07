@@ -93,18 +93,15 @@ class SourcingIntegrationTest {
             jdbc.update("DELETE FROM public.goods_receipt_notes WHERE po_number = ?", po);
             jdbc.update("DELETE FROM public.po_pr_allocations WHERE po_number = ?", po);
             jdbc.update("DELETE FROM public.purchase_orders WHERE po_number = ?", po);
-            jdbc.update("DELETE FROM public.procurement_audit_log WHERE entity_ref = ?", po);
         }
+        // procurement_audit_log rows stay: the audit log is append-only (migration 2026-11-04-17)
         for (Long d : drafts) {
-            String number = jdbc.queryForObject("SELECT draft_number FROM public.po_drafts WHERE id = ?", String.class, d);
             jdbc.update("DELETE FROM public.po_draft_allocations WHERE draft_id = ?", d);
             jdbc.update("DELETE FROM public.po_drafts WHERE id = ?", d);
-            jdbc.update("DELETE FROM public.procurement_audit_log WHERE entity_ref = ?", number);
         }
         for (String pr : prNumbers) {
             jdbc.update("DELETE FROM public.purchase_requisition_items WHERE pr_number = ?", pr);
             jdbc.update("DELETE FROM public.purchase_requisitions WHERE pr_number = ?", pr);
-            jdbc.update("DELETE FROM public.procurement_audit_log WHERE entity_ref = ?", pr);
         }
         for (Long id : itemIds) {
             jdbc.update("DELETE FROM public.vendor_item_rates WHERE item_id = ?", id);

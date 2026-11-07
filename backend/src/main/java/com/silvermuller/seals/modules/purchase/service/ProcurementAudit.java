@@ -2,6 +2,7 @@ package com.silvermuller.seals.modules.purchase.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.silvermuller.seals.modules.admin.security.RequestActor;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.util.Map;
@@ -13,7 +14,12 @@ public final class ProcurementAudit {
 
     private ProcurementAudit() {}
 
+    /**
+     * The actor is always the signed-in user of the current request when there is one; {@code actor} is only the
+     * fallback outside a web request (startup jobs, tests). A browser-sent name is never recorded.
+     */
     public static void record(JdbcTemplate jdbc, String entityType, String entityRef, String action, String actor, Map<String, ?> details) {
+        actor = RequestActor.nameOr(actor);
         String json;
         try {
             json = details == null || details.isEmpty() ? null : JSON.writeValueAsString(details);

@@ -1,5 +1,7 @@
 target/
 *.class
 .env
+# run.ps1 supervisor: restart logs, API output and the supervisor PID file
+logs/
 .mvn/
 !.mvn/wrapper/

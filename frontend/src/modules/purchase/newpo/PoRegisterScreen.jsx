@@ -3,6 +3,7 @@ import { formatDisplayDate } from "../../../shared/utils/dateFormat";
 import { poRegisterApi } from "./api";
 import { inp, btn, card, errorBox, th, thFor, td, money, qty } from "./ui";
 import { printPo } from "./printPo";
+import { ActivityButton } from "../activity/ActivityTrail";
 import { useColumnFilters, filterRows, FilterCells, filterInputStyle } from "./ColumnFilters";
 
 const ORIGIN_LABEL = { PO_BY_PR: "PR based", DIRECT: "Direct", LEGACY: "Older PO" };
@@ -145,6 +146,7 @@ export default function PoRegisterScreen({ user, flash }) {
                 <div style={{ fontSize: 12, color: "#64748b" }}>{detail.vendorName} · {formatDisplayDate(detail.poDate)} · origin {detail.origin}</div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <ActivityButton docRef={detail.poNumber} label="Activity" style={{ padding: "6px 10px", fontSize: 12 }} />
                 <button type="button" style={btn(false)} onClick={() => { try { printPo(detail); } catch (e) { flash(e.message, true); } }}>Print PO</button>
                 <StatusBadge status={detail.status} />
               </div>

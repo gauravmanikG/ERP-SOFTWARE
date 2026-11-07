@@ -1,0 +1,33 @@
+# Runs the backend in Docker with an automatic restart policy, against the PostgreSQL already on this PC
+# (Windows service on port 5434). The database is NOT run in Docker, so all data stays where it is today.
+#
+#   docker compose up -d --build     start (and rebuild after code changes)
+#   docker compose ps                status; shows "healthy" once /api/health/live answers
+#   docker compose logs -f backend   follow the logs
+#   docker compose down              stop
+#
+# Use EITHER this OR backend\run.ps1, not both: they both want port 4000.
+# Secrets come from backend/.env (never baked into the image).
+
+services:
+  backend:
+    build: ./backend
+    image: silver-muller-seals-backend:local
+    # Restart whenever the container exits (crash, out of memory, Docker/PC restart) unless you stopped it.
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      PORT: "4000"
+      # Inside the container "localhost" is the container itself; host.docker.internal is this PC.
+      SPRING_DATASOURCE_URL: ${DOCKER_DATASOURCE_URL:-jdbc:postgresql://host.docker.internal:5434/sms_seals}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${BACKEND_HOST_PORT:-4000}:4000"
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"

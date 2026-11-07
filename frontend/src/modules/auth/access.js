@@ -76,6 +76,7 @@ export function canOpenPage(user, rawPage) {
   if (user.wildcard) return true;
   const page = aliases[rawPage] || rawPage;
   if (!page || ALWAYS.has(page)) return true;
+  if (page.startsWith("docs-")) return true; // Documentation module: every signed-in user
   const keys = user.permissions || [];
   if (MODULE_WIDE[page]) return keys.some((k) => k.startsWith(`${MODULE_WIDE[page]}.`));
   const entities = entitiesFor(page);

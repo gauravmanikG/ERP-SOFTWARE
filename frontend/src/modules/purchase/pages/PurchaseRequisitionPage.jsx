@@ -40,6 +40,7 @@ import {
   RefreshCw,
   Download
 } from "lucide-react";
+import { ActivityButton } from "../activity/ActivityTrail";
 
 // 1. Direct Import of REAL 1,582 Item Master records from Engineering
 import { REAL_ITEM_MASTER_DATA } from "../../engineering/data/realItemMasterData";
@@ -2085,6 +2086,9 @@ export function PurchaseRequisitionPage({
                             <Eye size={13} />
                           </button>
 
+                          {/* Who did what: created, submitted, approved / rejected, drafted, ordered, received */}
+                          <ActivityButton docRef={pr.pr_number || pr.prNumber} label="" title={`Who did what on ${pr.pr_number || pr.prNumber}`} />
+
                           {/* Edit Action (Editable if not fully converted to PO) */}
                           {canEditPr && !isPrLocked(pr) && (
                             <button
@@ -3231,12 +3235,15 @@ export function PurchaseRequisitionPage({
                   {detailPr.pr_number} &bull; {detailPr.department}
                 </h3>
               </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <ActivityButton docRef={detailPr.pr_number} label="Activity" style={{ fontSize: 12, padding: "5px 10px" }} />
               <button
                 onClick={() => setDetailPr(null)}
                 style={{ background: "transparent", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: 20, fontWeight: 700 }}
               >
                 &times;
               </button>
+              </div>
             </div>
 
             {/* Modal Content */}

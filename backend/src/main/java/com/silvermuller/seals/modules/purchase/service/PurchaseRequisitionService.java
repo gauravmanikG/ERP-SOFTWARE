@@ -1,5 +1,6 @@
 package com.silvermuller.seals.modules.purchase.service;
 
+import com.silvermuller.seals.modules.admin.security.RequestActor;
 import com.silvermuller.seals.common.exception.ConflictException;
 import com.silvermuller.seals.modules.purchase.model.PurchaseRequisition;
 import com.silvermuller.seals.modules.purchase.model.PurchaseRequisitionItem;
@@ -452,6 +453,7 @@ public class PurchaseRequisitionService {
     public PurchaseRequisition createOrUpdateRequisition(PurchaseRequisition pr) {
         Long prId = pr.getId();
         boolean isUpdate = false;
+        String previousStatus = null;
         if (prId != null && prId > 0) {
             Integer count = jdbc.queryForObject("SELECT count(*) FROM purchase_requisitions WHERE id = ?", Integer.class, prId);
             if (count != null && count > 0) {
@@ -461,7 +463,7 @@ public class PurchaseRequisitionService {
         if (isUpdate) {
             // Lock the PR row so an edit cannot interleave with a draft or PO taking its lines. A PR that cannot
             // be edited at all is refused before its form contents are checked.
-            jdbc.queryForList("SELECT id FROM purchase_requisitions WHERE id = ? FOR UPDATE", Long.class, prId);
+            previousStatus = jdbc.queryForObject("SELECT status FROM purchase_requisitions WHERE id = ? FOR UPDATE", String.class, prId);
             assertNoPoByPrAllocationsForPrId(prId);
             assertNothingOrderedOrDrafted(prId);
         }
@@ -514,7 +516,7 @@ public class PurchaseRequisitionService {
                 ps.setString(15, pr.getCostCenter());
                 ps.setString(16, pr.getProjectReference());
                 ps.setString(17, pr.getCancellationReason());
-                ps.setString(18, pr.getCreatedBy() != null ? pr.getCreatedBy() : "User");
+                ps.setString(18, RequestActor.nameOr(pr.getCreatedBy() != null ? pr.getCreatedBy() : "User"));
                 ps.setLong(19, pr.getDepartmentId());
                 return ps;
             }, kh);
@@ -553,6 +555,13 @@ public class PurchaseRequisitionService {
         }
         ProcurementAudit.record(jdbc, "PR", pr.getPrNumber(), isUpdate ? "EDITED" : "CREATED", pr.getCreatedBy(),
                 Map.of("status", pr.getStatus(), "lineCount", pr.getItems() == null ? 0 : pr.getItems().size()));
+        // Saving straight into Pending Approval is also the submit step; it gets its own row so the trail shows who submitted.
+        if ("Pending Approval".equals(pr.getStatus()) && !"Pending Approval".equals(previousStatus)) {
+            Map<String, Object> submitted = new LinkedHashMap<>();
+            submitted.put("from", previousStatus == null ? "New" : previousStatus);
+            submitted.put("to", "Pending Approval");
+            ProcurementAudit.record(jdbc, "PR", pr.getPrNumber(), "STATUS_PENDING_APPROVAL", pr.getCreatedBy(), submitted);
+        }
         return getRequisitionByNumber(pr.getPrNumber());
     }
 
@@ -778,6 +787,7 @@ public class PurchaseRequisitionService {
             assertNoSourcingDocuments(prNumber, id);
             jdbc.update("DELETE FROM purchase_requisition_items WHERE pr_id = ?", id);
             jdbc.update("DELETE FROM purchase_requisitions WHERE id = ?", id);
+            ProcurementAudit.record(jdbc, "PR", prNumber, "DELETED", null, Map.of());
         }
     }
 

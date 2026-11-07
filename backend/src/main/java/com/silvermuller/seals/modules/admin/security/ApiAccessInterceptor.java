@@ -46,6 +46,7 @@ public class ApiAccessInterceptor implements HandlerInterceptor {
         CurrentUser user = auth.resolve(req.getHeader("Authorization"))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Sign in required."));
         if (!user.isActive()) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Account is inactive.");
+        RequestActor.set(req, user); // services record "who did this step" from the session, never from the browser
         if (path.startsWith("/api/auth/")) return true;
         if (user.mustChangePassword()) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Change your temporary password first.");
@@ -66,6 +67,7 @@ public class ApiAccessInterceptor implements HandlerInterceptor {
 
     static boolean isOpen(String method, String path) {
         return path.equals("/api/health")
+                || path.equals("/api/health/live")
                 || path.equals("/api/auth/login")
                 || (path.equals("/api/settings") && "GET".equals(method));
     }

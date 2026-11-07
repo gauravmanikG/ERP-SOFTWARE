@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
 import { formatDisplayDate } from "../../../shared/utils/dateFormat";
 import { sourcingApi } from "./api";
+import { ActivityButton } from "../activity/ActivityTrail";
 import { money, qty, qtyStep } from "./ui";
 import { Frame, FilterRow, Pill, Metric, SearchBox, Chip, Empty, ErrorLine, Modal, toolBtn, smallBtn, thS, thR, tdS, tdR, numInput } from "./frame";
 
@@ -143,6 +144,7 @@ export default function DraftPoScreen({ user, flash, onConvert, onNavigate }) {
                   <div style={{ flex: "1 1 180px", fontSize: 11.5, color: warn ? "#b45309" : "#64748b", fontWeight: warn ? 700 : 500 }}>
                     Next: {d.nextAction}
                   </div>
+                  <ActivityButton docRef={d.draftNumber} label="Activity" style={{ padding: "6px 10px", fontSize: 12 }} />
                   {isDraftOpen && (
                     <div style={{ display: "flex", gap: 8 }}>
                       <button type="button" style={smallBtn("danger")} onClick={() => setReleasing({ draft: d, allocation: null, qty: "", reason: "" })}>Release all</button>

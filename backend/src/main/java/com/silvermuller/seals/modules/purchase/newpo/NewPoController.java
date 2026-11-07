@@ -1,5 +1,6 @@
 package com.silvermuller.seals.modules.purchase.newpo;
 
+import com.silvermuller.seals.modules.admin.security.RequestActor;
 import com.silvermuller.seals.modules.purchase.newpo.VendorRateService.RateRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -52,7 +53,7 @@ public class NewPoController {
     public ResponseEntity<Map<String, Object>> create(@RequestBody RateBody body,
                                                       @RequestHeader(value = "X-User-Name", required = false) String user) {
         Map<String, Object> saved = rates.create(
-                new RateRequest(body.supplierCode(), body.itemId(), body.offeredUnitPrice(), body.effectiveFrom()), user);
+                new RateRequest(body.supplierCode(), body.itemId(), body.offeredUnitPrice(), body.effectiveFrom()), RequestActor.nameOr(user));
         return ResponseEntity.status(HttpStatus.CREATED).body(saved);
     }
 

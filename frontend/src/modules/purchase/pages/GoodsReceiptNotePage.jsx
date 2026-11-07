@@ -3,6 +3,7 @@ import DateInput from "../../../shared/components/DateInput";
 import SearchableSelect from "../../../shared/components/SearchableSelect";
 import { useResizableColumns, ResizableColGroup, ColumnResizeHandle } from "../../../shared/components/ResizableTable";
 import React, { useState, useEffect, useMemo } from "react";
+import { ActivityButton } from "../activity/ActivityTrail";
 
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
 
@@ -857,6 +858,7 @@ export function GoodsReceiptNotePage({ dark = false, onBackToHome, onNavigate, o
                           >
                             👁 View
                           </button>
+                          {g.grnNumber && <ActivityButton docRef={g.grnNumber} label="Activity" style={{ padding: "5px 10px" }} />}
                           {g.status === "DRAFT" && (
                             <button
                               onClick={() => handlePostDraft(g.id)}
@@ -1518,6 +1520,7 @@ export function GoodsReceiptNotePage({ dark = false, onBackToHome, onNavigate, o
               </div>
 
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <ActivityButton docRef={selectedGrn.grnNumber} label="Activity" style={{ padding: "6px 12px", fontSize: 12 }} />
                 <button
                   type="button"
                   onClick={handlePrintGrn}

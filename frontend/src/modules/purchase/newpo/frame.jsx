@@ -1,5 +1,13 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, X } from "lucide-react";
+import { useCurrentUser } from "../../auth/AuthGate";
+
+// Every step is recorded under the signed-in user (server side), so that is the name shown here.
+function SignedInAs({ fallback }) {
+  const me = useCurrentUser();
+  const name = (me && me.name) || fallback;
+  return <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 500 }}>Signed in as {name}</span>;
+}
 
 // Building blocks for the sourcing screens, matching the Item Master FG / Supplier Master layout:
 // a static toolbar with a breadcrumb, a filter row with metric tiles, a scrolling table, and a paging footer.
@@ -61,7 +69,7 @@ export function Frame({ actions, crumb, user, banner, children }) {
                 </span>
               ))}
             </span>
-            {user && <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 500 }}>Acting as {user.name}</span>}
+            {user && <SignedInAs fallback={user.name} />}
           </div>
         </div>
         {banner}

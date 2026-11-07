@@ -151,6 +151,12 @@ public class VendorRateService {
             // A concurrent request inserted the same vendor/item/date between the check and the insert.
             throw new NewPoException(HttpStatus.CONFLICT, "A rate for this vendor and item already exists on " + r.effectiveFrom() + ".");
         }
+        // A rate means this vendor supplies the item, so record the Supplier Master link too (idempotent).
+        jdbc.update(
+                "INSERT INTO public.supplier_item (supplier_id, item_id, created_by) " +
+                "SELECT s.id, ?, ? FROM public.supplier_master s WHERE s.supplier_code = ? " +
+                "ON CONFLICT (supplier_id, item_id) DO NOTHING",
+                r.itemId(), actor.trim().length() > 50 ? actor.trim().substring(0, 50) : actor.trim(), supplierCode);
         return jdbc.queryForMap(
                 "SELECT id, supplier_code, item_id, offered_unit_price, effective_from, created_by, created_at " +
                 "FROM public.vendor_item_rates WHERE id = ?", id);

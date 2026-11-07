@@ -19,6 +19,7 @@ import { MastersPage } from "./modules/masters/MastersPage";
 import { VendorQuotationsPage } from "./modules/purchase/pages/VendorQuotationsPage";
 import { GoodsReceiptNotePage } from "./modules/purchase/pages/GoodsReceiptNotePage";
 import { RequestForQuotationPage } from "./modules/purchase/pages/RequestForQuotationPage";
+import { DocumentationPage } from "./modules/documentation/DocumentationPage";
 import { useCurrentUser } from "./modules/auth/AuthGate";
 import { canOpenPage } from "./modules/auth/access";
 import { AccessDenied } from "./modules/auth/AccessDenied";
@@ -30,6 +31,7 @@ export default function App() {
   const [jobWorkScreen, setJobWorkScreen] = useState("dashboard");
   const [newPoScreen, setNewPoScreen] = useState("vendor-rates");
   const [mastersScreen, setMastersScreen] = useState("mode-of-payment");
+  const [docsScreen, setDocsScreen] = useState("overview");
   const [rbacUser, setRbacUser] = useState(null); // user selected on the Users screen for Access Control
 
   const handleNavigateToPage = (targetPage) => {
@@ -76,6 +78,10 @@ export default function App() {
       setMastersScreen(page.replace("masters-", ""));
       setCurrentView("masters");
       setSidebarOpen(false);
+    } else if (page && page.startsWith("docs-")) {
+      setDocsScreen(page.replace("docs-", ""));
+      setCurrentView("documentation");
+      setSidebarOpen(false);
     } else if (page && page.startsWith("new-po-")) {
       setNewPoScreen(page.replace("new-po-", ""));
       setCurrentView("new-po");
@@ -117,7 +123,8 @@ export default function App() {
     currentView === "masters" ? `masters-${mastersScreen}`
       : currentView === "new-po" ? `new-po-${newPoScreen}`
         : currentView === "job-work" ? `job-work-${jobWorkScreen}`
-          : currentView;
+          : currentView === "documentation" ? `docs-${docsScreen}`
+            : currentView;
   const view = canOpenPage(me, pageKey) ? currentView : "denied";
 
   const isFullscreenMaster =
@@ -137,7 +144,8 @@ export default function App() {
     currentView === "capital-po" ||
     currentView === "job-work" ||
     currentView === "new-po" ||
-    currentView === "masters";
+    currentView === "masters" ||
+    currentView === "documentation";
 
   return (
     <div
@@ -344,6 +352,16 @@ export default function App() {
             onOpenSidebar={() => setSidebarOpen((v) => !v)}
             sidebarOpen={sidebarOpen}
             onNavigate={handleNavigateToPage}
+          />
+        )}
+
+        {view === "documentation" && (
+          <DocumentationPage
+            screen={docsScreen}
+            onNavigate={handleNavigateToPage}
+            onBackToHome={handleBackToHome}
+            onOpenSidebar={() => setSidebarOpen((v) => !v)}
+            sidebarOpen={sidebarOpen}
           />
         )}
 
