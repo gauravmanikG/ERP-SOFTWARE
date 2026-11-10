@@ -30,7 +30,8 @@ edit to `frontend/src` or `backend/src`.
 
 - Data safety: an ordinary start must never delete, reset or overwrite data (`docs/startup-data-rules.md`).
   `schema.sql` is the single source of truth; data fixes go through `StartupDataMigrations`.
-- Tests: `backend\test-db.ps1` runs the full suite on a throwaway database (never the live `sms_seals`).
+- Tests: `backend\test-db.ps1` runs the full suite (empty throwaway database + throwaway copy of `sms_seals`; never
+  writes the live `sms_seals`). `-NoCopy` skips the purchase tests, `-Test Name` runs one class.
 - Backend process: `backend\run.ps1` is a supervisor with auto-restart; stop it with `backend\stop-backend.ps1`
   (killing `java.exe` only makes the supervisor restart it).
 - Access control: the server enforces permissions (`ApiAccessInterceptor`, `PermissionCatalog`); the frontend's

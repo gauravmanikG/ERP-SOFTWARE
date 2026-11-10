@@ -52,7 +52,11 @@ class PurchaseOrderReceiptIntegrationTest {
 
     @DynamicPropertySource
     static void datasource(DynamicPropertyRegistry r) {
-        r.add("spring.datasource.url", () -> System.getenv("SMS_TEST_DATABASE_URL"));
+        String url = System.getenv("SMS_TEST_DATABASE_URL");
+        if (url.matches("(?i).*/sms_seals(\\?.*)?$")) {
+            throw new IllegalStateException("Refusing to run tests against the live sms_seals database");
+        }
+        r.add("spring.datasource.url", () -> url);
         r.add("spring.datasource.username", () -> System.getenv().getOrDefault("SMS_TEST_DATABASE_USERNAME", "postgres"));
         r.add("spring.datasource.password", () -> System.getenv().getOrDefault("SMS_TEST_DATABASE_PASSWORD", "postgres"));
     }

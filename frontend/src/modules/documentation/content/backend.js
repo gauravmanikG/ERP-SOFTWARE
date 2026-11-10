@@ -226,9 +226,10 @@ export const HIGHLIGHTS = [
     items: [
       {
         title: "Tested on throwaway databases",
-        headline: "Integration tests run against a brand-new database created for the run and dropped afterwards — and refuse to run against the live one.",
+        headline: "Integration tests run against throwaway databases created for the run and dropped afterwards — and refuse to run against the live one.",
         points: [
-          "backend/test-db.ps1 creates a disposable database, runs the whole suite, and drops it.",
+          "backend/test-db.ps1 runs every test in one go: start-up and master-data tests on a brand-new empty database, purchase tests on a fresh copy of the live data (the live database is only read), then drops both.",
+          "Every database test class refuses a connection to the live sms_seals database, so a mistyped setting cannot write test data into it.",
           "Unit tests cover PO validity, capital PO rules, service PO calculation and guards, PR status and guards, GRN validity, vendor rates and access rules.",
           "Purchase-order, sourcing and receipt integration tests exercise the real SQL, locks and transactions."
         ],
