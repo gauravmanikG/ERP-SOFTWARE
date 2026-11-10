@@ -1,6 +1,12 @@
 # Starts the Spring Boot API against local PostgreSQL on port 5434
 # (persistent Windows service postgresql-x64-18) and keeps it running.
 #
+# Two modes, picked at every (re)start:
+#   - Production (a release is installed by ..\release.ps1): runs ..\release\seals-backend.jar, which also serves
+#     the built ERP screens on http://<this-pc>:4000/. Starts in seconds, uses less memory, and code edits in the
+#     working copy do not reach users until the next release.
+#   - Development (no release, or SMS_MODE=dev): mvn spring-boot:run from the source code.
+#
 # Restart policy (supervisor + watchdog):
 #   - If the API process exits for any reason (crash, out of memory, killed, database down at startup),
 #     it is started again. Quick repeated failures back off: 10s, 20s, 40s, then every 60s.
@@ -62,6 +68,8 @@ $minDelaySeconds      = 10    # restart delay after a normal run
 $maxDelaySeconds      = 60    # restart delay cap during a crash loop
 $stableRunSeconds     = 120   # a run at least this long resets the crash-loop backoff
 $keepRunLogs          = 10
+$releaseJar           = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\release\seals-backend.jar"))
+$javaExe              = if ($env:JAVA_HOME -and (Test-Path "$env:JAVA_HOME\bin\java.exe")) { "$env:JAVA_HOME\bin\java.exe" } else { "java" }
 
 $logDir = Join-Path $PSScriptRoot "logs"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
@@ -157,12 +165,20 @@ try {
     $errLog = Join-Path $logDir "backend-$stamp.err.log"
     Remove-OldRunLogs
 
-    Write-Log "Starting backend (attempt $attempt). Output: $outLog"
     # ExitOnOutOfMemoryError: an out-of-memory JVM exits (and is restarted) instead of limping along.
-    $proc = Start-Process -FilePath "cmd.exe" `
-      -ArgumentList '/c', 'mvn', '-B', 'spring-boot:run', "`"-Dspring-boot.run.jvmArguments=$env:BACKEND_JVM_OPTS -XX:+ExitOnOutOfMemoryError`"" `
-      -WorkingDirectory $PSScriptRoot -WindowStyle Hidden -PassThru `
-      -RedirectStandardOutput $outLog -RedirectStandardError $errLog
+    if ((Test-Path $releaseJar) -and ($env:SMS_MODE -ne "dev")) {
+      Write-Log "Starting backend from the release $releaseJar (production mode, attempt $attempt). Output: $outLog"
+      $javaArgs = @($env:BACKEND_JVM_OPTS -split '\s+' | Where-Object { $_ }) + @('-XX:+ExitOnOutOfMemoryError', '-jar', "`"$releaseJar`"")
+      $proc = Start-Process -FilePath $javaExe -ArgumentList $javaArgs `
+        -WorkingDirectory $PSScriptRoot -WindowStyle Hidden -PassThru `
+        -RedirectStandardOutput $outLog -RedirectStandardError $errLog
+    } else {
+      Write-Log "Starting backend from source with Maven (development mode, attempt $attempt). Output: $outLog"
+      $proc = Start-Process -FilePath "cmd.exe" `
+        -ArgumentList '/c', 'mvn', '-B', 'spring-boot:run', "`"-Dspring-boot.run.jvmArguments=$env:BACKEND_JVM_OPTS -XX:+ExitOnOutOfMemoryError`"" `
+        -WorkingDirectory $PSScriptRoot -WindowStyle Hidden -PassThru `
+        -RedirectStandardOutput $outLog -RedirectStandardError $errLog
+    }
     $null = $proc.Handle   # keeps the exit code readable after the process ends
     $startedAt = Get-Date
     $everLive = $false

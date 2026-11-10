@@ -5,6 +5,26 @@ import docsChangelog from "./docs-changelog-plugin.js";
 export default defineConfig({
   // docsChangelog: git history for Documentation -> What's new (refreshes on every commit in dev).
   plugins: [react(), docsChangelog()],
+  // Production build (npm run build -> dist/, served by the backend on :4000). Every screen is its own file (see
+  // src/shared/utils/lazyPage.js); the big shared libraries get their own files too, so a release that changes only
+  // app code leaves them in the browser cache. All names carry a content hash, so they can be cached for good.
+  build: {
+    target: "es2022",
+    sourcemap: false,
+    // The Documentation module's diagram library (loaded only on that screen) is large by nature.
+    chunkSizeWarningLimit: 1600,
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [
+            { name: "react", test: /[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/, priority: 30 },
+            { name: "xlsx", test: /[\\/]node_modules[\\/]xlsx[\\/]/, priority: 20 },
+            { name: "icons", test: /[\\/]node_modules[\\/]lucide-react[\\/]/, priority: 20 },
+          ],
+        },
+      },
+    },
+  },
   server: {
     // This PC only by default. SMS_DEV_HOST=0.0.0.0 opens the dev server to other PCs on the network
     // (for real hosting use the backend on :4000, which serves the built ERP itself — docs/hosting.md).

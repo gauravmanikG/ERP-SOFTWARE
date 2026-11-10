@@ -32,6 +32,9 @@ edit to `frontend/src` or `backend/src`.
   `schema.sql` is the single source of truth; data fixes go through `StartupDataMigrations`.
 - Tests: `backend\test-db.ps1` runs the full suite (empty throwaway database + throwaway copy of `sms_seals`; never
   writes the live `sms_seals`). `-NoCopy` skips the purchase tests, `-Test Name` runs one class.
+- Production mode: when `release\seals-backend.jar` exists (made by `.\release.ps1`) the supervisors run that jar
+  (ERP on http://localhost:4000/, port 5173 only redirects). Code edits reach users only after `.\release.ps1`;
+  `-Rollback` restores the previous release. Without a release (or with `SMS_MODE=dev`) it is Maven + Vite.
 - Backend process: `backend\run.ps1` is a supervisor with auto-restart; stop it with `backend\stop-backend.ps1`
   (killing `java.exe` only makes the supervisor restart it).
 - Access control: the server enforces permissions (`ApiAccessInterceptor`, `PermissionCatalog`); the frontend's

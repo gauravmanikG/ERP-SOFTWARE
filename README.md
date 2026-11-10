@@ -112,7 +112,30 @@ health check on `/api/health/live`; `docker compose ps` shows `healthy`. Run
 either Docker or `run.ps1`, not both — both use port 4000. In Docker Desktop,
 enable *Settings → General → Start Docker Desktop when you sign in*.
 
-## 3. Start the frontend
+## Production mode on this PC (recommended for daily use)
+
+From the repo root:
+```
+.\release.ps1
+```
+It builds the screens, packages one jar with the API and the screens inside
+(unit tests included), installs it as `release\seals-backend.jar`, restarts the
+supervisors and checks the ERP answers; if it does not, the previous release is
+put back automatically. From then on the ERP is **http://localhost:4000/** (other
+PCs: `http://<this-pc>:4000/`), and `http://localhost:5173` just redirects there.
+
+| Task | Command (repo root) |
+|------|---------------------|
+| Release the current code | `.\release.ps1` (`-FullTests` also runs every database test) |
+| Build only, do not install | `.\release.ps1 -BuildOnly` |
+| Go back to the previous release | `.\release.ps1 -Rollback` |
+| Back to development mode | `.\stop-all.ps1`, delete the `release` folder, `.\start-dev.ps1` |
+
+In production mode code edits reach users only with the next `release.ps1`.
+Development mode (Maven + Vite with live reload, below) is what runs when no
+release is installed, or with `SMS_MODE=dev` set.
+
+## 3. Start the frontend (development)
 
 In a second terminal:
 ```

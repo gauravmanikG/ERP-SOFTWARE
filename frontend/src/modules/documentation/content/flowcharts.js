@@ -62,7 +62,7 @@ export const FLOWCHARTS = [
     id: "restart-policy",
     group: "system",
     title: "Self-healing backend: supervisor and watchdog",
-    description: "What backend/run.ps1 does, forever, until you stop it with stop-all.ps1 (frontend/run-frontend.ps1 does the same for the UI on port 5173). The Windows task starts the supervisor at sign-in and re-checks every 2 minutes, so a killed supervisor comes back too.",
+    description: "What backend/run.ps1 does, forever, until you stop it with stop-all.ps1 (frontend/run-frontend.ps1 does the same for port 5173). In production mode it runs release/seals-backend.jar; in development mode, Maven. The Windows task starts the supervisor at sign-in and re-checks every 2 minutes, so a killed supervisor comes back too.",
     code: `flowchart TD
   T(["Windows task: at sign-in<br/>+ every 2 minutes"]) --> F{"Stopped on purpose<br/>(stop-all.ps1)?"}
   F -->|yes| X0(["Do nothing"])

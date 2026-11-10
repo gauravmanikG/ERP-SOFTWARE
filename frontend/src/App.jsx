@@ -1,28 +1,32 @@
 import { useState } from "react";
+import { lazyPage } from "./shared/utils/lazyPage";
+import { ScreenBoundary } from "./shared/components/ScreenBoundary";
 import { GlobalTopHeader } from "./shared/layout/GlobalTopHeader";
 import { GlobalMoveableSidebar } from "./shared/layout/GlobalMoveableSidebar";
 import { SilverBrainLandingPage } from "./modules/home/pages/SilverBrainLandingPage";
-import { ItemMasterFormPage } from "./modules/engineering/pages/ItemMasterFormPage";
-import { OtherItemMasterPage } from "./modules/engineering/pages/OtherItemMasterPage";
-import { SupplierMasterPage } from "./modules/purchase/pages/SupplierMasterPage";
-import { CustomerMasterPage } from "./modules/crm/pages/CustomerMasterPage";
-import { DepartmentMasterPage } from "./modules/settings/pages/DepartmentMasterPage";
-import { UsersPage } from "./modules/settings/pages/UsersPage";
-import { RbacPage } from "./modules/settings/pages/RbacPage";
-import { MachineMasterPage } from "./modules/maintenance/pages/MachineMasterPage";
-import { PurchaseRequisitionPage } from "./modules/purchase/pages/PurchaseRequisitionPage";
-import { ServicePurchaseOrderPage } from "./modules/purchase/pages/ServicePurchaseOrderPage";
-import { CapitalPurchaseOrderPage } from "./modules/purchase/pages/CapitalPurchaseOrderPage";
-import { JobWorkPage } from "./modules/purchase/pages/JobWorkPage";
-import { NewPurchaseOrderPage } from "./modules/purchase/newpo/NewPurchaseOrderPage";
-import { MastersPage } from "./modules/masters/MastersPage";
-import { VendorQuotationsPage } from "./modules/purchase/pages/VendorQuotationsPage";
-import { GoodsReceiptNotePage } from "./modules/purchase/pages/GoodsReceiptNotePage";
-import { RequestForQuotationPage } from "./modules/purchase/pages/RequestForQuotationPage";
-import { DocumentationPage } from "./modules/documentation/DocumentationPage";
 import { useCurrentUser } from "./modules/auth/AuthGate";
 import { canOpenPage } from "./modules/auth/access";
 import { AccessDenied } from "./modules/auth/AccessDenied";
+
+// Every screen except Home loads on first open (see shared/utils/lazyPage.js).
+const ItemMasterFormPage = lazyPage(() => import("./modules/engineering/pages/ItemMasterFormPage"), "ItemMasterFormPage");
+const OtherItemMasterPage = lazyPage(() => import("./modules/engineering/pages/OtherItemMasterPage"), "OtherItemMasterPage");
+const SupplierMasterPage = lazyPage(() => import("./modules/purchase/pages/SupplierMasterPage"), "SupplierMasterPage");
+const CustomerMasterPage = lazyPage(() => import("./modules/crm/pages/CustomerMasterPage"), "CustomerMasterPage");
+const DepartmentMasterPage = lazyPage(() => import("./modules/settings/pages/DepartmentMasterPage"), "DepartmentMasterPage");
+const UsersPage = lazyPage(() => import("./modules/settings/pages/UsersPage"), "UsersPage");
+const RbacPage = lazyPage(() => import("./modules/settings/pages/RbacPage"), "RbacPage");
+const MachineMasterPage = lazyPage(() => import("./modules/maintenance/pages/MachineMasterPage"), "MachineMasterPage");
+const PurchaseRequisitionPage = lazyPage(() => import("./modules/purchase/pages/PurchaseRequisitionPage"), "PurchaseRequisitionPage");
+const ServicePurchaseOrderPage = lazyPage(() => import("./modules/purchase/pages/ServicePurchaseOrderPage"), "ServicePurchaseOrderPage");
+const CapitalPurchaseOrderPage = lazyPage(() => import("./modules/purchase/pages/CapitalPurchaseOrderPage"), "CapitalPurchaseOrderPage");
+const JobWorkPage = lazyPage(() => import("./modules/purchase/pages/JobWorkPage"), "JobWorkPage");
+const NewPurchaseOrderPage = lazyPage(() => import("./modules/purchase/newpo/NewPurchaseOrderPage"), "NewPurchaseOrderPage");
+const MastersPage = lazyPage(() => import("./modules/masters/MastersPage"), "MastersPage");
+const VendorQuotationsPage = lazyPage(() => import("./modules/purchase/pages/VendorQuotationsPage"), "VendorQuotationsPage");
+const GoodsReceiptNotePage = lazyPage(() => import("./modules/purchase/pages/GoodsReceiptNotePage"), "GoodsReceiptNotePage");
+const RequestForQuotationPage = lazyPage(() => import("./modules/purchase/pages/RequestForQuotationPage"), "RequestForQuotationPage");
+const DocumentationPage = lazyPage(() => import("./modules/documentation/DocumentationPage"), "DocumentationPage");
 
 export default function App() {
   const [currentView, setCurrentView] = useState("home"); // "home" | "item-master" | "item-master-other" | "supplier-master" | "customer-master" | "department-master" | "machine-master" | "purchase-requisition" | "purchase-orders" | "purchase-processing" | "po-approval" | "vendor-quotations" | "rfq" | "grn" | "operations"
@@ -185,6 +189,7 @@ export default function App() {
 
       {/* 3. Main Screen View Area */}
       <div style={{ flex: 1, position: "relative", minHeight: 0, overflow: isFullscreenMaster ? "hidden" : "visible" }}>
+        <ScreenBoundary resetKey={`${view}:${pageKey}`} onHome={handleBackToHome}>
         {view === "item-master" && (
           <ItemMasterFormPage
             onBackToHome={handleBackToHome}
@@ -374,6 +379,7 @@ export default function App() {
             hideSidebar={false}
           />
         )}
+        </ScreenBoundary>
       </div>
     </div>
   );

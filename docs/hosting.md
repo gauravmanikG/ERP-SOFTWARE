@@ -58,6 +58,14 @@ Set the environment variables above first (`backend\run.ps1` loads `backend/.env
 API running with automatic restarts). Always `npm run build` **before** packaging, or the jar has no screens
 (the API still works; `/` then shows nothing).
 
+## Option 3 — this Windows PC, with automatic restarts
+
+From the repository root: `.\release.ps1`. It builds and tests a release, installs it as
+`release\seals-backend.jar`, restarts the supervisors (`backend\run.ps1` then runs the jar; port 5173 only
+redirects to 4000) and verifies the ERP answers, putting the previous release back if it does not.
+`.\release.ps1 -Rollback` returns to the previous release. Together with `install-autostart.ps1` (README) the ERP
+starts at sign-in and is re-checked every 2 minutes.
+
 ## Letting other PCs reach it
 
 1. Find the server's address (`ipconfig` on Windows) and open `http://<that-address>:4000/` from the other PC.

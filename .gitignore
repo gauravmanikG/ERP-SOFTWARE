@@ -15,3 +15,4 @@ artifacts/
 *.bak
 backend/logs/
 frontend/logs/
+release/

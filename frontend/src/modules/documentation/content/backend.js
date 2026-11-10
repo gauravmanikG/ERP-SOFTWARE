@@ -35,7 +35,7 @@ export const HIGHLIGHTS = [
           "Out-of-memory protection: the JVM runs with ExitOnOutOfMemoryError, so it exits cleanly (and is restarted) instead of limping along.",
           "Single instance: a system-wide lock guarantees only one supervisor runs, so a manual start and the auto-start task can never collide.",
           "Memory caps: Maven and the API JVM have fixed heap limits, so they cannot grow into the PC's free RAM and get processes killed for low memory.",
-          "The frontend (Vite) has the same supervisor and watchdog: frontend/run-frontend.ps1.",
+          "The frontend has the same supervisor and watchdog: frontend/run-frontend.ps1 (Vite in development mode; in production mode a small redirect from port 5173 to 4000).",
           "Watchdog for the watchdogs: install-autostart.ps1 registers two hidden Windows tasks that start both supervisors 30 s after sign-in and re-check every 2 minutes, so a supervisor that is itself killed is back within 2 minutes. A deliberate stop (stop-all.ps1) is respected until start-dev.ps1 is run.",
           "Per-run logs with rotation in backend/logs and frontend/logs.",
           "Tested for real: killed the process (back in ~60 s), froze it (watchdog detected and restarted it), started a second copy (refused), stopped it cleanly (nothing left behind)."
@@ -78,6 +78,22 @@ export const HIGHLIGHTS = [
           "Behind an HTTPS reverse proxy the API reads its X-Forwarded-* headers (server.forward-headers-strategy=native)."
         ],
         files: ["docs/hosting.md", "backend/pom.xml", "backend/Dockerfile", "docker-compose.yml", "docker-compose.db.yml", "modules/admin/AdminSeeder.java", "frontend/src/shared/api/apiBase.js"]
+      },
+      {
+        title: "Production release with one command",
+        tag: "New",
+        headline: "release.ps1 builds, checks and installs a production release on this PC, verifies it answers, and puts the previous release back by itself if it does not.",
+        points: [
+          "One jar (release/seals-backend.jar) holds the API and the minified screens; the supervisor runs it instead of Maven, so start-up takes seconds and needs less memory. Code edits reach users only with the next release.",
+          "Built in release/build, so building never disturbs the running app; the ERP is down only for the ~30 s swap.",
+          "Checks before installing: documentation check, frontend build, unit tests, and that the jar really contains the screens. -FullTests also runs every database test.",
+          "After installing it waits for /api/health/live and the ERP page; if they do not answer within 4 minutes the previous release (or development mode, on a first release) is started again. release.ps1 -Rollback goes back on demand.",
+          "Screens load on first open: the start-up download is about 90 KB of app code plus React and icons (it was one 3 MB file). A tab left open across a release reloads itself once when it needs a screen file that the new release replaced.",
+          "Script and style files have content-hashed names and are cached by browsers for a year; the page itself is never cached, so a release is picked up on the next visit. Text responses are gzip-compressed.",
+          "Every response carries nosniff, SAMEORIGIN framing and same-origin referrer headers; a screen that fails shows a Reload / Home message instead of a blank page.",
+          "Port 5173 redirects to port 4000 in production mode, so old bookmarks keep working. SMS_MODE=dev switches both supervisors back to Maven + Vite."
+        ],
+        files: ["release.ps1", "backend/run.ps1", "frontend/run-frontend.ps1", "frontend/scripts/redirect-to-backend.mjs", "frontend/vite.config.js", "frontend/src/shared/utils/lazyPage.js", "frontend/src/shared/components/ScreenBoundary.jsx", "common/config/WebUiConfig.java"]
       }
     ]
   },

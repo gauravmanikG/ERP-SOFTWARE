@@ -1,4 +1,9 @@
-# Starts the Vite frontend (http://127.0.0.1:5173) and keeps it running - the frontend twin of backend\run.ps1.
+# Keeps port 5173 answering - the frontend twin of backend\run.ps1.
+#
+# Two modes, picked at every (re)start:
+#   - Production (a release is installed: ..\release\seals-backend.jar, made by ..\release.ps1): the backend
+#     serves the built ERP on port 4000, so 5173 only redirects there (scripts\redirect-to-backend.mjs).
+#   - Development (no release, or SMS_MODE=dev): the Vite dev server with live reload (npm run dev).
 #
 #   - If the dev server exits for any reason it is started again (10s, then backing off to 60s in a crash loop).
 #   - If it is running but stops answering http://127.0.0.1:5173/ (3 checks in a row, 15s apart, after a
@@ -22,6 +27,7 @@ if (-not $AutoStart) { Remove-Item -Force $stopFlag -ErrorAction SilentlyContinu
 
 $port                 = 5173
 $liveUrl              = "http://127.0.0.1:$port/"
+$releaseJar           = Join-Path $PSScriptRoot "..\release\seals-backend.jar"
 $checkIntervalSeconds = 15
 $failuresBeforeKill   = 3
 $startupGraceSeconds  = 180
@@ -88,8 +94,8 @@ try {
     $owner = Get-PortOwner
     if ($owner) {
       $cmd = (Get-CimInstance Win32_Process -Filter "ProcessId = $owner" -ErrorAction SilentlyContinue).CommandLine
-      if ($cmd -and $cmd -match 'vite') {
-        Write-Log "Found an unmanaged Vite server on port $port (PID $owner); stopping it so this supervisor manages it."
+      if ($cmd -and $cmd -match 'vite|redirect-to-backend') {
+        Write-Log "Found an unmanaged frontend server on port $port (PID $owner); stopping it so this supervisor manages it."
         Stop-Tree $owner
         Start-Sleep -Seconds 3
       } else {
@@ -106,8 +112,17 @@ try {
     Get-ChildItem $logDir -Filter "vite-*.out.log" | Sort-Object LastWriteTime -Descending | Select-Object -Skip $keepRunLogs |
       ForEach-Object { Remove-Item -Force $_.FullName, ($_.FullName -replace '\.out\.log$', '.err.log') -ErrorAction SilentlyContinue }
 
-    Write-Log "Starting frontend (attempt $attempt). Output: $outLog"
-    $proc = Start-Process -FilePath "cmd.exe" -ArgumentList '/c', 'npm', 'run', 'dev', '--', '--strictPort' `
+    $production = (Test-Path $releaseJar) -and ($env:SMS_MODE -ne "dev")
+    if ($production) {
+      $liveUrl = "http://127.0.0.1:$port/__health"
+      $arguments = '/c', 'node', 'scripts\redirect-to-backend.mjs'
+      Write-Log "Starting the redirect to port 4000 (production mode, attempt $attempt). Output: $outLog"
+    } else {
+      $liveUrl = "http://127.0.0.1:$port/"
+      $arguments = '/c', 'npm', 'run', 'dev', '--', '--strictPort'
+      Write-Log "Starting the Vite dev server (development mode, attempt $attempt). Output: $outLog"
+    }
+    $proc = Start-Process -FilePath "cmd.exe" -ArgumentList $arguments `
       -WorkingDirectory $PSScriptRoot -WindowStyle Hidden -PassThru `
       -RedirectStandardOutput $outLog -RedirectStandardError $errLog
     $null = $proc.Handle
