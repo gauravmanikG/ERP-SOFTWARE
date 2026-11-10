@@ -7,13 +7,13 @@
 
 export const BACKEND_INTRO = {
   title: "Built like a bank ledger, not a spreadsheet",
-  text: "Silver Brain's backend is a Spring Boot 3 (Java 17) service on PostgreSQL. It was designed around one idea: the numbers must always be right. Quantities cannot be over-ordered or over-received even when many people click at the same moment, history is never overwritten, every step is attributed to a real signed-in person, and a restart can never damage data. The service watches itself and restarts automatically if it fails."
+  text: "Silver Brain's backend is a Spring Boot 4 (Java 17) service on PostgreSQL. It was designed around one idea: the numbers must always be right. Quantities cannot be over-ordered or over-received even when many people click at the same moment, history is never overwritten, every step is attributed to a real signed-in person, and a restart can never damage data. The service watches itself and restarts automatically if it fails."
 };
 
 export const STACK = [
-  ["Language / framework", "Java 17, Spring Boot 3.3 (web, JDBC, JPA in validate-only mode)"],
+  ["Language / framework", "Java 17, Spring Boot 4.1 (Spring MVC, JDBC, JPA in validate-only mode), Jackson 3 for JSON"],
   ["Database", "PostgreSQL (with pgcrypto for password hashing and encryption)"],
-  ["Frontend", "React 18 + Vite, served separately; talks to the API over /api"],
+  ["Frontend", "React 19 + Vite 8 (Tailwind CSS 3), served separately; talks to the API over /api"],
   ["Packaging", "Executable jar (seals-backend.jar) or a Docker image with a health check"],
   ["Operations", "Self-healing supervisor (run.ps1), Windows auto-start task, docker-compose with restart policy"],
   ["Testing", "JUnit 5: unit tests, guard tests and integration tests on disposable databases"]
@@ -220,6 +220,16 @@ export const HIGHLIGHTS = [
           "Purchase-order, sourcing and receipt integration tests exercise the real SQL, locks and transactions."
         ],
         files: ["backend/test-db.ps1", "backend/src/test/"]
+      },
+      {
+        title: "Same JSON after the framework upgrade",
+        headline: "Moving to Spring Boot 4 / Jackson 3 did not change a single value the screens receive; dates stay plain calendar dates.",
+        points: [
+          "spring.jackson.use-jackson2-defaults keeps the JSON rules the API was built with: fields in declared order, and older stored JSON (PO lines, Capital PO amendments, settings) still reads back.",
+          "DATE columns are sent as yyyy-MM-dd. Jackson 3 would otherwise send a UTC timestamp, which shows the previous day on an Indian-time server; JsonConfig prevents that and JsonConfigTest guards it.",
+          "Checked at upgrade time by calling every list endpoint on the old and new builds against the same copy of the data and comparing the answers."
+        ],
+        files: ["backend/src/main/resources/application.properties", "backend/src/main/java/com/silvermuller/seals/common/config/JsonConfig.java", "backend/src/test/java/com/silvermuller/seals/common/config/JsonConfigTest.java"]
       },
       {
         title: "Clear, consistent errors",

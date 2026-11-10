@@ -1,7 +1,7 @@
 package com.silvermuller.seals.modules.purchase.capitalpo;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import com.silvermuller.seals.modules.purchase.capitalpo.CapitalPoDtos.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DuplicateKeyException;
@@ -357,7 +357,7 @@ public class CapitalPoService {
             jdbc.update("INSERT INTO public.capital_po_amendments (capital_po_id, revision_no, status, reason, payload_json, changes_json, proposed_by) "
                     + "VALUES (?,?,'PENDING',?,?,?,?)", id, rev, req.reason().trim(), objectMapper.writeValueAsString(req),
                     objectMapper.writeValueAsString(changes), actor.name());
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new CapitalPoException(HttpStatus.INTERNAL_SERVER_ERROR, "Could not store amendment: " + e.getMessage());
         }
         history(id, "AMENDMENT_PROPOSED", status, status, actor, "Revision " + rev + ": " + req.reason());
@@ -383,7 +383,7 @@ public class CapitalPoService {
             PoRequest payload;
             try {
                 payload = objectMapper.readValue(str(a, "payload_json"), PoRequest.class);
-            } catch (JsonProcessingException e) {
+            } catch (JacksonException e) {
                 throw new CapitalPoException(HttpStatus.INTERNAL_SERVER_ERROR, "Stored amendment is unreadable: " + e.getMessage());
             }
             Prepared p = prepare(payload, actor, id);
