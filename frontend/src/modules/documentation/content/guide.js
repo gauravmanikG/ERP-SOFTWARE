@@ -16,7 +16,7 @@
 //   { tip: "text" } / { warn: "text" }             call-outs
 //   { flow: "flowchart-id" }                       link to a chart in the Flowcharts section
 
-export const GUIDE_UPDATED = "2026-11-06";
+export const GUIDE_UPDATED = "2026-11-10";
 
 // ---------------------------------------------------------------- start here (not tied to a menu screen)
 
@@ -347,6 +347,7 @@ export const SCREEN_GUIDE = {
       { rules: [
         "The vendor must be ACTIVE and each item must exist in the Item Master.",
         "A vendor rate must be effective on the PO date, and each item's HSN must have an active GST rate.",
+        "GST split: a vendor whose GSTIN starts with our own state code (06, Haryana) is charged CGST + SGST; any other state is charged IGST. The same rule applies to PO by PR.",
         "Duplicate item lines are merged; quantities must be above zero with at most 2 decimals.",
         "A Direct PO never reads or changes any PR quantity."
       ] }

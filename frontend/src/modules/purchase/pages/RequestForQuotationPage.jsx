@@ -4,8 +4,9 @@ import DateInput from "../../../shared/components/DateInput";
 import SearchableSelect from "../../../shared/components/SearchableSelect";
 import { useResizableColumns, ResizableColGroup, ColumnResizeHandle } from "../../../shared/components/ResizableTable";
 import React, { useState, useEffect, useMemo } from "react";
+import { API_BASE } from "../../../shared/api/apiBase.js";
 
-const BASE_URL = "http://localhost:4000";
+const BASE_URL = API_BASE;
 
 // Standard date formatter
 function formatDate(val) {

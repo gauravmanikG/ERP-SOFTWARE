@@ -2,6 +2,7 @@ import { useResizableColumns, ResizableColGroup, ColumnResizeHandle } from "../.
 import { useState, useRef, useEffect, useMemo } from "react";
 import { Eye, Pencil, Trash2, Search, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
 import SearchableSelect from "../../../shared/components/SearchableSelect";
+import { API_BASE } from "../../../shared/api/apiBase.js";
 
 // Master lists extracted directly from the reference sheet
 const GROUP_OPTIONS = [
@@ -289,7 +290,7 @@ export function ItemMasterFormPage({
 
   // Fetch all FG items directly from backend PostgreSQL item_master table
   const fetchDbItems = () => {
-    fetch("http://localhost:4000/api/inventory/items?type=FG")
+    fetch(`${API_BASE}/api/inventory/items?type=FG`)
       .then((res) => (res.ok ? res.json() : null))
       .then((dbItems) => {
         if (Array.isArray(dbItems)) {
@@ -375,7 +376,7 @@ export function ItemMasterFormPage({
   const [hsnList, setHsnList] = useState([]);
 
   useEffect(() => {
-    fetch("http://localhost:4000/api/inventory/procurement-master")
+    fetch(`${API_BASE}/api/inventory/procurement-master`)
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (Array.isArray(data)) {
@@ -384,7 +385,7 @@ export function ItemMasterFormPage({
       })
       .catch((err) => console.warn("Could not fetch procurement master:", err));
 
-    fetch("http://localhost:4000/api/inventory/process-master")
+    fetch(`${API_BASE}/api/inventory/process-master`)
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (Array.isArray(data)) {
@@ -393,7 +394,7 @@ export function ItemMasterFormPage({
       })
       .catch((err) => console.warn("Could not fetch process master:", err));
 
-    fetch("http://localhost:4000/api/purchase/hsn-master")
+    fetch(`${API_BASE}/api/purchase/hsn-master`)
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (Array.isArray(data)) {
@@ -457,7 +458,7 @@ export function ItemMasterFormPage({
     setDeleteTarget(null);
     let message;
     try {
-      const res = await fetch(`http://localhost:4000/api/inventory/items/${target.id}`, { method: "DELETE" });
+      const res = await fetch(`${API_BASE}/api/inventory/items/${target.id}`, { method: "DELETE" });
       if (res.ok) {
         if (detailItem?.id === target.id) setDetailItem(null);
         window.dispatchEvent(new CustomEvent("SMS_ITEM_MASTER_UPDATED"));
@@ -685,7 +686,7 @@ export function ItemMasterFormPage({
     // The list only changes once the server has saved the item; a refused save keeps the form open with the reason.
     let res;
     try {
-      res = await fetch("http://localhost:4000/api/inventory/items", {
+      res = await fetch(`${API_BASE}/api/inventory/items`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)

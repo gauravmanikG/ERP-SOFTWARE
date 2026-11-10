@@ -10,9 +10,10 @@ import { isNumericHeader } from "../newpo/ui";
 // Service POs use service_* tables on the backend. They never create a GRN and never change stock.
 // ============================================================================
 
-const API_ROOT = (import.meta.env.VITE_API_URL || "http://localhost:4000") + "/api";
+const API_ROOT = API_BASE + "/api";
 const SPO = `${API_ROOT}/service-pos`;
 import { getSetting, setSetting } from "../../../shared/utils/settingsStore";
+import { API_BASE } from "../../../shared/api/apiBase.js";
 
 const USER_KEY = "SMS_CURRENT_USER";
 const ROLES = ["CREATOR", "APPROVER", "ACCEPTOR", "FINANCE", "ADMIN"];

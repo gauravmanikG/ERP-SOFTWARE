@@ -4,8 +4,9 @@
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { History, X, User, Clock } from "lucide-react";
+import { API_BASE } from "../../../shared/api/apiBase.js";
 
-const API_ROOT = (import.meta.env.VITE_API_URL || "http://localhost:4000") + "/api";
+const API_ROOT = API_BASE + "/api";
 
 export async function fetchActivity(ref) {
   const res = await fetch(`${API_ROOT}/purchase/activity?ref=${encodeURIComponent(ref)}`);

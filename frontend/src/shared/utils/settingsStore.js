@@ -1,8 +1,9 @@
+import { API_BASE } from "../api/apiBase.js";
 // Application settings (theme, table column widths, current user) live in PostgreSQL (app_setting).
 // They are loaded once at startup, kept in memory, and saved back to the server on every change.
 // Nothing is written to localStorage or sessionStorage.
 
-const API_ROOT = (import.meta.env.VITE_API_URL || "http://localhost:4000") + "/api";
+const API_ROOT = API_BASE + "/api";
 const SETTINGS_API = `${API_ROOT}/settings`;
 const GROUPS_API = `${API_ROOT}/inventory/item-groups`;
 

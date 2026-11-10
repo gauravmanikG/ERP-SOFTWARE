@@ -10,9 +10,10 @@ import { isNumericHeader } from "../newpo/ui";
 // Job-worker balances come from the job work ledger. Every screen calls the real API.
 // ============================================================================
 
-const API_ROOT = (import.meta.env.VITE_API_URL || "http://localhost:4000") + "/api";
+const API_ROOT = API_BASE + "/api";
 const JW = `${API_ROOT}/job-work`;
 import { getSetting, setSetting } from "../../../shared/utils/settingsStore";
+import { API_BASE } from "../../../shared/api/apiBase.js";
 
 const USER_KEY = "SMS_CURRENT_USER";
 const ROLES = ["CREATOR", "APPROVER", "STORE", "QUALITY", "ADMIN"];

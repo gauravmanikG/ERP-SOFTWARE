@@ -2,8 +2,9 @@
 // so they are always exact: API endpoints, database tables, access-control catalog and applied data migrations.
 import { useEffect, useMemo, useState } from "react";
 import { C } from "./theme";
+import { API_BASE } from "../../shared/api/apiBase.js";
 
-const API_ROOT = (import.meta.env.VITE_API_URL || "http://localhost:4000") + "/api";
+const API_ROOT = API_BASE + "/api";
 
 export function useSystemInfo() {
   const [state, setState] = useState({ loading: true, data: null, error: null });
@@ -65,7 +66,7 @@ export function LiveSystem() {
   }, [data, q]);
 
   if (loading) return <Note>Reading the live system…</Note>;
-  if (error) return <Note bad>Could not read the live system ({error}). Check that the backend is running: http://localhost:4000/api/health</Note>;
+  if (error) return <Note bad>Could not read the live system ({error}). Check that the backend is running: open /api/health on this site</Note>;
 
   const tabs = [
     ["api", `API endpoints (${data.totals.endpoints})`],

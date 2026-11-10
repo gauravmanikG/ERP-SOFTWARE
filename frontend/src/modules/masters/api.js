@@ -1,6 +1,7 @@
+import { API_BASE } from "../../shared/api/apiBase.js";
 // Network calls for the Masters screens. Components import from here and never call fetch directly.
 
-const API_ROOT = (import.meta.env.VITE_API_URL || "http://localhost:4000") + "/api";
+const API_ROOT = API_BASE + "/api";
 
 async function call(method, path, body) {
   const res = await fetch(`${API_ROOT}${path}`, {

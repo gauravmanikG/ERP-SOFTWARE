@@ -10,9 +10,10 @@ import { isNumericHeader } from "../newpo/ui";
 // Receiving, installation, commissioning and asset registration are separate steps.
 // ============================================================================
 
-const API_ROOT = (import.meta.env.VITE_API_URL || "http://localhost:4000") + "/api";
+const API_ROOT = API_BASE + "/api";
 const CPO = `${API_ROOT}/capital-pos`;
 import { getSetting, setSetting } from "../../../shared/utils/settingsStore";
+import { API_BASE } from "../../../shared/api/apiBase.js";
 
 const USER_KEY = "SMS_CURRENT_USER";
 const ROLES = ["CREATOR", "APPROVER", "RECEIVER", "ASSET_MANAGER", "ADMIN"];

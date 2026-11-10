@@ -1,6 +1,7 @@
 import { useResizableColumns, ResizableColGroup, ColumnResizeHandle } from "../../../shared/components/ResizableTable";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { Eye, Pencil, Trash2, Search, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
+import { API_BASE } from "../../../shared/api/apiBase.js";
 
 const INITIAL_MACHINE_FORM = {
   sNo: "",
@@ -89,7 +90,7 @@ export function MachineMasterPage({
 
   // Determine API base URL
   const getApiUrl = () => {
-    return import.meta.env.VITE_API_URL || "http://localhost:4000";
+    return API_BASE;
   };
 
   // Fetch Machines from API on component mount

@@ -12,6 +12,7 @@ import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,6 +39,8 @@ public class PurchaseProcessingService {
     private final PurchaseRequisitionService prService;
     private final JdbcTemplate jdbc;
     private final ObjectMapper objectMapper;
+    /** GST state code of our own registration (GSTIN 06AFBFS8991J1ZC, Haryana). Vendors in this state pay CGST + SGST. */
+    private final String companyStateCode;
 
     public static final String COMPANY_BILLING_ADDRESS =
             "Silver Muller Seals Ltd, Plot 42, GIDC Sector 3, Silvassa, D&NH - 396230. GSTIN: 24AAACS1234D1Z5";
@@ -45,7 +48,9 @@ public class PurchaseProcessingService {
     public PurchaseProcessingService(SupplierMasterRepository supplierRepository,
                                      PurchaseRequisitionService prService,
                                      JdbcTemplate jdbc,
-                                     ObjectMapper objectMapper) {
+                                     ObjectMapper objectMapper,
+                                     @Value("${app.company.gst-state-code:06}") String companyStateCode) {
+        this.companyStateCode = companyStateCode.trim();
         this.supplierRepository = supplierRepository;
         this.prService = prService;
         this.jdbc = jdbc;
@@ -120,8 +125,8 @@ public class PurchaseProcessingService {
                 String gstin = sup.getGstin();
                 if (gstin != null && gstin.trim().length() >= 2) {
                     String statePrefix = gstin.trim().substring(0, 2);
-                    // Company state code is 27 (Maharashtra - Silver Muller Seals)
-                    isInterState = !"27".equals(statePrefix);
+                    // Inter-state (IGST) when the vendor's GSTIN state differs from our own registration state.
+                    isInterState = !companyStateCode.equals(statePrefix);
                 }
             } else if ("IGST".equalsIgnoreCase(item.getTaxType())) {
                 isInterState = true;

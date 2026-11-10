@@ -120,8 +120,12 @@ cd frontend
 npm install
 npm run dev
 ```
-Opens `http://localhost:5173`. The pages call the backend on port 4000; the
-browser origins allowed to do so are set by `app.cors.allowed-origins` in
+Opens `http://localhost:5173`. Every screen calls the API on the same origin
+(`/api/...`, built from `frontend/src/shared/api/apiBase.js`); Vite's dev proxy
+forwards those calls to the backend on port 4000, so no backend address is
+hard-coded anywhere. Only when the frontend is served from a different host
+than the API does it call the API directly: set `VITE_API_URL` at build time and
+allow the frontend's origin with `app.cors.allowed-origins` in
 `application.properties` (override with the `APP_CORS_ALLOWED_ORIGINS` env var).
 
 ## Production notes (brief)
@@ -131,7 +135,8 @@ browser origins allowed to do so are set by `app.cors.allowed-origins` in
 - For a production deploy, host the backend somewhere that runs a Java jar
   (Railway, Fly.io, an EC2 box, etc.), point
   `SPRING_DATASOURCE_URL`/`SPRING_DATASOURCE_USERNAME`/`SPRING_DATASOURCE_PASSWORD`
-  at your production Postgres instance, and set the frontend's
-  `VITE_API_URL` env var to that backend's public URL before building the
-  frontend with `npm run build`, and set `APP_CORS_ALLOWED_ORIGINS` on the
-  backend to the frontend's public URL.
+  at your production Postgres instance, and either serve the
+  built frontend and the API behind one address (a reverse proxy sending
+  `/api` to the backend; no frontend setting needed), or set the frontend's
+  `VITE_API_URL` env var to the backend's public URL before `npm run build`
+  and set `APP_CORS_ALLOWED_ORIGINS` on the backend to the frontend's public URL.

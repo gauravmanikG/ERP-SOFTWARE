@@ -1,9 +1,10 @@
 // All network calls for the New Purchase Order module. Components import from here and never call fetch directly.
 
-const API_ROOT = (import.meta.env.VITE_API_URL || "http://localhost:4000") + "/api";
+const API_ROOT = API_BASE + "/api";
 export const NPO = `${API_ROOT}/new-po`;
 
 import { getSetting } from "../../../shared/utils/settingsStore";
+import { API_BASE } from "../../../shared/api/apiBase.js";
 
 const USER_KEY = "SMS_CURRENT_USER";
 

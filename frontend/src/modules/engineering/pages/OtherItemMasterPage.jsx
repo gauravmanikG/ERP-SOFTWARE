@@ -24,6 +24,7 @@ import {
   FileSpreadsheet,
   Printer
 } from "lucide-react";
+import { API_BASE } from "../../../shared/api/apiBase.js";
 
 export const OTHER_ITEM_GROUPS_CONFIG = [
   {
@@ -173,7 +174,7 @@ export const OTHER_ITEM_GROUPS_CONFIG = [
 ];
 
 // Groups & subgroups API (PostgreSQL). Throws with the server's message when a change is refused.
-const GROUPS_API = "http://localhost:4000/api/inventory/item-groups";
+const GROUPS_API = `${API_BASE}/api/inventory/item-groups`;
 
 async function groupsRequest(method, path = "", body) {
   const res = await fetch(`${GROUPS_API}${path}`, {
@@ -344,7 +345,7 @@ export function OtherItemMasterPage({ onBackToHome, onOpenSidebar, sidebarOpen, 
   // Fetch all existing Non-FG/Other items directly from backend PostgreSQL database
   const fetchOtherFromApi = async () => {
     try {
-      const res = await fetch("http://localhost:4000/api/inventory/items?type=OTHER");
+      const res = await fetch(`${API_BASE}/api/inventory/items?type=OTHER`);
       if (res.ok) {
         const apiItems = await res.json();
         if (Array.isArray(apiItems)) { // an empty list is applied too, so the last deleted item disappears
@@ -388,7 +389,7 @@ export function OtherItemMasterPage({ onBackToHome, onOpenSidebar, sidebarOpen, 
   const [hsnList, setHsnList] = useState([]);
 
   useEffect(() => {
-    fetch("http://localhost:4000/api/inventory/procurement-master")
+    fetch(`${API_BASE}/api/inventory/procurement-master`)
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (Array.isArray(data)) {
@@ -397,7 +398,7 @@ export function OtherItemMasterPage({ onBackToHome, onOpenSidebar, sidebarOpen, 
       })
       .catch((err) => console.warn("Could not fetch procurement master:", err));
 
-    fetch("http://localhost:4000/api/inventory/process-master")
+    fetch(`${API_BASE}/api/inventory/process-master`)
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (Array.isArray(data)) {
@@ -406,7 +407,7 @@ export function OtherItemMasterPage({ onBackToHome, onOpenSidebar, sidebarOpen, 
       })
       .catch((err) => console.warn("Could not fetch process master:", err));
 
-    fetch("http://localhost:4000/api/purchase/hsn-master")
+    fetch(`${API_BASE}/api/purchase/hsn-master`)
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (Array.isArray(data)) {
@@ -1000,7 +1001,7 @@ export function OtherItemMasterPage({ onBackToHome, onOpenSidebar, sidebarOpen, 
     setDeleteTarget(null);
     let message;
     try {
-      const res = await fetch(`http://localhost:4000/api/inventory/items/${target.id}`, { method: "DELETE" });
+      const res = await fetch(`${API_BASE}/api/inventory/items/${target.id}`, { method: "DELETE" });
       if (res.ok) {
         setSelectedIds((prev) => {
           const next = new Set(prev);
@@ -1083,7 +1084,7 @@ export function OtherItemMasterPage({ onBackToHome, onOpenSidebar, sidebarOpen, 
     // The list only changes once the server has saved the item; a refused save keeps the form open with the reason.
     let res;
     try {
-      res = await fetch("http://localhost:4000/api/inventory/items", {
+      res = await fetch(`${API_BASE}/api/inventory/items`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)

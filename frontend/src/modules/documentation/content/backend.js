@@ -13,7 +13,7 @@ export const BACKEND_INTRO = {
 export const STACK = [
   ["Language / framework", "Java 17, Spring Boot 4.1 (Spring MVC, JDBC, JPA in validate-only mode), Jackson 3 for JSON"],
   ["Database", "PostgreSQL (with pgcrypto for password hashing and encryption)"],
-  ["Frontend", "React 19 + Vite 8 (Tailwind CSS 3), served separately; talks to the API over /api"],
+  ["Frontend", "React 19 + Vite 8 (Tailwind CSS 3), served separately; every screen calls the API on its own origin (/api, one setting in shared/api/apiBase.js), so no backend address is hard-coded"],
   ["Packaging", "Executable jar (seals-backend.jar) or a Docker image with a health check"],
   ["Operations", "Self-healing supervisor (run.ps1), Windows auto-start task, docker-compose with restart policy"],
   ["Testing", "JUnit 5: unit tests, guard tests and integration tests on disposable databases"]
@@ -175,9 +175,10 @@ export const HIGHLIGHTS = [
         headline: "GST rates are validated so a PO can never carry inconsistent tax.",
         points: [
           "HSN / SAC master: CGST + SGST must equal GST and IGST must equal GST.",
-          "Direct PO and PO by PR require each item's HSN to have an active GST rate; capital and service charges carry their own SAC codes."
+          "Direct PO and PO by PR require each item's HSN to have an active GST rate; capital and service charges carry their own SAC codes.",
+          "CGST + SGST vs IGST is decided by comparing the vendor's GSTIN state with our own registration state, app.company.gst-state-code (06, Haryana — GSTIN 06AFBFS8991J1ZC). Capital and service POs take the company state on the form."
         ],
-        files: ["modules/purchase/controller/HsnTaxMasterController.java"]
+        files: ["modules/purchase/controller/HsnTaxMasterController.java", "modules/purchase/service/PurchaseProcessingService.java", "backend/src/main/resources/application.properties"]
       }
     ]
   },

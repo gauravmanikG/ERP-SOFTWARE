@@ -4,8 +4,9 @@ import SearchableSelect from "../../../shared/components/SearchableSelect";
 import { useResizableColumns, ResizableColGroup, ColumnResizeHandle } from "../../../shared/components/ResizableTable";
 import React, { useState, useEffect, useMemo } from "react";
 import { ActivityButton } from "../activity/ActivityTrail";
+import { API_BASE } from "../../../shared/api/apiBase.js";
 
-const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
+const BASE_URL = API_BASE;
 
 // Standard audit date/time formatter
 function formatAuditDateTime(val) {

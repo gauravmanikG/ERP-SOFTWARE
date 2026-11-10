@@ -13,8 +13,8 @@ import {
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { INITIAL_PR_DATA } from "./PurchaseRequisitionPage";
+import { API_BASE } from "../../../shared/api/apiBase.js";
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:4000";
 
 const formatAuditDateTime = (val) => {
   if (!val) return null;

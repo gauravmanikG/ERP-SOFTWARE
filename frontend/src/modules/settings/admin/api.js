@@ -1,8 +1,9 @@
+import { API_BASE } from "../../../shared/api/apiBase.js";
 // Network calls for the Users and Access Control (RBAC) screens, plus session-token handling.
 // The token is kept in sessionStorage so an accidental refresh does not sign the admin out mid-task;
 // it is never written to the shared app settings. Every call sends Authorization: Bearer <token>.
 
-const API_ROOT = (import.meta.env.VITE_API_URL || "http://localhost:4000") + "/api";
+const API_ROOT = API_BASE + "/api";
 const TOKEN_KEY = "SMS_ADMIN_TOKEN";
 
 export function getToken() {

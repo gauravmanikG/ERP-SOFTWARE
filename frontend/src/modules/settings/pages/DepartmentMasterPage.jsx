@@ -2,6 +2,7 @@ import { useResizableColumns, ResizableColGroup, ColumnResizeHandle } from "../.
 import { useState, useRef, useEffect, useMemo } from "react";
 import SearchableSelect from "../../../shared/components/SearchableSelect";
 import { Eye, Pencil, Trash2, Search, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Plus, RefreshCw, Download, Printer, Building2, ShieldCheck, Layers, Boxes } from "lucide-react";
+import { API_BASE } from "../../../shared/api/apiBase.js";
 
 const INITIAL_DEPARTMENT_FORM = {
   deptCode: "",
@@ -90,7 +91,7 @@ export function DepartmentMasterPage({
 
   // Determine API base URL
   const getApiUrl = () => {
-    return import.meta.env.VITE_API_URL || "http://localhost:4000";
+    return API_BASE;
   };
 
   // Fetch Departments from API on component mount

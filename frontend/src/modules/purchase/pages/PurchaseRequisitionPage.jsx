@@ -47,6 +47,7 @@ import { REAL_ITEM_MASTER_DATA } from "../../engineering/data/realItemMasterData
 
 // 2. Direct Import of REAL 14 Groups from Other Item Master
 import { INITIAL_GROUPS_DATA } from "../../engineering/pages/OtherItemMasterPage";
+import { API_BASE } from "../../../shared/api/apiBase.js";
 
 // =============================================================================
 // REAL MASTER DATASETS (Exact matches with Silver Muller Seals Master Tables)
@@ -291,7 +292,7 @@ export function PurchaseRequisitionPage({
 
       // 1. Fetch from PostgreSQL item_master table via backend API
       try {
-        const res = await fetch("http://localhost:4000/api/inventory/items");
+        const res = await fetch(`${API_BASE}/api/inventory/items`);
         if (res.ok) {
           const apiData = await res.json();
           if (Array.isArray(apiData) && apiData.length > 0) {
@@ -334,7 +335,7 @@ export function PurchaseRequisitionPage({
     loadAllItems();
 
     // 2. Real Categories from Group Master (PostgreSQL)
-    fetch("http://localhost:4000/api/inventory/item-groups")
+    fetch(`${API_BASE}/api/inventory/item-groups`)
       .then((res) => (res.ok ? res.json() : []))
       .then((groups) => {
         const names = groups.map((g) => g.name).filter(Boolean);
@@ -345,7 +346,7 @@ export function PurchaseRequisitionPage({
     // 3. Real Departments from Department Master backend API or fallback
     const fetchRealDepts = async () => {
       try {
-        const res = await fetch("http://localhost:4000/api/inventory/departments");
+        const res = await fetch(`${API_BASE}/api/inventory/departments`);
         if (res.ok) {
           const data = await res.json();
           if (Array.isArray(data) && data.length > 0) {
@@ -386,7 +387,7 @@ export function PurchaseRequisitionPage({
 
   const fetchRequisitions = async () => {
     try {
-      const res = await fetch("http://localhost:4000/api/purchase/requisitions");
+      const res = await fetch(`${API_BASE}/api/purchase/requisitions`);
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) {
@@ -469,7 +470,7 @@ export function PurchaseRequisitionPage({
   // HSN Master list for PR line item classification
   const [hsnMasterList, setHsnMasterList] = useState([]);
   useEffect(() => {
-    fetch("http://localhost:4000/api/purchase/hsn-master")
+    fetch(`${API_BASE}/api/purchase/hsn-master`)
       .then((res) => (res.ok ? res.json() : []))
       .then((data) => {
         if (Array.isArray(data)) setHsnMasterList(data);
@@ -517,7 +518,7 @@ export function PurchaseRequisitionPage({
       CREATED: "Created", EDITED: "Edited", STATUS_APPROVED: "Approved", STATUS_REJECTED: "Rejected",
       STATUS_PENDING_APPROVAL: "Submitted for approval", STATUS_CANCELLED: "Cancelled"
     };
-    fetch(`http://localhost:4000/api/new-po/sourcing/audit?ref=${encodeURIComponent(prNum)}`)
+    fetch(`${API_BASE}/api/new-po/sourcing/audit?ref=${encodeURIComponent(prNum)}`)
       .then((res) => (res.ok ? res.json() : []))
       .then((events) => {
         if (cancelled) return;
@@ -564,7 +565,7 @@ export function PurchaseRequisitionPage({
     const fetchRelated = async () => {
       setRelatedLoading(true);
       try {
-        const qRes = await fetch("http://localhost:4000/api/purchase/quotations");
+        const qRes = await fetch(`${API_BASE}/api/purchase/quotations`);
         if (qRes.ok) {
           const qData = await qRes.json();
           if (Array.isArray(qData)) {
@@ -574,7 +575,7 @@ export function PurchaseRequisitionPage({
             setRelatedQuotes(matched);
           }
         }
-        const oRes = await fetch("http://localhost:4000/api/purchase/orders");
+        const oRes = await fetch(`${API_BASE}/api/purchase/orders`);
         if (oRes.ok) {
           const oData = await oRes.json();
           if (Array.isArray(oData)) {
@@ -779,7 +780,7 @@ export function PurchaseRequisitionPage({
     setIsCreateModalOpen(true);
 
     // Synchronize with authoritative next number from PostgreSQL database
-    fetch("http://localhost:4000/api/purchase/requisitions/next-number")
+    fetch(`${API_BASE}/api/purchase/requisitions/next-number`)
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data && data.prNumber) {
@@ -1039,7 +1040,7 @@ export function PurchaseRequisitionPage({
 
     setPrSaving(true);
     try {
-      const res = await fetch("http://localhost:4000/api/purchase/requisitions", {
+      const res = await fetch(`${API_BASE}/api/purchase/requisitions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(dbPayload)
@@ -1070,7 +1071,7 @@ export function PurchaseRequisitionPage({
   const decidePr = async (pr, status, reason) => {
     const prNum = pr.pr_number || pr.prNumber;
     try {
-      const res = await fetch(`http://localhost:4000/api/purchase/requisitions/${encodeURIComponent(prNum)}/status`, {
+      const res = await fetch(`${API_BASE}/api/purchase/requisitions/${encodeURIComponent(prNum)}/status`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status, reason, user: loadUser().name })
@@ -1153,7 +1154,7 @@ export function PurchaseRequisitionPage({
     const target = deletePrTarget;
     const prNum = target.pr_number || target.prNumber;
     try {
-      const res = await fetch(`http://localhost:4000/api/purchase/requisitions/${encodeURIComponent(prNum)}`, { method: "DELETE" });
+      const res = await fetch(`${API_BASE}/api/purchase/requisitions/${encodeURIComponent(prNum)}`, { method: "DELETE" });
       if (!res.ok) {
         alert(await readServerError(res, `PR "${prNum}" was not deleted (HTTP ${res.status}).`));
         setDeletePrTarget(null);

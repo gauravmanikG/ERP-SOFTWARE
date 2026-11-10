@@ -58,7 +58,8 @@ class DirectPoIntegrationTest {
     void rate() {
         for (long item : new long[] {1611L, 1612L}) {
             Map<String, Object> r = rates.create(
-                    new VendorRateService.RateRequest(VENDOR, item, new BigDecimal("100"), LocalDate.of(1990, 1, 1)), "it-direct");
+                    // Effective today, so it is the vendor's current rate whatever older rates the database copy holds.
+                    new VendorRateService.RateRequest(VENDOR, item, new BigDecimal("100"), PO_DATE), "it-direct");
             rateIds.add(((Number) r.get("id")).longValue());
         }
     }
@@ -125,9 +126,13 @@ class DirectPoIntegrationTest {
         assertTrue(c.poNumber().matches("PO-2026-\\d{5,}"));
         assertEquals("DIRECT", origin(c.poNumber()));
         assertEquals("STANDARD", jdbc.queryForObject("SELECT po_type FROM public.purchase_orders WHERE po_number = ?", String.class, c.poNumber()));
-        // 3 x 100 + 2 x 100 = 500 taxable, 18 % IGST = 90 (vendor SUP-002 is outside the company state)
+        // 3 x 100 + 2 x 100 = 500 taxable, 18 % GST = 90. SUP-002 (GSTIN 06...) is in our own state, Haryana (06),
+        // so the 90 is split CGST 45 + SGST 45 with no IGST.
         assertEquals(0, new BigDecimal("500").compareTo(c.po().taxableAmount()));
         assertEquals(0, new BigDecimal("90").compareTo(c.po().totalTax()));
+        assertEquals(0, new BigDecimal("45").compareTo(c.po().lines().stream().map(l -> l.cgstAmount()).reduce(BigDecimal.ZERO, BigDecimal::add)));
+        assertEquals(0, new BigDecimal("45").compareTo(c.po().lines().stream().map(l -> l.sgstAmount()).reduce(BigDecimal.ZERO, BigDecimal::add)));
+        assertEquals(0, BigDecimal.ZERO.compareTo(c.po().lines().stream().map(l -> l.igstAmount()).reduce(BigDecimal.ZERO, BigDecimal::add)));
         assertEquals(0, new BigDecimal("590").compareTo(c.po().grandTotal()));
         assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM public.po_pr_allocations WHERE po_number = ?", Integer.class, c.poNumber()).intValue());
         assertEquals(PO_DATE.plusDays(7), jdbc.queryForObject("SELECT expected_delivery FROM public.purchase_orders WHERE po_number = ?", java.sql.Date.class, c.poNumber()).toLocalDate());
@@ -149,9 +154,18 @@ class DirectPoIntegrationTest {
 
         assertThrows(NewPoException.class, () -> direct.preview(request(new Line("CON01-0001", BigDecimal.ZERO))));
         assertThrows(NewPoException.class, () -> direct.preview(request(new Line("NO-SUCH-ITEM-" + TAG, new BigDecimal("1")))));
+        // A PO date in the past is refused before rates are looked at, so "no rate" needs an item the vendor has never quoted.
+        String unquoted = jdbc.queryForObject(
+                "SELECT i.sms_new_part_no FROM public.item_master i JOIN public.hsn_tax_master h ON h.hsn_sac_code = i.hsn_code AND h.is_active "
+                        + "WHERE i.sms_new_part_no IS NOT NULL AND NOT EXISTS (SELECT 1 FROM public.vendor_item_rates r "
+                        + "WHERE r.supplier_code = ? AND r.item_id = i.id) ORDER BY i.id LIMIT 1", String.class, VENDOR);
         NewPoException noRate = assertThrows(NewPoException.class,
-                () -> direct.preview(new Request(VENDOR, LocalDate.of(1980, 1, 1), null, List.of(new Line("CON01-0001", BigDecimal.ONE)), null)));
+                () -> direct.preview(new Request(VENDOR, PO_DATE, null, List.of(new Line(unquoted, BigDecimal.ONE)), null)));
         assertEquals(HttpStatus.UNPROCESSABLE_ENTITY, noRate.getStatus());
+        assertTrue(noRate.getMessage().contains("No vendor rate"), noRate.getMessage());
+        NewPoException pastDate = assertThrows(NewPoException.class,
+                () -> direct.preview(new Request(VENDOR, PO_DATE.minusDays(1), null, List.of(new Line("CON01-0001", BigDecimal.ONE)), null)));
+        assertEquals(HttpStatus.BAD_REQUEST, pastDate.getStatus());
     }
 
     @Test

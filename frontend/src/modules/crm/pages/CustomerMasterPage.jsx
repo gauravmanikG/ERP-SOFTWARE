@@ -25,6 +25,7 @@ import {
   Globe,
   Share2
 } from "lucide-react";
+import { API_BASE } from "../../../shared/api/apiBase.js";
 
 const INITIAL_CUSTOMER_FORM = {
   // Tab 1: All 22 Excel Sheet Attributes
@@ -217,7 +218,7 @@ export function CustomerMasterPage({
 
   // Determine API base URL
   const getApiUrl = () => {
-    return import.meta.env.VITE_API_URL || "http://localhost:4000";
+    return API_BASE;
   };
 
   // Fetch Customers directly from PostgreSQL database via API

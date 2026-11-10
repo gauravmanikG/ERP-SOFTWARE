@@ -1,6 +1,7 @@
 import { useResizableColumns, ResizableColGroup, ColumnResizeHandle } from "../../../shared/components/ResizableTable";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { Eye, Pencil, Trash2, Search, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Plus, RefreshCw, Download, Printer, Building2, ShieldCheck, MapPin, UserCheck } from "lucide-react";
+import { API_BASE } from "../../../shared/api/apiBase.js";
 
 const INITIAL_SUPPLIER_FORM = {
   supplierCode: "",
@@ -140,7 +141,7 @@ export function SupplierMasterPage({
 
   // Determine API base URL
   const getApiUrl = () => {
-    return import.meta.env.VITE_API_URL || "http://localhost:4000";
+    return API_BASE;
   };
 
   // Fetch Suppliers from API on component mount
