@@ -1,7 +1,8 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useState } from "react";
 import * as api from "../settings/admin/api";
 import { LoginScreen } from "./LoginScreen";
 import { ChangePasswordScreen } from "./ChangePasswordScreen";
+import { applyTheme, getTheme } from "../../shared/utils/theme";
 
 // Whole-app login gate: nothing inside it renders until a valid session is resolved
 // against /api/auth/me (which only succeeds for an ACTIVE row in app_user — see
@@ -32,6 +33,14 @@ export function AuthGate({ children }) {
   };
 
   useEffect(() => { checkSession(); }, []);
+
+  // The sign-in screens have one fixed light design. The saved theme (night view) is shared by everyone, so it must
+  // not reach them: its dark-mode rules would turn their text white on the white card (unreadable email, password and
+  // headings). The saved theme applies once someone is signed in; signing out returns to the light screens.
+  // useLayoutEffect: switch before the browser paints, so there is no flash of the wrong colours.
+  useLayoutEffect(() => {
+    applyTheme(status === "signedIn" ? getTheme() : "light");
+  }, [status]);
 
   // Any API call answered 401 (session expired / revoked / user deactivated) returns to the login screen.
   useEffect(() => {

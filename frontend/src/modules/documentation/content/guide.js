@@ -54,6 +54,7 @@ export const START_HERE = [
         "Passwords are stored as one-way bcrypt hashes; nobody can read your password from the database.",
         "A session lasts 12 hours. After that, or if an administrator deactivates your account, you are returned to the sign-in screen.",
         "An inactive account cannot sign in.",
+        "The sign-in and set-password screens always use the light design. Night view (if it is switched on) applies after you sign in.",
         "Every action you take is recorded under your signed-in name. The server takes the name from your session, never from anything typed in the browser."
       ] },
       { tip: "Your session is kept for this browser tab. Opening the ERP in a new tab or window may ask you to sign in again." }
