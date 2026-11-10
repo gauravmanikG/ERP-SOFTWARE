@@ -5,6 +5,7 @@ import com.silvermuller.seals.modules.admin.rbac.PermissionCatalog;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -26,8 +27,17 @@ public class AdminSeeder {
 
     private static final Logger log = LoggerFactory.getLogger(AdminSeeder.class);
 
-    /** One-time default password for the bootstrap accounts; both are flagged must_change_password. */
-    static final String BOOTSTRAP_PASSWORD = "ChangeMe@123";
+    /**
+     * First-time password for the bootstrap accounts when APP_BOOTSTRAP_PASSWORD is not set (local development only:
+     * this repository is public, so a hosted install must set its own). Both accounts must change it at first sign-in.
+     */
+    static final String DEFAULT_BOOTSTRAP_PASSWORD = "ChangeMe@123";
+
+    private final String bootstrapPassword;
+
+    AdminSeeder(@Value("${app.security.bootstrap-password:}") String configured) {
+        this.bootstrapPassword = configured == null || configured.isBlank() ? DEFAULT_BOOTSTRAP_PASSWORD : configured;
+    }
 
     record RoleDef(String code, String name, boolean wildcard, String description) {}
 
@@ -63,6 +73,10 @@ public class AdminSeeder {
             }
         }
 
+        if (DEFAULT_BOOTSTRAP_PASSWORD.equals(bootstrapPassword)) {
+            log.warn("Bootstrap accounts were created with the public default password. Set APP_BOOTSTRAP_PASSWORD "
+                    + "before the first start of any install that other people can reach.");
+        }
         bootstrapUser(jdbc, "Super Admin", "superadmin@silverseals.com", "super_admin");
         bootstrapUser(jdbc, "Developer", "developer@silverseals.com", "developer");
         log.info("Admin/RBAC bootstrap complete: {} roles, bootstrap users seeded (temp password must be changed).",
@@ -75,6 +89,6 @@ public class AdminSeeder {
         jdbc.update("INSERT INTO public.app_user (name, email, password_hash, role_id, status, must_change_password) "
                 // no conflict target: also skips when another user already holds this name (uq_app_user_name_ci)
                 + "VALUES (?, ?, crypt(?, gen_salt('bf')), ?, 'ACTIVE', TRUE) ON CONFLICT DO NOTHING",
-                name, email, BOOTSTRAP_PASSWORD, roleId);
+                name, email, bootstrapPassword, roleId);
     }
 }

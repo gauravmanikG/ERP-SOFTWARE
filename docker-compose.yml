@@ -1,22 +1,29 @@
-# Runs the backend in Docker with an automatic restart policy, against the PostgreSQL already on this PC
-# (Windows service on port 5434). The database is NOT run in Docker, so all data stays where it is today.
+# Runs the whole ERP (screens + API, one container) with an automatic restart policy. Open http://<server>:4000/
 #
-#   docker compose up -d --build     start (and rebuild after code changes)
+# A) Database already exists (e.g. the PostgreSQL on this PC, Windows service on port 5434) — this file alone:
+#        docker compose up -d --build
+#    Settings come from backend/.env (SPRING_DATASOURCE_USERNAME / _PASSWORD, APP_PASSWORD_VIEW_KEY, and
+#    APP_BOOTSTRAP_PASSWORD if the database is new). DOCKER_DATASOURCE_URL overrides where the database is.
+# B) Brand-new server with no PostgreSQL — add docker-compose.db.yml (see that file and docs/hosting.md).
+#
 #   docker compose ps                status; shows "healthy" once /api/health/live answers
 #   docker compose logs -f backend   follow the logs
-#   docker compose down              stop
+#   docker compose down              stop (a bundled database keeps its data in its volume)
 #
-# Use EITHER this OR backend\run.ps1, not both: they both want port 4000.
-# Secrets come from backend/.env (never baked into the image).
+# Use EITHER this OR backend\run.ps1 on one PC, not both: they both want port 4000.
+# Secrets come from backend/.env or the environment (never baked into the image).
 
 services:
   backend:
-    build: ./backend
-    image: silver-muller-seals-backend:local
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: silver-muller-seals:local
     # Restart whenever the container exits (crash, out of memory, Docker/PC restart) unless you stopped it.
     restart: unless-stopped
     env_file:
-      - ./backend/.env
+      - path: ./backend/.env
+        required: false
     environment:
       PORT: "4000"
       # Inside the container "localhost" is the container itself; host.docker.internal is this PC.

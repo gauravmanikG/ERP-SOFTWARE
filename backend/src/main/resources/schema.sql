@@ -647,7 +647,7 @@ ALTER TABLE public.purchase_orders ADD COLUMN IF NOT EXISTS freight_terms VARCHA
 ALTER TABLE public.purchase_orders ADD COLUMN IF NOT EXISTS delivery_mode VARCHAR(50) DEFAULT 'Road Transport';
 ALTER TABLE public.purchase_orders ADD COLUMN IF NOT EXISTS credit_period INT DEFAULT 30;
 ALTER TABLE public.purchase_orders ADD COLUMN IF NOT EXISTS revision_number INT DEFAULT 0;
-ALTER TABLE public.purchase_orders ADD COLUMN IF NOT EXISTS company_gstin VARCHAR(50) DEFAULT '27ABCDE1234F1Z5';
+ALTER TABLE public.purchase_orders ADD COLUMN IF NOT EXISTS company_gstin VARCHAR(50) DEFAULT '06AFBFS8991J1ZC';
 ALTER TABLE public.purchase_orders ADD COLUMN IF NOT EXISTS company_state_code VARCHAR(10) DEFAULT '27';
 
 -- PO Validity: NULL = legacy PO (no expiry enforced). A PO is valid through validity_date and expired from the next day.

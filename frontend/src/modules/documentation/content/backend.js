@@ -14,7 +14,7 @@ export const STACK = [
   ["Language / framework", "Java 17, Spring Boot 4.1 (Spring MVC, JDBC, JPA in validate-only mode), Jackson 3 for JSON"],
   ["Database", "PostgreSQL (with pgcrypto for password hashing and encryption)"],
   ["Frontend", "React 19 + Vite 8 (Tailwind CSS 3), served separately; every screen calls the API on its own origin (/api, one setting in shared/api/apiBase.js), so no backend address is hard-coded"],
-  ["Packaging", "Executable jar (seals-backend.jar) or a Docker image with a health check"],
+  ["Packaging", "One executable jar (seals-backend.jar) that serves the ERP screens and the API from one address, or a Docker image of the same with a health check"],
   ["Operations", "Self-healing supervisor (run.ps1), Windows auto-start task, docker-compose with restart policy"],
   ["Testing", "JUnit 5: unit tests, guard tests and integration tests on disposable databases"]
 ];
@@ -65,7 +65,19 @@ export const HIGHLIGHTS = [
           "Secrets never enter the image (.dockerignore excludes .env); they are supplied at run time.",
           "Ready for cloud platforms such as AWS ECS, which replace unhealthy containers automatically."
         ],
-        files: ["backend/Dockerfile", "docker-compose.yml", "backend/.dockerignore"]
+        files: ["backend/Dockerfile", "docker-compose.yml", ".dockerignore"]
+      },
+      {
+        title: "Runs on any PC from one address",
+        headline: "A hosted install is one program: http://<server>:4000/ opens the ERP and its API calls stay on that same address.",
+        points: [
+          "The jar carries the built screens (pom.xml copies frontend/dist into static/), so no Vite, CORS setup or backend address is needed on the server.",
+          "Every screen builds its API URLs from one setting (frontend/src/shared/api/apiBase.js); nothing points at localhost.",
+          "A new database is set up on first start; the built-in accounts get the first password from APP_BOOTSTRAP_PASSWORD instead of a public default.",
+          "Docker: the image builds screens and API together; docker-compose.db.yml adds PostgreSQL for a server that has none and refuses to start without a database password and a first admin password.",
+          "Behind an HTTPS reverse proxy the API reads its X-Forwarded-* headers (server.forward-headers-strategy=native)."
+        ],
+        files: ["docs/hosting.md", "backend/pom.xml", "backend/Dockerfile", "docker-compose.yml", "docker-compose.db.yml", "modules/admin/AdminSeeder.java", "frontend/src/shared/api/apiBase.js"]
       }
     ]
   },

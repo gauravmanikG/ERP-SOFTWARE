@@ -1,0 +1,10 @@
+# Keeps secrets, dependencies and build output out of the Docker build context (built from the repository root).
+.git
+**/.env
+**/.env.*
+**/node_modules
+**/target
+**/dist
+**/logs
+artifacts
+*.bak

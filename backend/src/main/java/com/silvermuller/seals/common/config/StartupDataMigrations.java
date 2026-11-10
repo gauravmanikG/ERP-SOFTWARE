@@ -632,6 +632,56 @@ public class StartupDataMigrations implements ApplicationRunner {
                         RAISE EXCEPTION 'These user names are used by more than one user: %. Rename them, then restart.', dup;
                       END IF;
                       CREATE UNIQUE INDEX IF NOT EXISTS uq_app_user_name_ci ON public.app_user (lower(btrim(name)));
+                    END $$"""),
+            new Migration("2026-11-10-19-po-gst-split-for-haryana-registration",
+                    "The PO tax engine used to treat Maharashtra (27) as the company's GST state, but the company is "
+                            + "registered in Haryana (GSTIN 06AFBFS8991J1ZC, state 06). Re-splits the tax already stored on "
+                            + "each PO line: a vendor whose GSTIN starts with 06 gets CGST + SGST (half each), any other "
+                            + "state gets IGST. Each line's tax amount, taxable value and total stay exactly the same; only "
+                            + "the CGST/SGST/IGST breakdown and tax type change, and only on lines whose split was wrong. "
+                            + "Lines without a vendor GSTIN are left alone. Also replaces the placeholder company GSTIN "
+                            + "27ABCDE1234F1Z5 on POs (and as the column default) with the real 06AFBFS8991J1ZC.",
+                    """
+                    DO $$
+                    BEGIN
+                      ALTER TABLE public.purchase_orders ALTER COLUMN company_gstin SET DEFAULT '06AFBFS8991J1ZC';
+
+                      -- One UPDATE per PO: a second update of a row changed earlier in this transaction would re-check
+                      -- the NOT VALID foreign keys that older POs are allowed to break.
+                      WITH fixed AS (
+                        SELECT p.po_number,
+                               jsonb_agg(
+                                 CASE WHEN left(btrim(p.vendor_gstin), 2) = '06' THEN
+                                   l.line || jsonb_build_object(
+                                     'taxType', 'GST',
+                                     'cgstRate', round(COALESCE((l.line->>'taxPercent')::numeric, 0) / 2, 2),
+                                     'sgstRate', round(COALESCE((l.line->>'taxPercent')::numeric, 0) / 2, 2),
+                                     'cgstAmount', round(COALESCE((l.line->>'taxAmount')::numeric, 0) / 2, 2),
+                                     'sgstAmount', COALESCE((l.line->>'taxAmount')::numeric, 0)
+                                                   - round(COALESCE((l.line->>'taxAmount')::numeric, 0) / 2, 2),
+                                     'igstRate', 0, 'igstAmount', 0)
+                                 ELSE
+                                   l.line || jsonb_build_object(
+                                     'taxType', 'IGST',
+                                     'igstRate', COALESCE((l.line->>'taxPercent')::numeric, 0),
+                                     'igstAmount', COALESCE((l.line->>'taxAmount')::numeric, 0),
+                                     'cgstRate', 0, 'cgstAmount', 0, 'sgstRate', 0, 'sgstAmount', 0)
+                                 END ORDER BY l.ord) AS lines
+                        FROM public.purchase_orders p
+                        CROSS JOIN LATERAL jsonb_array_elements(p.details_json::jsonb) WITH ORDINALITY AS l(line, ord)
+                        WHERE p.details_json IS NOT NULL AND btrim(p.details_json) LIKE '[%'
+                          AND p.vendor_gstin ~ '^[0-9]{2}'
+                        GROUP BY p.po_number
+                      )
+                      UPDATE public.purchase_orders p
+                      SET details_json = CASE WHEN f.lines IS NOT NULL AND f.lines IS DISTINCT FROM p.details_json::jsonb
+                                              THEN f.lines::text ELSE p.details_json END,
+                          company_gstin = CASE WHEN p.company_gstin = '27ABCDE1234F1Z5' THEN '06AFBFS8991J1ZC' ELSE p.company_gstin END
+                      FROM public.purchase_orders p2
+                      LEFT JOIN fixed f ON f.po_number = p2.po_number
+                      WHERE p.po_number = p2.po_number
+                        AND (p.company_gstin = '27ABCDE1234F1Z5'
+                             OR (f.lines IS NOT NULL AND f.lines IS DISTINCT FROM p.details_json::jsonb));
                     END $$""")
     );
 

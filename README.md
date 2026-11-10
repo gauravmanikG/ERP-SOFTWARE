@@ -128,15 +128,9 @@ than the API does it call the API directly: set `VITE_API_URL` at build time and
 allow the frontend's origin with `app.cors.allowed-origins` in
 `application.properties` (override with the `APP_CORS_ALLOWED_ORIGINS` env var).
 
-## Production notes (brief)
+## Hosting on another PC or a server
 
-- Never commit `backend/.env` or real credentials — `backend/.gitignore`
-  already excludes `.env`.
-- For a production deploy, host the backend somewhere that runs a Java jar
-  (Railway, Fly.io, an EC2 box, etc.), point
-  `SPRING_DATASOURCE_URL`/`SPRING_DATASOURCE_USERNAME`/`SPRING_DATASOURCE_PASSWORD`
-  at your production Postgres instance, and either serve the
-  built frontend and the API behind one address (a reverse proxy sending
-  `/api` to the backend; no frontend setting needed), or set the frontend's
-  `VITE_API_URL` env var to the backend's public URL before `npm run build`
-  and set `APP_CORS_ALLOWED_ORIGINS` on the backend to the frontend's public URL.
+See **[docs/hosting.md](docs/hosting.md)**. In short: the backend serves the ERP screens itself, so a hosted install
+is one program on one address (`http://<server>:4000/`). Build it with `npm run build` (frontend) then
+`mvn clean package` (backend), or run `docker compose up -d --build`. Set `APP_BOOTSTRAP_PASSWORD` before the first
+start of any install other people can reach, and never commit `backend/.env` or real credentials.
