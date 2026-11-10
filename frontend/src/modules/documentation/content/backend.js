@@ -25,19 +25,22 @@ export const HIGHLIGHTS = [
     group: "Reliability & operations",
     items: [
       {
-        title: "Self-healing backend (automatic restart)",
+        title: "Self-healing backend and frontend (automatic restart)",
         tag: "New",
-        headline: "If the API crashes, runs out of memory or freezes, it comes back by itself — no one has to notice first.",
+        headline: "If the API or the UI server crashes, runs out of memory, freezes — or even if its supervisor is killed — it comes back by itself. No one has to notice first.",
         points: [
           "Supervisor (backend/run.ps1): restarts the API whenever it exits — crash, out-of-memory, killed process, database unavailable at startup.",
           "Watchdog: checks /api/health/live every 15 seconds; three failures in a row after start-up means the API is hung, so it is stopped and started again.",
           "Smart backoff: a healthy run restarts after 10 s; repeated start-up failures back off to 20 s, 40 s, then every 60 s, so a broken configuration never hammers the machine.",
           "Out-of-memory protection: the JVM runs with ExitOnOutOfMemoryError, so it exits cleanly (and is restarted) instead of limping along.",
           "Single instance: a system-wide lock guarantees only one supervisor runs, so a manual start and the auto-start task can never collide.",
-          "Auto-start at Windows sign-in (install-autostart.ps1), clean stop (stop-backend.ps1), per-run logs with rotation in backend/logs.",
+          "Memory caps: Maven and the API JVM have fixed heap limits, so they cannot grow into the PC's free RAM and get processes killed for low memory.",
+          "The frontend (Vite) has the same supervisor and watchdog: frontend/run-frontend.ps1.",
+          "Watchdog for the watchdogs: install-autostart.ps1 registers two hidden Windows tasks that start both supervisors 30 s after sign-in and re-check every 2 minutes, so a supervisor that is itself killed is back within 2 minutes. A deliberate stop (stop-all.ps1) is respected until start-dev.ps1 is run.",
+          "Per-run logs with rotation in backend/logs and frontend/logs.",
           "Tested for real: killed the process (back in ~60 s), froze it (watchdog detected and restarted it), started a second copy (refused), stopped it cleanly (nothing left behind)."
         ],
-        files: ["backend/run.ps1", "backend/stop-backend.ps1", "backend/install-autostart.ps1"]
+        files: ["backend/run.ps1", "frontend/run-frontend.ps1", "install-autostart.ps1", "stop-all.ps1", "start-dev.ps1"]
       },
       {
         title: "Real health checks: liveness vs readiness",

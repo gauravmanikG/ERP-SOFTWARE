@@ -6,6 +6,11 @@ $ErrorActionPreference = "Stop"
 $taskName = "SilverMullerSeals-Backend"
 $runScript = (Join-Path $PSScriptRoot "run.ps1")
 
+# Tell the auto-start keep-alive check (every 2 minutes) that this stop is deliberate, so it does not restart it.
+# Running run.ps1 by hand, or start-dev.ps1, clears the flag.
+New-Item -ItemType Directory -Force -Path (Join-Path $PSScriptRoot "logs") | Out-Null
+Set-Content -Path (Join-Path $PSScriptRoot "logs\stopped.flag") -Value (Get-Date -Format s) -Encoding ASCII
+
 $task = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
 if ($task -and $task.State -eq "Running") {
   Stop-ScheduledTask -TaskName $taskName

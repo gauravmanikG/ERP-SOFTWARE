@@ -81,16 +81,29 @@ java -jar target/seals-backend.jar
   by itself when PostgreSQL is back.
 - Only one supervisor runs at a time. Logs: `backend\logs\supervisor.log`
   (restart events) and `backend\logs\backend-*.out.log` (API output, last 10 runs).
+- Memory is capped (Maven `-Xmx384m`, API `-Xmx1024m`; override with
+  `MAVEN_OPTS` / `BACKEND_JVM_OPTS` in `backend\.env`) so the two JVMs cannot
+  eat the PC's RAM and get processes killed for low memory.
 
-| Task | Command (in `backend`) |
-|------|------------------------|
-| Start now, in this window | `.\run.ps1` (Ctrl+C stops it and the API) |
-| Start automatically at Windows sign-in | `.\install-autostart.ps1 -StartNow` |
-| Stop (however it was started) | `.\stop-backend.ps1` |
-| Remove the auto-start | `.\uninstall-autostart.ps1` |
+The frontend has the same supervisor: `frontend\run-frontend.ps1`.
 
-Killing `java.exe` by hand does not stop the backend — the supervisor restarts
-it. Use `stop-backend.ps1`.
+**Keep the whole app live (recommended, once per PC)** — from the repo root:
+`.\install-autostart.ps1 -StartNow`. It registers two hidden Task Scheduler tasks
+(`SilverMullerSeals-Backend`, `SilverMullerSeals-Frontend`) that start 30 s after
+Windows sign-in **and re-check every 2 minutes**, so even if a supervisor itself
+is killed (Task Manager, a closed window, a tool freeing memory) it is back within
+2 minutes. A deliberate stop is respected until you start again.
+
+| Task | Command (repo root) |
+|------|---------------------|
+| Install keep-alive + start now | `.\install-autostart.ps1 -StartNow` |
+| Start (after a deliberate stop) | `.\start-dev.ps1` |
+| Stop on purpose (stays stopped) | `.\stop-all.ps1` (or `backend\stop-backend.ps1` / `frontend\stop-frontend.ps1`) |
+| Remove the keep-alive tasks | `.\uninstall-autostart.ps1` |
+| Run one in a window instead | `backend\run.ps1` / `frontend\run-frontend.ps1` (Ctrl+C stops it) |
+
+Killing `java.exe` or `node.exe` by hand does not stop the app — the supervisor
+restarts it. Use `stop-all.ps1`.
 
 **Docker alternative** (from the repo root, uses the same local PostgreSQL and
 `backend/.env`): `docker compose up -d --build`. The container has

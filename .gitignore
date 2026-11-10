@@ -13,3 +13,5 @@ backend/.env
 .idea
 artifacts/
 *.bak
+backend/logs/
+frontend/logs/

@@ -8,7 +8,9 @@ export default defineConfig({
   server: {
     host: "127.0.0.1",
     port: 5173,
-    open: true,
+    // Opens the browser on a manual `npm run dev`; the run-frontend.ps1 supervisor sets SMS_NO_BROWSER_OPEN so a
+    // restart does not open a new tab every time.
+    open: !process.env.SMS_NO_BROWSER_OPEN,
     proxy: {
       // Forwards frontend fetch("/api/...") calls to the Spring Boot +
       // PostgreSQL backend in /backend during `npm run dev`, so there's no

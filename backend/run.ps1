@@ -13,9 +13,19 @@
 # Logs: backend\logs\supervisor.log (restart events) and backend\logs\backend-<time>.out.log / .err.log
 # (API output, last 10 runs kept).
 # Stop: press Ctrl+C in this window. If it runs from the auto-start task, stop it with backend\stop-backend.ps1.
+#
+# -AutoStart is what the Windows auto-start task passes (at sign-in and every 2 minutes as a keep-alive check).
+# In that mode the script does nothing if someone stopped the backend on purpose with stop-backend.ps1
+# (logs\stopped.flag). Starting run.ps1 by hand clears that flag.
+
+param([switch]$AutoStart)
 
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
+
+$stopFlag = Join-Path $PSScriptRoot "logs\stopped.flag"
+if ($AutoStart -and (Test-Path $stopFlag)) { exit 0 }   # stopped on purpose: the keep-alive check must not undo that
+if (-not $AutoStart) { Remove-Item -Force $stopFlag -ErrorAction SilentlyContinue }
 
 if (Test-Path .env) {
   Get-Content .env | ForEach-Object {
@@ -37,6 +47,10 @@ if (-not $env:SPRING_DATASOURCE_PASSWORD) {
 if (-not $env:PORT) {
   $env:PORT = "4000"
 }
+# Memory caps. Without them each JVM (Maven + the API it forks) may grow to 1/4 of the PC's RAM, and on a busy
+# PC Windows or other tools then kill processes for lack of memory. Override in backend\.env if needed.
+if (-not $env:MAVEN_OPTS)       { $env:MAVEN_OPTS = "-Xmx384m" }
+if (-not $env:BACKEND_JVM_OPTS) { $env:BACKEND_JVM_OPTS = "-Xms256m -Xmx1024m" }
 
 # ------------------------------------------------------------------ settings
 $port                 = [int]$env:PORT
@@ -146,7 +160,7 @@ try {
     Write-Log "Starting backend (attempt $attempt). Output: $outLog"
     # ExitOnOutOfMemoryError: an out-of-memory JVM exits (and is restarted) instead of limping along.
     $proc = Start-Process -FilePath "cmd.exe" `
-      -ArgumentList '/c', 'mvn', '-B', 'spring-boot:run', '"-Dspring-boot.run.jvmArguments=-XX:+ExitOnOutOfMemoryError"' `
+      -ArgumentList '/c', 'mvn', '-B', 'spring-boot:run', "`"-Dspring-boot.run.jvmArguments=$env:BACKEND_JVM_OPTS -XX:+ExitOnOutOfMemoryError`"" `
       -WorkingDirectory $PSScriptRoot -WindowStyle Hidden -PassThru `
       -RedirectStandardOutput $outLog -RedirectStandardError $errLog
     $null = $proc.Handle   # keeps the exit code readable after the process ends
