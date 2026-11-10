@@ -266,6 +266,7 @@ export const SCREEN_GUIDE = {
         ["Rejected", "Returned with a reason; edit and submit again"],
         ["Cancelled", "Stopped (possible from Draft, Pending Approval, Approved or Rejected)"]
       ] } },
+      { p: "The list's \"Converted to PO\" filter and the \"PO Converted\" counter include every PR that has a PO against it: Partially Ordered, Fully Ordered, and older PRs marked Converted to PO." },
       { rules: [
         "A PR line can never be ordered beyond its requested quantity — every reservation is checked under a database lock, so two buyers cannot over-order the same line at the same moment.",
         "A PR with lines already ordered through PO by PR cannot be deleted, and its lines cannot be edited.",

@@ -484,6 +484,8 @@ export function PurchaseRequisitionPage({
   // Search input & status filter pills
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
+  // A PR that has a PO against it: "Partially Ordered" / "Fully Ordered" (PO by PR) or the legacy "Converted to PO".
+  const PO_RAISED_STATUSES = ["Converted to PO", "Partially Ordered", "Fully Ordered"];
 
   // Per-column filter inputs (matching ItemMasterFormPage sticky header row 2)
   const [colFilters, setColFilters] = useState({
@@ -620,7 +622,8 @@ export function PurchaseRequisitionPage({
   const filteredPrs = useMemo(() => {
     return prList.filter((pr) => {
       // 1. Status Pill Filter
-      if (statusFilter !== "ALL" && pr.status !== statusFilter) return false;
+      if (statusFilter === "Converted to PO") { if (!PO_RAISED_STATUSES.includes(pr.status)) return false; }
+      else if (statusFilter !== "ALL" && pr.status !== statusFilter) return false;
 
       // 2. Global Top Search
       if (searchTerm.trim()) {
@@ -724,7 +727,7 @@ export function PurchaseRequisitionPage({
   const totalPrCount = prList.length;
   const pendingApprovalCount = prList.filter((p) => p.status === "Pending Approval").length;
   const approvedCount = prList.filter((p) => p.status === "Approved").length;
-  const convertedPoCount = prList.filter((p) => p.status === "Converted to PO").length;
+  const convertedPoCount = prList.filter((p) => PO_RAISED_STATUSES.includes(p.status)).length;
   const totalIndentValue = prList.reduce((sum, p) => sum + (Number(p.estimated_amount) || 0), 0);
 
   // Selection toggle
