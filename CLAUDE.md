@@ -1,6 +1,6 @@
 # Silver Muller Seals ERP — working rules
 
-Spring Boot 3 / Java 17 backend (`backend/`, port 4000) on PostgreSQL (`localhost:5434/sms_seals`), React + Vite
+Spring Boot 4 / Java 17 backend (`backend/`, port 4000) on PostgreSQL (`localhost:5434/sms_seals`), React + Vite
 frontend (`frontend/`, port 5173). See `README.md` to run it and `docs/startup-data-rules.md` before touching anything
 that runs at start-up.
 

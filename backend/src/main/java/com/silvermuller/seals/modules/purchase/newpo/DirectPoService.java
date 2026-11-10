@@ -1,6 +1,6 @@
 package com.silvermuller.seals.modules.purchase.newpo;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.silvermuller.seals.modules.purchase.dto.PurchaseCalculationRequest;
 import com.silvermuller.seals.modules.purchase.dto.PurchaseCalculationResponse;
 import com.silvermuller.seals.modules.purchase.dto.PurchaseItemLine;

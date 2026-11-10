@@ -1,7 +1,7 @@
 package com.silvermuller.seals.modules.purchase.servicepo;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import com.silvermuller.seals.modules.purchase.servicepo.ServicePoCalculator.PricingMethod;
 import com.silvermuller.seals.modules.purchase.servicepo.ServicePoDtos.*;
 import org.springframework.beans.factory.annotation.Value;
@@ -351,7 +351,7 @@ public class ServicePoService {
         try {
             jdbc.update("INSERT INTO public.service_po_revisions (service_po_id, revision_number, reason, changes_json, changed_by) "
                             + "VALUES (?,?,?,?,?)", id, nextRev, req.reason(), objectMapper.writeValueAsString(changes), actor.name());
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new ServicePoException(HttpStatus.INTERNAL_SERVER_ERROR, "Could not record revision: " + e.getMessage());
         }
         cols.put("version", ((Integer) row.get("version")) + 1);

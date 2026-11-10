@@ -4,8 +4,8 @@
 
 | Layer     | Tech                                                    |
 |-----------|----------------------------------------------------------|
-| Frontend  | React, HTML, CSS, JavaScript (Vite + Tailwind)            |
-| Backend   | Spring Boot (Java)                                         |
+| Frontend  | React 19, HTML, CSS, JavaScript (Vite 8 + Tailwind 3)     |
+| Backend   | Spring Boot 4.1 (Java 17+)                                 |
 | Database  | PostgreSQL                                                  |
 
 ## Folder structure

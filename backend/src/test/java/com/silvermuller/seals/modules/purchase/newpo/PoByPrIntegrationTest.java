@@ -19,7 +19,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataAccessException;
 import com.silvermuller.seals.modules.purchase.newpo.ProcurementMigrations;
-import org.springframework.boot.test.mock.mockito.SpyBean;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -71,7 +71,7 @@ class PoByPrIntegrationTest {
     @Autowired PurchaseProcessingService purchaseProcessing;
     @Autowired GoodsReceiptNoteService grnService;
     @Autowired VendorRateService rates;
-    @SpyBean PurchaseRequisitionService spiedPrService;
+    @MockitoSpyBean PurchaseRequisitionService spiedPrService;
 
     private static final List<Long> RATE_IDS = Collections.synchronizedList(new ArrayList<>());
     private static final List<String> PR_NUMBERS = Collections.synchronizedList(new ArrayList<>());
