@@ -147,7 +147,11 @@ if (Wait-Healthy 240) {
   Write-Host ""
   Write-Host "Release $commit is running in production mode." -ForegroundColor Green
   Write-Host "  This PC:      http://localhost:$port/"
-  Write-Host "  Other PCs:    http://<this-pc's-address>:$port/   (Windows Firewall must allow TCP $port)"
+  # The PC name stays the same when the router gives the PC a new IP address; the IP is shown as a fallback.
+  Write-Host "  Other PCs:    http://$($env:COMPUTERNAME):$port/   (stays the same)"
+  Get-NetIPAddress -AddressFamily IPv4 -PrefixOrigin Dhcp, Manual -ErrorAction SilentlyContinue |
+    Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.254.*' -and $_.InterfaceAlias -notlike 'vEthernet*' } |
+    ForEach-Object { Write-Host "                http://$($_.IPAddress):$port/   (today's IP on $($_.InterfaceAlias); can change)" }
   Write-Host "  Old address:  http://127.0.0.1:5173/ now redirects to port $port."
   exit 0
 }

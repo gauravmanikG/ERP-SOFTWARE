@@ -68,7 +68,10 @@ starts at sign-in and is re-checked every 2 minutes.
 
 ## Letting other PCs reach it
 
-1. Find the server's address (`ipconfig` on Windows) and open `http://<that-address>:4000/` from the other PC.
+1. Open `http://<server-pc-name>:4000/` from the other PC (Windows: the name is under Settings → System → About;
+   `release.ps1` prints it). The **name** stays the same; the IP address (`ipconfig`) can change whenever the
+   router hands out a new one, which breaks bookmarks that use it. For a fixed IP, reserve one for the server in
+   the router's DHCP settings.
 2. Allow inbound TCP port **4000** in the server's firewall (Windows: Windows Defender Firewall → Inbound rules →
    New rule → Port → TCP 4000). This is a deliberate security choice for whoever manages that PC.
 3. For the internet, put the ERP behind HTTPS (a reverse proxy such as nginx, IIS or a cloud load balancer

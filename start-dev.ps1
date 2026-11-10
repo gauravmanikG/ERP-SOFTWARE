@@ -41,3 +41,6 @@ if ($installed.Count -eq $tasks.Count) {
   Write-Host "To keep them running without windows, run .\install-autostart.ps1 -StartNow once." -ForegroundColor Yellow
 }
 Write-Host "The backend needs up to a minute. Then open $openUrl"
+if ($production) {
+  Write-Host "Other PCs: http://$($env:COMPUTERNAME):4000/ (the PC name stays the same when its IP address changes)"
+}
