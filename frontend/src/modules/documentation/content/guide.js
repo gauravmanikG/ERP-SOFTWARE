@@ -16,7 +16,7 @@
 //   { tip: "text" } / { warn: "text" }             call-outs
 //   { flow: "flowchart-id" }                       link to a chart in the Flowcharts section
 
-export const GUIDE_UPDATED = "2026-11-10";
+export const GUIDE_UPDATED = "2026-11-11";
 
 // ---------------------------------------------------------------- start here (not tied to a menu screen)
 
@@ -63,9 +63,12 @@ export const START_HERE = [
   {
     id: "navigation",
     title: "Finding your way around",
-    summary: "Home page, module menu, the slide-out menu and breadcrumbs.",
+    summary: "Home page, module menu, the slide-out menu, the Back and Home buttons and breadcrumbs.",
     blocks: [
       { list: [
+        "Back and Home buttons (top-left of the header, on every screen): the arrow returns to the screen you were on before, and the house icon takes you to the home page. Back is greyed out when there is no earlier screen in this tab.",
+        "The browser's own Back and Forward buttons (and Alt+Left / Alt+Right, or a mouse's back button) move between ERP screens the same way. Refreshing the page keeps you on the screen you were on.",
+        "Back goes to the previous screen, not to an earlier step inside a screen. Anything typed but not saved on the screen you leave is not kept, just as when you open another screen from the menu.",
         "Home page: the left-hand list shows every module you have access to. Hover a module to open its screens; hover a group (for example Purchase → Purchase Orders) to see the screens inside it.",
         "Inside a screen: use the Menu button (top-left of most screens) to slide the module menu in and out, and Home to return to the home page.",
         "The header always shows which module and screen you are in, plus the live date and time.",

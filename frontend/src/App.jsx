@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { lazyPage } from "./shared/utils/lazyPage";
+import { initialScreen, useScreenHistory } from "./shared/utils/screenHistory";
 import { ScreenBoundary } from "./shared/components/ScreenBoundary";
 import { GlobalTopHeader } from "./shared/layout/GlobalTopHeader";
 import { GlobalMoveableSidebar } from "./shared/layout/GlobalMoveableSidebar";
@@ -29,14 +30,17 @@ const RequestForQuotationPage = lazyPage(() => import("./modules/purchase/pages/
 const DocumentationPage = lazyPage(() => import("./modules/documentation/DocumentationPage"), "DocumentationPage");
 
 export default function App() {
-  const [currentView, setCurrentView] = useState("home"); // "home" | "item-master" | "item-master-other" | "supplier-master" | "customer-master" | "department-master" | "machine-master" | "purchase-requisition" | "purchase-orders" | "purchase-processing" | "po-approval" | "vendor-quotations" | "rfq" | "grn" | "operations"
-  const [erpSlot, setErpSlot] = useState("dashboard");
+  const me = useCurrentUser();
+  // After a page refresh the screen that was open comes back; otherwise the ERP opens at Home.
+  const [start] = useState(() => initialScreen(me?.id) || {});
+  const [currentView, setCurrentView] = useState(start.currentView || "home"); // "home" | "item-master" | "item-master-other" | "supplier-master" | "customer-master" | "department-master" | "machine-master" | "purchase-requisition" | "purchase-orders" | "purchase-processing" | "po-approval" | "vendor-quotations" | "rfq" | "grn" | "operations"
+  const [erpSlot, setErpSlot] = useState(start.erpSlot || "dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [jobWorkScreen, setJobWorkScreen] = useState("dashboard");
-  const [newPoScreen, setNewPoScreen] = useState("vendor-rates");
-  const [mastersScreen, setMastersScreen] = useState("mode-of-payment");
-  const [docsScreen, setDocsScreen] = useState("overview");
-  const [rbacUser, setRbacUser] = useState(null); // user selected on the Users screen for Access Control
+  const [jobWorkScreen, setJobWorkScreen] = useState(start.jobWorkScreen || "dashboard");
+  const [newPoScreen, setNewPoScreen] = useState(start.newPoScreen || "vendor-rates");
+  const [mastersScreen, setMastersScreen] = useState(start.mastersScreen || "mode-of-payment");
+  const [docsScreen, setDocsScreen] = useState(start.docsScreen || "overview");
+  const [rbacUser, setRbacUser] = useState(start.rbacUser || null); // user selected on the Users screen for Access Control
 
   const handleNavigateToPage = (targetPage) => {
     let page = targetPage;
@@ -119,10 +123,27 @@ export default function App() {
 
   const handleBackToHome = () => {
     setCurrentView("home");
+    setSidebarOpen(false);
   };
 
+  // Every screen change becomes a browser-history entry: the header's Back button (and the browser's own Back /
+  // Forward) return to the previous screen exactly as it was opened (shared/utils/screenHistory.js).
+  const { canGoBack, goBack } = useScreenHistory(
+    { currentView, erpSlot, jobWorkScreen, newPoScreen, mastersScreen, docsScreen, rbacUser },
+    (s) => {
+      setCurrentView(s.currentView || "home");
+      setErpSlot(s.erpSlot || "dashboard");
+      setJobWorkScreen(s.jobWorkScreen || "dashboard");
+      setNewPoScreen(s.newPoScreen || "vendor-rates");
+      setMastersScreen(s.mastersScreen || "mode-of-payment");
+      setDocsScreen(s.docsScreen || "overview");
+      setRbacUser(s.rbacUser || null);
+      setSidebarOpen(false);
+    },
+    me?.id
+  );
+
   // Screen-level access: whatever route led here, a screen this user may not open is never mounted.
-  const me = useCurrentUser();
   const pageKey =
     currentView === "masters" ? `masters-${mastersScreen}`
       : currentView === "new-po" ? `new-po-${newPoScreen}`
@@ -169,6 +190,8 @@ export default function App() {
         currentView={currentView}
         erpSlot={erpSlot}
         onNavigateHome={handleBackToHome}
+        canGoBack={canGoBack}
+        onGoBack={goBack}
         onNavigateNotifications={() => {
           setCurrentView("home");
           setErpSlot("notifications");

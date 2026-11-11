@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { LogOut, Camera } from "lucide-react";
+import { LogOut, Camera, ArrowLeft, Home } from "lucide-react";
 import * as adminApi from "../../modules/settings/admin/api";
 import { fileToProfilePhoto } from "../../modules/auth/profilePhoto";
 import { formatDisplayDate, formatDisplayDateTime } from "../utils/dateFormat";
@@ -27,6 +27,8 @@ export function GlobalTopHeader({
   currentView,
   erpSlot,
   onNavigateHome,
+  canGoBack,
+  onGoBack,
   onNavigateNotifications
 }) {
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -200,6 +202,27 @@ export function GlobalTopHeader({
             <div style={{ width: 1, height: 26, background: "#e2e8f0" }} />
           </>
         )}
+
+        {/* Back (previous screen) and Home (landing page), on every screen */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <HeaderNavButton
+            id="btn-header-back"
+            title={canGoBack ? "Back to the previous screen (Alt+Left)" : "No previous screen"}
+            disabled={!canGoBack}
+            onClick={onGoBack}
+          >
+            <ArrowLeft size={18} strokeWidth={2.5} />
+          </HeaderNavButton>
+          <HeaderNavButton
+            id="btn-header-home"
+            title={currentView === "home" ? "You are on Home" : "Home"}
+            active={currentView === "home"}
+            onClick={onNavigateHome}
+          >
+            <Home size={18} strokeWidth={2.3} />
+          </HeaderNavButton>
+        </div>
+        <div style={{ width: 1, height: 26, background: "#e2e8f0" }} />
 
         {/* Silver Brain Logo (Clickable to return Home) */}
         <div
@@ -586,5 +609,49 @@ export function GlobalTopHeader({
 
       </div>
     </header>
+  );
+}
+
+// A square icon button in the header's left group (Back, Home).
+function HeaderNavButton({ id, title, disabled, active, onClick, children }) {
+  const rest = { background: active ? "#fee2e2" : "#ffffff", color: active ? "#c51f28" : "#475569", borderColor: active ? "#c51f28" : "#cbd5e1" };
+  return (
+    <button
+      type="button"
+      id={id}
+      title={title}
+      aria-label={title}
+      disabled={disabled}
+      onClick={onClick}
+      style={{
+        width: 34,
+        height: 34,
+        borderRadius: 8,
+        background: rest.background,
+        color: rest.color,
+        border: `1px solid ${rest.borderColor}`,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        cursor: disabled ? "not-allowed" : "pointer",
+        opacity: disabled ? 0.4 : 1,
+        padding: 0,
+        transition: "all 0.15s ease",
+        boxShadow: "0 1px 2px rgba(0, 0, 0, 0.04)"
+      }}
+      onMouseEnter={(e) => {
+        if (disabled) return;
+        e.currentTarget.style.background = "#fee2e2";
+        e.currentTarget.style.color = "#c51f28";
+        e.currentTarget.style.borderColor = "#c51f28";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = rest.background;
+        e.currentTarget.style.color = rest.color;
+        e.currentTarget.style.borderColor = rest.borderColor;
+      }}
+    >
+      {children}
+    </button>
   );
 }
