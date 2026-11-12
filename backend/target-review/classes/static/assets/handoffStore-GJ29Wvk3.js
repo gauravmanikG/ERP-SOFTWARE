@@ -1,1 +1,0 @@
-var e=new Map;function t(t,n){e.set(t,String(n))}function n(t){return e.has(t)?e.get(t):null}function r(t){e.delete(t)}export{r as n,t as r,n as t};
