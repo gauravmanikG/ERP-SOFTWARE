@@ -43,7 +43,6 @@ import {
 import { ActivityButton } from "../activity/ActivityTrail";
 
 // 1. Direct Import of REAL 1,582 Item Master records from Engineering
-import { REAL_ITEM_MASTER_DATA } from "../../engineering/data/realItemMasterData";
 
 // 2. Direct Import of REAL 14 Groups from Other Item Master
 import { INITIAL_GROUPS_DATA } from "../../engineering/pages/OtherItemMasterPage";
@@ -313,21 +312,8 @@ export function PurchaseRequisitionPage({
         console.warn("Could not fetch items from backend API, using local storage fallback:", err);
       }
 
-      // 3. Fallback to bundled FG data if database was empty
-      if (combined.length === 0 && Array.isArray(REAL_ITEM_MASTER_DATA)) {
-        REAL_ITEM_MASTER_DATA.forEach((it) => {
-          combined.push({
-            item_code: it.sms_new_part_no || (it.old_code ? `FG-${it.old_code}` : `ITM-${it.id}`),
-            item_name: it.description_size || it.product || "Oil Seal",
-            category: it.group_name || "FG",
-            uom: it.purchased_uom || "",
-            current_stock: 0,
-            reorder_level: 50,
-            est_rate: Number(it.price) || 0,
-            item_type: "FG"
-          });
-        });
-      }
+      // Items come from the Item Master only (the API above). The old bundled copy of the item list, which was
+      // used when the database was empty, is gone: it was stale demo data and made this screen 1 MB heavier.
 
       setMasterItems(combined);
     };

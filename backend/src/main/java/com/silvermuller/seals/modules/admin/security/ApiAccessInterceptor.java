@@ -1,6 +1,7 @@
 package com.silvermuller.seals.modules.admin.security;
 
 import com.silvermuller.seals.modules.admin.auth.AuthService;
+import com.silvermuller.seals.modules.admin.rbac.PermissionCatalog;
 import com.silvermuller.seals.modules.admin.rbac.PermissionService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -46,7 +47,10 @@ public class ApiAccessInterceptor implements HandlerInterceptor {
         CurrentUser user = auth.resolve(req.getHeader("Authorization"))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Sign in required."));
         if (!user.isActive()) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Account is inactive.");
-        RequestActor.set(req, user); // services record "who did this step" from the session, never from the browser
+        // Services record "who did this step" from the session, never from the browser, and modules with their own
+        // role model (Capital PO, Service PO, Job Work) derive the user's role from these keys (ModuleRoles).
+        Set<String> keys = user.wildcard() ? PermissionCatalog.allKeys() : permissions.effectiveKeys(user.id());
+        RequestActor.set(req, user, keys);
         if (path.startsWith("/api/auth/")) return true;
         if (user.mustChangePassword()) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Change your temporary password first.");
@@ -59,7 +63,6 @@ public class ApiAccessInterceptor implements HandlerInterceptor {
         ActionRules.Rule rule = ActionRules.match(method, path).orElseThrow(() ->
                 new ResponseStatusException(HttpStatus.FORBIDDEN, "This action is not permitted for your account."));
         if (rule.inController()) return true; // the controller checks the exact action once it has read the body
-        Set<String> keys = permissions.effectiveKeys(user.id());
         if (rule.anyOf().stream().anyMatch(keys::contains)) return true;
         throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                 "You do not have permission for this action (" + String.join(" or ", rule.anyOf()) + ").");

@@ -57,6 +57,16 @@ class ApiAccessInterceptorTest {
     }
 
     @Test
+    void moduleRuledActionsNeedTheApproverPermission() {
+        // Capital / Service PO decide these by their own role model (ModuleRoles): approver-level tasks there.
+        assertEquals(List.of("purchase.capital_po:approve"), ActionRules.match("POST", "/api/capital-pos/categories").orElseThrow().anyOf());
+        assertEquals(List.of("purchase.capital_po:approve"), ActionRules.match("POST", "/api/capital-pos/7/validity/extend").orElseThrow().anyOf());
+        assertEquals(List.of("purchase.service_po:approve"), ActionRules.match("POST", "/api/service-pos/categories").orElseThrow().anyOf());
+        assertEquals(List.of("purchase.service_po:approve"), ActionRules.match("POST", "/api/service-pos/9/amend").orElseThrow().anyOf());
+        assertEquals(List.of("purchase.service_po:receive"), ActionRules.match("POST", "/api/service-pos/9/invoices").orElseThrow().anyOf());
+    }
+
+    @Test
     void unlistedWritesAreNotMatchedSoTheyAreDenied() {
         assertTrue(ActionRules.match("POST", "/api/purchase/requisitions/PR-1/approve").isEmpty());
         assertTrue(ActionRules.match("DELETE", "/api/capital-pos/7").isEmpty());

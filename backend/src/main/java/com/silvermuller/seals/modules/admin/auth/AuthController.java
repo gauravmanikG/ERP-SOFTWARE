@@ -2,6 +2,7 @@ package com.silvermuller.seals.modules.admin.auth;
 
 import com.silvermuller.seals.modules.admin.rbac.PermissionService;
 import com.silvermuller.seals.modules.admin.security.CurrentUser;
+import com.silvermuller.seals.modules.admin.security.ModuleRoles;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -48,7 +49,10 @@ public class AuthController {
         body.put("mustChangePassword", c.mustChangePassword());
         body.put("photo", auth.photoOf(c.id()));
         // effective permission keys, used by the browser to show only the screens this user may open
-        body.put("permissions", new ArrayList<>(permissions.effectiveKeys(c.id())));
+        java.util.Set<String> keys = permissions.effectiveKeys(c.id());
+        body.put("permissions", new ArrayList<>(keys));
+        // the role this user plays inside Capital PO, Service PO and Job Work (derived on the server, see ModuleRoles)
+        body.put("moduleRoles", ModuleRoles.all(c.wildcard(), keys));
         return ResponseEntity.ok(body);
     }
 

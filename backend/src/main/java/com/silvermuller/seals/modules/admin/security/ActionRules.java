@@ -123,7 +123,8 @@ public final class ActionRules {
 
         // ---------------- Capital PO ----------------
         String cap = "/api/capital-pos";
-        rule("POST", cap + "/categories", "purchase.capital_po:create");
+        // Capital PO keeps its own role model (ModuleRoles): adding a category and extending validity are approver tasks there.
+        rule("POST", cap + "/categories", "purchase.capital_po:approve");
         rule("POST", cap + "/preview", "purchase.capital_po:view");
         rule("POST", cap, "purchase.capital_po:create");
         rule("PUT", cap + "/{id}", "purchase.capital_po:edit");
@@ -133,7 +134,7 @@ public final class ActionRules {
         rule("POST", cap + "/{id}/issue", "purchase.capital_po:issue");
         rule("POST", cap + "/{id}/cancel", "purchase.capital_po:cancel");
         rule("POST", cap + "/{id}/close", "purchase.capital_po:approve");
-        rule("POST", cap + "/{id}/validity/extend", "purchase.capital_po:edit");
+        rule("POST", cap + "/{id}/validity/extend", "purchase.capital_po:approve");
         rule("POST", cap + "/{id}/amendments", "purchase.capital_po:edit");
         rule("POST", cap + "/{id}/amendments/{amendmentId}/decision", "purchase.capital_po:approve", "purchase.capital_po:reject");
         rule("PUT", cap + "/{id}/schedule", "purchase.capital_po:edit");
@@ -146,7 +147,9 @@ public final class ActionRules {
 
         // ---------------- Service PO ----------------
         String svc = "/api/service-pos";
-        rule("POST", svc + "/categories", "purchase.service_po:create");
+        // Service PO keeps its own role model (ModuleRoles): categories, validity extensions and amendments are approver
+        // tasks there, and invoices are recorded by finance / acceptance (receive) users.
+        rule("POST", svc + "/categories", "purchase.service_po:approve");
         rule("POST", svc + "/preview", "purchase.service_po:view");
         rule("POST", svc, "purchase.service_po:create");
         rule("PUT", svc + "/{id}", "purchase.service_po:edit");
@@ -158,11 +161,11 @@ public final class ActionRules {
         rule("POST", svc + "/{id}/release", "purchase.service_po:approve");
         rule("POST", svc + "/{id}/close", "purchase.service_po:approve");
         rule("POST", svc + "/{id}/cancel", "purchase.service_po:cancel");
-        rule("POST", svc + "/{id}/validity/extend", "purchase.service_po:edit");
-        rule("POST", svc + "/{id}/amend", "purchase.service_po:edit");
+        rule("POST", svc + "/{id}/validity/extend", "purchase.service_po:approve");
+        rule("POST", svc + "/{id}/amend", "purchase.service_po:approve");
         rule("PUT", svc + "/{id}/schedule", "purchase.service_po:edit");
         rule("POST", svc + "/{id}/acceptances", "purchase.service_po:receive");
-        rule("POST", svc + "/{id}/invoices", "purchase.service_po:receive", "purchase.service_po:edit");
+        rule("POST", svc + "/{id}/invoices", "purchase.service_po:receive");
         rule("POST", svc + "/{id}/attachments", "purchase.service_po:create", "purchase.service_po:edit", "purchase.service_po:receive");
 
         // ---------------- Job Work ----------------

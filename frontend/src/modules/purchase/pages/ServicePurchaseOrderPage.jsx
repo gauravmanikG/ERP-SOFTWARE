@@ -12,11 +12,9 @@ import { isNumericHeader } from "../newpo/ui";
 
 const API_ROOT = API_BASE + "/api";
 const SPO = `${API_ROOT}/service-pos`;
-import { getSetting, setSetting } from "../../../shared/utils/settingsStore";
 import { API_BASE } from "../../../shared/api/apiBase.js";
-
-const USER_KEY = "SMS_CURRENT_USER";
-const ROLES = ["CREATOR", "APPROVER", "ACCEPTOR", "FINANCE", "ADMIN"];
+import { useCurrentUser } from "../../auth/AuthGate";
+import { sessionActor, hasRole, rolesLabel, MODULES } from "../../auth/moduleRoles";
 
 const PRICING_METHODS = [
   { value: "FIXED_PRICE", label: "Fixed price for entire job" },
@@ -82,24 +80,12 @@ const ACTION_PATH = {
 
 const TODAY = () => new Date().toISOString().slice(0, 10);
 
-function loadUser() {
-  const u = getSetting(USER_KEY, null);
-  if (u && u.name) return { name: u.name, role: ROLES.includes(u.role) ? u.role : "CREATOR" };
-  return { name: "Current User", role: "CREATOR" };
-}
-
-function saveUser(u) {
-  setSetting(USER_KEY, u);
-}
-
+// Who is acting is decided by the server from the session (see auth/moduleRoles.js); `user` is kept as a parameter so
+// the many call sites read the same, but nothing about the user is sent.
 async function api(method, path, user, body) {
   const res = await fetch(`${SPO}${path}`, {
     method,
-    headers: {
-      "Content-Type": "application/json",
-      "X-User-Name": user.name,
-      "X-User-Role": user.role
-    },
+    headers: { "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body)
   });
   const text = await res.text();
@@ -123,7 +109,7 @@ async function plainGet(path) {
 }
 
 async function authedBlob(path, user) {
-  const res = await fetch(`${SPO}${path}`, { headers: { "X-User-Name": user.name, "X-User-Role": user.role } });
+  const res = await fetch(`${SPO}${path}`);
   if (!res.ok) throw new Error(`Could not load file (HTTP ${res.status})`);
   return res.blob();
 }
@@ -372,7 +358,7 @@ function CreateForm({ user, refs, reloadRefs, editing, amendMode, onSaved, onCan
   const vendorState = vendor ? [vendor.state, vendor.stateCode].filter(Boolean).join(" (") + (vendor.stateCode ? ")" : "") : "";
   const vendorAddress = vendor ? [vendor.address, vendor.city, vendor.pincode].filter(Boolean).join(", ") : "";
   const amountOnly = AMOUNT_ONLY_METHODS.includes(form.pricingMethod);
-  const canAddCategory = ["APPROVER", "ADMIN"].includes(user.role);
+  const canAddCategory = hasRole(user, "APPROVER");
 
   // Live totals: the server validates and calculates; nothing is saved by a preview.
   useEffect(() => {
@@ -948,7 +934,7 @@ function DetailView({ id, user, departments, onClose, onAction, onEdit, onAmend,
 
   const print = async () => {
     try {
-      const res = await fetch(`${SPO}/${id}/print`, { headers: { "X-User-Name": user.name, "X-User-Role": user.role } });
+      const res = await fetch(`${SPO}/${id}/print`);
       if (!res.ok) throw new Error(`Print failed (HTTP ${res.status})`);
       const url = URL.createObjectURL(new Blob([await res.text()], { type: "text/html" }));
       window.open(url, "_blank");
@@ -1452,7 +1438,9 @@ function MenuItem({ children, onClick, danger }) {
 // ============================================================================
 
 export function ServicePurchaseOrderPage({ onBackToHome, onOpenSidebar, sidebarOpen, onNavigate }) {
-  const [user, setUserState] = useState(loadUser);
+  // The signed-in user and the role(s) the server gives them in Service PO (never chosen in the browser).
+  const me = useCurrentUser();
+  const user = sessionActor(me, MODULES.servicePo);
   const [tab, setTab] = useState("register");
   const [formState, setFormState] = useState(null); // { editing, amendMode }
   const [detailId, setDetailId] = useState(null);
@@ -1460,8 +1448,6 @@ export function ServicePurchaseOrderPage({ onBackToHome, onOpenSidebar, sidebarO
   const [refreshToken, setRefreshToken] = useState(0);
   const [refs, setRefs] = useState({ vendors: [], departments: [], categories: [], sacCodes: [] });
   const [toast, setToast] = useState(null);
-
-  const setUser = (u) => { setUserState(u); saveUser(u); };
 
   const flash = useCallback((message, isError = false) => {
     setToast({ message, isError });
@@ -1517,7 +1503,7 @@ export function ServicePurchaseOrderPage({ onBackToHome, onOpenSidebar, sidebarO
 
   const onPrint = async (id) => {
     try {
-      const res = await fetch(`${SPO}/${id}/print`, { headers: { "X-User-Name": user.name, "X-User-Role": user.role } });
+      const res = await fetch(`${SPO}/${id}/print`);
       if (!res.ok) throw new Error(`Print failed (HTTP ${res.status})`);
       const url = URL.createObjectURL(new Blob([await res.text()], { type: "text/html" }));
       window.open(url, "_blank");
@@ -1556,11 +1542,9 @@ export function ServicePurchaseOrderPage({ onBackToHome, onOpenSidebar, sidebarO
           {tabBtn("register", "Service PO Register")}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
-          <span style={{ color: "#94a3b8" }}>Acting as</span>
-          <input style={{ ...inp, width: 150, padding: "4px 8px" }} value={user.name} onChange={(e) => setUser({ ...user, name: e.target.value })} title="Current user (sent as X-User-Name)" />
-          <select style={{ ...inp, width: 130, padding: "4px 8px" }} value={user.role} onChange={(e) => setUser({ ...user, role: e.target.value })} title="Role (sent as X-User-Role)">
-            {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
-          </select>
+          <span style={{ color: "#94a3b8" }} title="Your role here comes from your permissions (Settings → Access Control)">
+            Signed in as <b style={{ color: "#e2e8f0" }}>{user.name}</b> · {rolesLabel(user)}
+          </span>
           <button onClick={onOpenSidebar} style={{ background: "rgba(255,255,255,0.08)", color: "#fff", border: "none", borderRadius: 6, padding: "5px 10px", fontSize: 12, cursor: "pointer" }}>{sidebarOpen ? "Hide menu" : "Menu"}</button>
           <span onClick={onBackToHome} style={{ cursor: "pointer", color: "#60a5fa", textDecoration: "underline", marginLeft: 6 }}>Home</span>
         </div>

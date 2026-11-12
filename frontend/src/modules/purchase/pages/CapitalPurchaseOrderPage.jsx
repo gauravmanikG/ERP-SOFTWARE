@@ -12,11 +12,10 @@ import { isNumericHeader } from "../newpo/ui";
 
 const API_ROOT = API_BASE + "/api";
 const CPO = `${API_ROOT}/capital-pos`;
-import { getSetting, setSetting } from "../../../shared/utils/settingsStore";
 import { API_BASE } from "../../../shared/api/apiBase.js";
+import { useCurrentUser } from "../../auth/AuthGate";
+import { sessionActor, hasRole, rolesLabel, MODULES } from "../../auth/moduleRoles";
 
-const USER_KEY = "SMS_CURRENT_USER";
-const ROLES = ["CREATOR", "APPROVER", "RECEIVER", "ASSET_MANAGER", "ADMIN"];
 const CONDITIONS = ["GOOD", "DAMAGED", "PARTIAL"];
 const INSPECTIONS = ["NOT_REQUIRED", "PENDING", "PASSED", "FAILED"];
 const WARRANTY_START = ["DELIVERY", "INSTALLATION", "COMMISSIONING"];
@@ -72,19 +71,12 @@ const money = (v) => {
   return Number.isNaN(n) ? String(v) : n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-function loadUser() {
-  const u = getSetting(USER_KEY, null);
-  if (u && u.name) return { name: u.name, role: ROLES.includes(u.role) ? u.role : "CREATOR" };
-  return { name: "Current User", role: "CREATOR" };
-}
-function saveUser(u) {
-  setSetting(USER_KEY, u);
-}
-
+// Who is acting is decided by the server from the session (see auth/moduleRoles.js); `user` is kept as a parameter so
+// the many call sites read the same, but nothing about the user is sent.
 async function api(method, path, user, body) {
   const res = await fetch(`${CPO}${path}`, {
     method,
-    headers: { "Content-Type": "application/json", "X-User-Name": user.name, "X-User-Role": user.role },
+    headers: { "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body)
   });
   const text = await res.text();
@@ -115,7 +107,7 @@ function fileToBase64(file) {
 }
 
 async function openBlob(path, user, mime) {
-  const res = await fetch(`${CPO}${path}`, { headers: { "X-User-Name": user.name, "X-User-Role": user.role } });
+  const res = await fetch(`${CPO}${path}`);
   if (!res.ok) throw new Error(`Request failed (HTTP ${res.status})`);
   return URL.createObjectURL(new Blob([await res.arrayBuffer()], { type: mime }));
 }
@@ -340,7 +332,7 @@ function CreateForm({ user, refs, editing, amendMode, onSaved, onCancel, flash }
     const t = setTimeout(async () => {
       try {
         const body = toPayload(h, lines);
-        const res = await fetch(`${CPO}/preview`, { method: "POST", headers: { "Content-Type": "application/json", "X-User-Name": user.name, "X-User-Role": user.role }, body: JSON.stringify(body) });
+        const res = await fetch(`${CPO}/preview`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
         if (res.ok) setPreview(await res.json()); else setPreview(null);
       } catch (e) { setPreview(null); }
     }, 500);
@@ -799,7 +791,7 @@ function DetailView({ id, user, onClose, onAction, onEdit, onAmend, onChanged, r
   };
   const download = async (a) => {
     try {
-      const res = await fetch(`${CPO}/${id}/attachments/${a.id}`, { headers: { "X-User-Name": user.name, "X-User-Role": user.role } });
+      const res = await fetch(`${CPO}/${id}/attachments/${a.id}`);
       if (!res.ok) throw new Error(`Download failed (HTTP ${res.status})`);
       const url = URL.createObjectURL(await res.blob());
       const link = document.createElement("a");
@@ -920,7 +912,7 @@ function DetailView({ id, user, onClose, onAction, onEdit, onAmend, onChanged, r
           ))}
         </Table>
       )}
-      {(d.receipts || []).length > 0 && ["RECEIVER", "ASSET_MANAGER", "ADMIN"].includes(user.role) && (
+      {(d.receipts || []).length > 0 && hasRole(user, "RECEIVER", "ASSET_MANAGER") && (
         <div style={{ marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
           {(d.receipts || []).map((r) => (
             <button key={r.id} style={btn()} onClick={() => onAction(d, "RECORD_INSPECTION", { receiptId: r.id })}>Inspection: {r.receiptNumber}</button>
@@ -1208,7 +1200,9 @@ function MenuItem({ children, onClick, danger }) {
 // ============================================================================
 
 export function CapitalPurchaseOrderPage({ onBackToHome, onOpenSidebar, sidebarOpen }) {
-  const [user, setUserState] = useState(loadUser);
+  // The signed-in user and the role(s) the server gives them in Capital PO (never chosen in the browser).
+  const me = useCurrentUser();
+  const user = sessionActor(me, MODULES.capitalPo);
   const [tab, setTab] = useState("register");
   const [formState, setFormState] = useState(null);
   const [detailId, setDetailId] = useState(null);
@@ -1218,7 +1212,6 @@ export function CapitalPurchaseOrderPage({ onBackToHome, onOpenSidebar, sidebarO
   const [refs, setRefs] = useState({ vendors: [], departments: [], categories: [], hsnGoods: [], sacCodes: [], eligiblePrs: [], policy: { allowDirectCreation: true, approvalLimit: "" } });
   const [toast, setToast] = useState(null);
 
-  const setUser = (u) => { setUserState(u); saveUser(u); };
   const flash = useCallback((message, isError = false) => {
     setToast({ message, isError });
     setTimeout(() => setToast(null), 3400);
@@ -1281,11 +1274,9 @@ export function CapitalPurchaseOrderPage({ onBackToHome, onOpenSidebar, sidebarO
           {tabBtn("register", "Capital PO Register")}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
-          <span style={{ color: "#94a3b8" }}>Acting as</span>
-          <input style={{ ...inp, width: 150, padding: "4px 8px" }} value={user.name} onChange={(e) => setUser({ ...user, name: e.target.value })} title="Current user (sent as X-User-Name)" />
-          <select style={{ ...inp, width: 150, padding: "4px 8px" }} value={user.role} onChange={(e) => setUser({ ...user, role: e.target.value })} title="Role (sent as X-User-Role)">
-            {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
-          </select>
+          <span style={{ color: "#94a3b8" }} title="Your role here comes from your permissions (Settings → Access Control)">
+            Signed in as <b style={{ color: "#e2e8f0" }}>{user.name}</b> · {rolesLabel(user)}
+          </span>
           <button onClick={onOpenSidebar} style={{ background: "rgba(255,255,255,0.08)", color: "#fff", border: "none", borderRadius: 6, padding: "5px 10px", fontSize: 12, cursor: "pointer" }}>{sidebarOpen ? "Hide menu" : "Menu"}</button>
           <span onClick={onBackToHome} style={{ cursor: "pointer", color: "#60a5fa", textDecoration: "underline", marginLeft: 6 }}>Home</span>
         </div>

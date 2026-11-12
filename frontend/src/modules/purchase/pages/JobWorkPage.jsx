@@ -12,11 +12,10 @@ import { isNumericHeader } from "../newpo/ui";
 
 const API_ROOT = API_BASE + "/api";
 const JW = `${API_ROOT}/job-work`;
-import { getSetting, setSetting } from "../../../shared/utils/settingsStore";
 import { API_BASE } from "../../../shared/api/apiBase.js";
+import { useCurrentUser } from "../../auth/AuthGate";
+import { sessionActor, hasRole, rolesLabel, MODULES } from "../../auth/moduleRoles";
 
-const USER_KEY = "SMS_CURRENT_USER";
-const ROLES = ["CREATOR", "APPROVER", "STORE", "QUALITY", "ADMIN"];
 const STEP_SCREENS = [
   { key: "dashboard", label: "Home" },
   { key: "indents", label: "1 · Indents" },
@@ -77,19 +76,12 @@ const qty = (v) => num(v).toLocaleString("en-IN", { maximumFractionDigits: 3 });
 const money = (v) => num(v).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const newKey = (p) => `${p}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-function loadUser() {
-  const u = getSetting(USER_KEY, null);
-  if (u && u.name) return { name: u.name, role: ROLES.includes(u.role) ? u.role : "CREATOR" };
-  return { name: "Current User", role: "CREATOR" };
-}
-function saveUser(u) {
-  setSetting(USER_KEY, u);
-}
-
+// Who is acting is decided by the server from the session (see auth/moduleRoles.js); `user` is kept as a parameter so
+// the many call sites read the same, but nothing about the user is sent.
 async function api(method, path, user, body) {
   const res = await fetch(`${JW}${path}`, {
     method,
-    headers: { "Content-Type": "application/json", "X-User-Name": user.name, "X-User-Role": user.role },
+    headers: { "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body)
   });
   const text = await res.text();
@@ -109,7 +101,7 @@ async function plainGet(path) {
 }
 
 async function openBlob(path, user, mime) {
-  const res = await fetch(`${JW}${path}`, { headers: { "X-User-Name": user.name, "X-User-Role": user.role } });
+  const res = await fetch(`${JW}${path}`);
   if (!res.ok) throw new Error(`Request failed (HTTP ${res.status})`);
   return URL.createObjectURL(new Blob([await res.arrayBuffer()], { type: mime }));
 }
@@ -969,10 +961,14 @@ const indentStageIndex = (d) => {
   return INDENT_STAGES.findIndex((s) => s.key === d.status);
 };
 
-function actionReason(rule, status, role, styleMap) {
+// `roles` = every job-work role the signed-in user holds (from the server, see auth/moduleRoles.js).
+function actionReason(rule, status, roles, styleMap) {
+  const held = Array.isArray(roles) ? roles : [];
   if (rule.unsupported) return rule.unsupported;
   if (!rule.statuses.includes(status)) return `Available when the status is: ${rule.statuses.map((s) => styleMap[s].label).join(", ")}`;
-  if (role !== "ADMIN" && !rule.roles.includes(role)) return `Needs the ${rule.roles.join(" or ")} role. You are signed in as ${role}.`;
+  if (!held.includes("ADMIN") && !rule.roles.some((r) => held.includes(r))) {
+    return `Needs the ${rule.roles.join(" or ")} role. Your job work role: ${held.length ? held.join(", ") : "view only"} (set by your permissions in Settings → Access Control).`;
+  }
   return rule.note || "Not available right now";
 }
 
@@ -1055,7 +1051,7 @@ function IndentDetail({ id, user, locations, operations, categories, items, work
       <div style={{ fontSize: 12, color: "#64748b" }}>Raised by {d.createdBy} on {dateText(d.indentDate)}</div>
       {indentStageIndex(d) >= 0 && <div style={{ marginTop: 10 }}><StageTracker stages={INDENT_STAGES} currentIndex={indentStageIndex(d)} /></div>}
       {d.rejectionReason && <Banner kind="error">Rejected: {d.rejectionReason}</Banner>}
-      <NextStepCard rules={INDENT_RULES} mainKeys={INDENT_MAIN[d.status] && !(d.status === "APPROVED" && orders.length > 0) ? INDENT_MAIN[d.status] : []} acts={acts} status={d.status} role={user.role} styleMap={INDENT_STYLE}
+      <NextStepCard rules={INDENT_RULES} mainKeys={INDENT_MAIN[d.status] && !(d.status === "APPROVED" && orders.length > 0) ? INDENT_MAIN[d.status] : []} acts={acts} status={d.status} role={user.roles} styleMap={INDENT_STYLE}
         nextStep={d.status === "APPROVED" && orders.length > 0 ? "A job work order has been raised from this indent." : INDENT_NEXT_STEP[d.status] || "—"}
         who={d.status === "APPROVED" && orders.length > 0 ? "—" : INDENT_WHO[d.status]}
         handlers={{ EDIT: () => setEditing(true), SUBMIT: () => act("submit", "Submit"), APPROVE: () => act("approve", "Approve"), REJECT: () => act("reject", "Reject"),
@@ -1466,7 +1462,7 @@ function OrderDetail({ id, user, onClose, flash, onChanged, locations, workers, 
       </div>
       {orderStageIndex(d) >= 0 && <div style={{ marginTop: 10 }}><StageTracker stages={ORDER_STAGES} currentIndex={orderStageIndex(d)} /></div>}
       {d.rejectionReason && <Banner kind="error">Rejected: {d.rejectionReason}</Banner>}
-      <NextStepCard rules={ORDER_RULES} mainKeys={ORDER_MAIN[d.status] || []} acts={acts} status={d.status} role={user.role} styleMap={ORDER_STYLE}
+      <NextStepCard rules={ORDER_RULES} mainKeys={ORDER_MAIN[d.status] || []} acts={acts} status={d.status} role={user.roles} styleMap={ORDER_STYLE}
         nextStep={ORDER_NEXT_STEP[d.status] || "—"} who={ORDER_WHO[d.status]}
         handlers={{ SUBMIT: () => act("submit", "Submit"), APPROVE: () => act("approve", "Approve"), REJECT: () => act("reject", "Reject", true),
           CANCEL: () => act("cancel", "Cancel", true), CREATE_CHALLAN: () => setScreenForm("challan"), CREATE_RECEIPT: () => setScreenForm("receipt"),
@@ -1520,7 +1516,7 @@ function OrderDetail({ id, user, onClose, flash, onChanged, locations, workers, 
                   <Td><b>{c.challanNumber}</b>{c.reworkDispatch && <div style={{ fontSize: 10, color: "#854d0e" }}>rework</div>}</Td><Td>{dateText(c.challanDate)}</Td><Td right>{qty(c.totalQty)}</Td><Td right>{qty(c.returnedQty)}</Td>
                   <Td><Badge map={CHALLAN_STYLE} value={c.status} /></Td><Td>{c.ewayBillNo || "—"}</Td>
                   <Td><button style={{ ...btn(), padding: "3px 10px" }} onClick={() => openPrint(c.id)}>Print</button>
-                    {c.status === "POSTED" && ["APPROVER", "ADMIN"].includes(user.role) && <button style={{ ...btn(), padding: "3px 10px", marginLeft: 4 }} onClick={() => cancelChallan(c)}>Reverse</button>}</Td>
+                    {c.status === "POSTED" && hasRole(user, "APPROVER") && <button style={{ ...btn(), padding: "3px 10px", marginLeft: 4 }} onClick={() => cancelChallan(c)}>Reverse</button>}</Td>
                 </tr>
               ))}
             </Table>
@@ -1673,7 +1669,7 @@ function WorkList({ kind, user, flash }) {
   const [openId, setOpenId] = useState(null);
   const { rows, error } = useOpenOrders(user, tick);
   const isSend = kind === "send";
-  const canAct = ["STORE", "ADMIN"].includes(user.role);
+  const canAct = hasRole(user, "STORE");
   const list = (rows || []).filter((r) => (isSend ? num(r.inputTotal) - num(r.dispatchedTotal) > 0 || num(r.reworkPendingTotal) > 0 : num(r.pendingWithWorker) > 0));
   return (
     <div>
@@ -1681,7 +1677,7 @@ function WorkList({ kind, user, flash }) {
         text={isSend ? "Approved orders that still have material to send to a job worker. Press Send material, enter the quantity and a delivery challan is created."
           : "Orders where material is still with a job worker. Press Receive material when something comes back. It then goes to Step 5, Inspection."} />
       {error && <Banner kind="error">{error}</Banner>}
-      {!canAct && <Banner kind="warn">You are acting as {user.role}. Only the STORE role can {isSend ? "send" : "receive"} material. Change the role at the top right.</Banner>}
+      {!canAct && <Banner kind="warn">Only the STORE role can {isSend ? "send" : "receive"} material. Your job work role is {rolesLabel(user)}; it comes from your permissions (Settings → Access Control), so ask an administrator if you should be able to do this.</Banner>}
       {!rows ? <Empty text="Loading…" /> : list.length === 0 ? (
         <div style={{ background: "#f8fafc", border: "1px dashed #cbd5e1", borderRadius: 10, padding: 24, textAlign: "center", color: "#64748b", fontSize: 14 }}>
           {isSend ? "Nothing is waiting to be sent. Approve a job work order first." : "No material is with any job worker right now."}
@@ -2097,7 +2093,7 @@ function ReconApprovalsTab({ user, flash, onChanged }) {
       setTick((t) => t + 1); onChanged && onChanged();
     } catch (e) { flash(e.message, true); }
   };
-  const canDecide = ["APPROVER", "ADMIN"].includes(user.role);
+  const canDecide = hasRole(user, "APPROVER");
   return (
     <div>
       {error && <Banner kind="error">{error}</Banner>}
@@ -2311,14 +2307,15 @@ function ReportsScreen({ user, flash }) {
 // ============================================================================
 
 export function JobWorkPage({ screen = "dashboard", onBackToHome, onOpenSidebar, sidebarOpen }) {
-  const [user, setUserState] = useState(loadUser);
+  // The signed-in user and the role(s) the server gives them in Job Work (never chosen in the browser).
+  const me = useCurrentUser();
+  const user = sessionActor(me, MODULES.jobWork);
   const [current, setCurrent] = useState(screen);
   const [filter, setFilter] = useState({});
   const [toast, setToast] = useState(null);
   const [refs, setRefs] = useState({ workers: [], locations: [], operations: [], categories: [], items: [], indents: [] });
   const [orderFromIndent, setOrderFromIndent] = useState(null);
   const [orderForm, setOrderForm] = useState(false);
-  const setUser = (u) => { setUserState(u); saveUser(u); };
   const flash = useCallback((message, isError = false) => {
     setToast({ message, isError });
     setTimeout(() => setToast(null), 3400);
@@ -2369,8 +2366,9 @@ export function JobWorkPage({ screen = "dashboard", onBackToHome, onOpenSidebar,
           <span>›</span><span>Job Work</span><span>›</span>
           <span style={{ color: "#0f172a", fontWeight: 700 }}>{SCREENS.find((s) => s.key === current)?.label}</span>
           <span style={{ color: "#e2e8f0", margin: "0 4px", fontSize: 18 }}>|</span>
-          <input title="Your name" style={{ ...inp, width: 130, padding: "5px 8px" }} value={user.name} onChange={(e) => setUser({ ...user, name: e.target.value })} />
-          <select title="Your role" style={{ ...inp, width: 120, padding: "5px 8px" }} value={user.role} onChange={(e) => setUser({ ...user, role: e.target.value })}>{ROLES.map((r) => <option key={r} value={r}>{r}</option>)}</select>
+          <span style={{ fontSize: 12, fontWeight: 500, color: "#64748b" }} title="Your role here comes from your permissions (Settings → Access Control)">
+            Signed in as <b style={{ color: "#0f172a" }}>{user.name}</b> · {rolesLabel(user)}
+          </span>
           <button onClick={onOpenSidebar} style={{ ...btn(), padding: "5px 12px" }}>{sidebarOpen ? "Hide menu" : "Menu"}</button>
         </div>
       </div>
@@ -2396,7 +2394,7 @@ export function JobWorkPage({ screen = "dashboard", onBackToHome, onOpenSidebar,
       </div>
       <div style={{ flexShrink: 0, background: "#1e293b", color: "#cbd5e1", padding: "7px 18px", fontSize: 12, fontWeight: 600, display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
         <span>Job Work · {SCREENS.find((s) => s.key === current)?.label}</span>
-        <span>Acting as {user.name} ({user.role})</span>
+        <span>Signed in as {user.name} ({rolesLabel(user)})</span>
       </div>
 
     </div>

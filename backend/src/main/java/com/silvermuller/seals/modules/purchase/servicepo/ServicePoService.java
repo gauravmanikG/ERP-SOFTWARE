@@ -15,6 +15,7 @@ import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.*;
+import com.silvermuller.seals.modules.admin.security.ModuleRoles;
 import java.util.stream.Collectors;
 
 /**
@@ -40,7 +41,13 @@ public class ServicePoService {
         }
     }
 
-    public record Actor(String name, String role) {}
+    /**
+     * Who is acting. {@code role} is the one recorded in history; {@code roles} is everything the user may do here
+     * (a signed-in user can be both APPROVER and FINANCE). Both come from the session (see {@link #actor}).
+     */
+    public record Actor(String name, String role, Set<String> roles) {
+        public Actor(String name, String role) { this(name, role, Set.of(role)); }
+    }
 
     record ListFilter(String q, String vendorCode, String department, String category,
                       String status, String invoiceStatus, LocalDate fromDate, LocalDate toDate) {}
@@ -84,7 +91,17 @@ public class ServicePoService {
 
     // ------------------------------------------------------------------ identity & roles
 
+    /**
+     * The acting user. Inside a web request this is always the signed-in session user, with the roles derived from
+     * their permissions ({@link ModuleRoles}); the browser-sent name and role are ignored, so nobody can act as ADMIN
+     * or under another name by editing a header. The parameters are only used outside a request (unit tests).
+     */
     public Actor actor(String name, String role) {
+        Optional<ModuleRoles.Resolved> session = ModuleRoles.fromSession(ModuleRoles.SERVICE_PO);
+        if (session.isPresent()) {
+            ModuleRoles.Resolved s = session.get();
+            return new Actor(s.name(), s.primaryRole(), s.roles());
+        }
         if (name == null || name.isBlank()) {
             throw new ServicePoException(HttpStatus.UNAUTHORIZED, "Missing current user (X-User-Name header).");
         }
@@ -96,8 +113,8 @@ public class ServicePoService {
     }
 
     private static boolean has(Actor a, String... roles) {
-        if ("ADMIN".equals(a.role())) return true;
-        for (String r : roles) if (r.equals(a.role())) return true;
+        if (a.roles().contains("ADMIN")) return true;
+        for (String r : roles) if (a.roles().contains(r)) return true;
         return false;
     }
 

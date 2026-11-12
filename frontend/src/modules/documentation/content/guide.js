@@ -16,7 +16,7 @@
 //   { tip: "text" } / { warn: "text" }             call-outs
 //   { flow: "flowchart-id" }                       link to a chart in the Flowcharts section
 
-export const GUIDE_UPDATED = "2026-11-11";
+export const GUIDE_UPDATED = "2026-11-12";
 
 // ---------------------------------------------------------------- start here (not tied to a menu screen)
 
@@ -377,8 +377,9 @@ export const SCREEN_GUIDE = {
         "Totals are calculated by the server, not the browser.",
         "Capital POs draw from approved Capital Goods / Asset PR lines without exceeding their remaining quantity.",
         "Receipts never create a stock GRN: received assets are registered in the asset register with their own asset codes.",
-        "Extending a PO's validity is restricted to authorised users, and every extension is kept in the validity history.",
-        "Amendments, attachments and the full status history are kept for every capital PO."
+        "Extending a PO's validity and adding a category are approver tasks, and every extension is kept in the validity history.",
+        "Amendments, attachments and the full status history are kept for every capital PO.",
+        "Who you are here is decided by the server from your sign-in: the header shows 'Signed in as <you> · <roles>'. Your Capital PO role follows your permissions (Create/Edit → Creator, Approve → Approver, Receive/Inspect → Receiver, Receive → Asset Manager); only Super Admin / Developer are ADMIN, so the approval limit and the 'cannot approve your own PO' rule cannot be skipped by choosing a role."
       ] },
       { flow: "capital-po" }
     ]
@@ -400,7 +401,8 @@ export const SCREEN_GUIDE = {
         "A Service PO never creates a GRN and never changes stock.",
         "An approval limit can be configured for approvers (service-po.approval-limit); ADMIN is never limited.",
         "Acceptance can be recorded only while the PO is Issued or Partially Fulfilled and not expired; vendor invoices are recorded by finance users.",
-        "Amendments keep the current status and are stored as revisions; validity extensions are kept in history."
+        "Amendments, validity extensions and new categories are approver tasks; amendments keep the current status and are stored as revisions, and extensions are kept in history.",
+        "Who you are here is decided by the server from your sign-in: the header shows 'Signed in as <you> · <roles>'. Your Service PO role follows your permissions (Create/Edit → Creator, Approve → Approver, Receive → Acceptor and Finance); only Super Admin / Developer are ADMIN, so the approval limit and the 'cannot approve your own PO' rule cannot be skipped by choosing a role."
       ] }
     ]
   },
@@ -503,7 +505,8 @@ export const SCREEN_GUIDE = {
       { p: "Job work means sending your material to an outside processor (a job worker) — CNC, grinding, coating, heat treatment and more — and receiving it back. Every movement is recorded in the job worker stock ledger, so you always know how much material each worker holds." },
       { list: [
         "Cards: orders by status (click to open the filtered register), action needed (approvals, overdue orders, open challans, receipts awaiting inspection), material and quality (with workers, rejected, rework, scrap).",
-        "Cost tables by job worker, department and item, and turnaround (average days from challan to receipt)."
+        "Cost tables by job worker, department and item, and turnaround (average days from challan to receipt).",
+        "Who you are in job work is decided by the server from your sign-in: the header shows 'Signed in as <you> · <roles>'. Your role follows your permissions — Indent/Order Create, Edit → Creator; Approve, Reject, Cancel (and maintaining operations, workers, rate contracts) → Approver; Challan/Receipt Create → Store; Inspect → Quality; only Super Admin / Developer are ADMIN. A greyed-out action explains which role it needs."
       ] },
       { warn: "Store stock is not checked by job work today, because there is no inventory engine yet. Job-worker balances come from the job work ledger." },
       { flow: "job-work" }
@@ -696,7 +699,7 @@ export const SCREEN_GUIDE = {
     purpose: "The permission grid for one user: modules down the side, actions across the top.",
     blocks: [
       { steps: ["Open Settings → Users, choose a user and open their access (or Settings → Access Control).", "Tick or untick permissions in the grid (View, Create, Edit, Delete, Submit, Approve, …).", "Use 'Reset to role' to return the user to their role's template.", "Save."] },
-      { rules: ["Super Admin and Developer have full access and are not edited on this screen.", "The server applies changes on the user's very next request (it re-reads permissions every time); their menu updates the next time they load the app."] },
+      { rules: ["Super Admin and Developer have full access and are not edited on this screen.", "The server applies changes on the user's very next request (it re-reads permissions every time); their menu updates the next time they load the app.", "Capital PO, Service PO and Job Work keep their own roles (Creator, Approver, Receiver, Finance, Store, Quality, …). The server derives them from these permissions — e.g. Capital PO: Approve → APPROVER, Receive → RECEIVER — and only Super Admin / Developer are ADMIN there. Nobody picks a role in the browser any more."] },
       { flow: "rbac-request" }
     ]
   }

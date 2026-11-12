@@ -614,14 +614,22 @@ public class GoodsReceiptNoteService {
         grn.setVendorGstin((String) po.get("vendor_gstin"));
     }
 
-    /** Refuses a GRN with a line whose item is not on its PO. */
+    /**
+     * Refuses a GRN with a line whose item is not on its PO. A line that arrives without an item name (older screens,
+     * API callers) takes the name from its PO line instead of failing on the database's NOT NULL rule.
+     */
     private void assertLinesOnPo(GoodsReceiptNote grn) {
         String poNumber = grn.getPoNumber();
-        Set<String> onPo = new HashSet<>(jdbc.queryForList(
-                "SELECT item_code FROM public.purchase_order_items WHERE po_number = ?", String.class, poNumber));
+        Map<String, String> onPo = new HashMap<>();
+        jdbc.query("SELECT item_code, item_name FROM public.purchase_order_items WHERE po_number = ?",
+                rs -> { onPo.put(rs.getString("item_code"), rs.getString("item_name")); }, poNumber);
         for (GoodsReceiptNoteItem it : grn.getItems()) {
-            if (it.getItemCode() == null || !onPo.contains(it.getItemCode())) {
+            if (it.getItemCode() == null || it.getItemCode().isBlank() || !onPo.containsKey(it.getItemCode())) {
                 throw new IllegalArgumentException("Item " + it.getItemCode() + " is not on PO " + poNumber + ". The GRN was not saved.");
+            }
+            if (it.getItemName() == null || it.getItemName().isBlank()) {
+                String poName = onPo.get(it.getItemCode());
+                it.setItemName(poName == null || poName.isBlank() ? it.getItemCode() : poName);
             }
         }
     }

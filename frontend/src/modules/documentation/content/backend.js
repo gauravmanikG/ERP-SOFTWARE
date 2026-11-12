@@ -116,10 +116,11 @@ export const HIGHLIGHTS = [
         title: "Who did it — taken from the session, never from the browser",
         headline: "Every create, approve, reject, convert and receive is recorded under the signed-in user. A name typed in the browser can never be recorded instead.",
         points: [
-          "The interceptor stores the verified user on the request; services read the actor from there (RequestActor).",
+          "The interceptor stores the verified user and their permission keys on the request; services read the actor from there (RequestActor).",
+          "Capital PO, Service PO and Job Work keep their own role model (Creator, Approver, Receiver, Finance, Store, Quality, Admin). Those roles are derived on the server from the user's permissions (ModuleRoles); the X-User-Name / X-User-Role headers the browser used to send are ignored, so nobody can act as ADMIN, skip an approval limit or approve their own document by editing a header.",
           "The procurement activity trail joins a PR, its drafts, POs and GRNs into one timeline of who did what and when."
         ],
-        files: ["modules/admin/security/RequestActor.java", "modules/purchase/activity/"]
+        files: ["modules/admin/security/RequestActor.java", "modules/admin/security/ModuleRoles.java", "modules/purchase/activity/"]
       },
       {
         title: "Passwords done properly",
