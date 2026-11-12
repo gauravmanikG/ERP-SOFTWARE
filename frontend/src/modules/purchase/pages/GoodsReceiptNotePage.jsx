@@ -430,26 +430,8 @@ export function GoodsReceiptNotePage({ dark = false, onBackToHome, onNavigate, o
 
       const saved = await res.json();
 
-      // If inwarding against specific delivery lot(s), record receipt in backend lot schedule
-      if (poDeliverySchedules.length > 0) {
-        for (const it of formItems) {
-          if (it.lotNumber !== undefined && it.lotNumber !== null) {
-            try {
-              await fetch(`${BASE_URL}/api/purchase/orders/${encodeURIComponent(selectedPo.poNumber)}/receipt`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  itemCode: it.itemCode,
-                  lotNumber: Number(it.lotNumber),
-                  receivedQty: Number(it.acceptedQty !== undefined ? it.acceptedQty : it.receivedQty) || 0
-                })
-              });
-            } catch (e) {
-              console.warn("Could not sync lot receipt:", e);
-            }
-          }
-        }
-      }
+      // Delivery lots are updated by the server when the GRN is posted (accepted quantity fills an item's lots in
+      // lot order), so nothing more is sent here.
 
       showToast(isPost ? `GRN #${saved.grnNumber} posted successfully! PO & delivery lot balances updated.` : `GRN Draft #${saved.grnNumber} saved.`);
       setInwardModalOpen(false);
@@ -977,6 +959,10 @@ export function GoodsReceiptNotePage({ dark = false, onBackToHome, onNavigate, o
                       Total {poDeliverySchedules.length} Lot(s) Configured
                     </div>
                   </div>
+                  <div style={{ fontSize: 11, color: "#166534", marginBottom: 8 }}>
+                    Choosing a lot pre-fills the lines with what that lot still expects. Accepted quantity fills an item's lots in
+                    date order (lot 1 first), so the lot balances update by themselves once the GRN is posted.
+                  </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", fontSize: 12 }}>
                     <span style={{ fontWeight: 700, color: "#166534" }}>Select Consignment Lot:</span>
                     <SearchableSelect
@@ -987,7 +973,7 @@ export function GoodsReceiptNotePage({ dark = false, onBackToHome, onNavigate, o
                         ...poDeliverySchedules.map((s) => ({
                           value: `SCHED_${s.id}`,
                           label: `Item ${s.itemCode} — Lot #${s.lotNumber}`,
-                          sub: `${s.balanceQty !== undefined ? s.balanceQty : s.scheduledQty} PCS, Due: ${formatDisplayDate(s.scheduledDate)} [${s.status}]`,
+                          sub: `${s.balanceQty !== undefined ? s.balanceQty : s.scheduledQty} ${((selectedPo.items || []).find((it) => it.itemCode === s.itemCode) || {}).uom || ""} to go, Due: ${formatDisplayDate(s.scheduledDate)} [${s.status}]`,
                           group: "Single Item Lot (Receive Only Selected Item Lot)"
                         })),
                         ...Array.from(new Set(poDeliverySchedules.map((s) => s.scheduledDate).filter(Boolean))).map((dt) => {
@@ -996,7 +982,7 @@ export function GoodsReceiptNotePage({ dark = false, onBackToHome, onNavigate, o
                           return {
                             value: `DATE_${dt}`,
                             label: `Consignment Date: ${dt}`,
-                            sub: `${schedsOnDate.length} item(s), ${totalQty} PCS total`,
+                            sub: `${schedsOnDate.length} item(s), ${totalQty} to go in total`,
                             group: "Delivery Date Consignment (All items due on date)"
                           };
                         })

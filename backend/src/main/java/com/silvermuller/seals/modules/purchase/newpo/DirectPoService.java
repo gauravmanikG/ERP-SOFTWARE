@@ -130,7 +130,11 @@ public class DirectPoService {
         for (Line l : r.lines()) {
             if (l != null && l.itemCode() != null && l.quantity() != null) poQtyByItem.merge(l.itemCode().trim(), l.quantity(), BigDecimal::add);
         }
-        DeliveryLots.validate(r.schedules(), poQtyByItem, poDate);
+        Map<String, String> uomByItem = new HashMap<>();
+        for (String code : poQtyByItem.keySet()) {
+            resolveItem(code).ifPresent(it -> uomByItem.put(code, it.get("uom") == null ? "PCS" : String.valueOf(it.get("uom"))));
+        }
+        DeliveryLots.validate(r.schedules(), poQtyByItem, uomByItem, poDate);
 
         // Merge duplicate item codes; validate each quantity.
         Map<String, BigDecimal> qty = new LinkedHashMap<>();

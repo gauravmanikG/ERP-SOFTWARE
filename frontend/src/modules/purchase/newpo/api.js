@@ -83,8 +83,22 @@ export const departmentApi = {
 export const poRegisterApi = {
   orders: () => request("GET", "/reports/all-purchase-orders", null),
   detail: (poNumber) => request("GET", `/pr/purchase-orders/${enc(poNumber)}`, null),
-  cancel: (user, poNumber, reason) => request("POST", `/pr/purchase-orders/${enc(poNumber)}/cancel`, user, { reason })
+  cancel: (user, poNumber, reason) => request("POST", `/pr/purchase-orders/${enc(poNumber)}/cancel`, user, { reason }),
+  // Delivery lots of a PO (the standard PO module keeps them): read, and replace them while the PO is still open.
+  schedules: (poNumber) => scheduleCall("GET", poNumber),
+  saveSchedules: (poNumber, rows) => scheduleCall("POST", poNumber, rows)
 };
+
+async function scheduleCall(method, poNumber, body) {
+  const res = await fetch(`${API_ROOT}/purchase/orders/${enc(poNumber)}/schedules`, {
+    method, headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body)
+  });
+  const text = await res.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch (e) { data = text; }
+  if (!res.ok) throw new Error((data && (data.message || data.error)) || `Request failed (${res.status})`);
+  return data;
+}
 
 export const reportApi = {
   poVsPr: (filters) => request("GET", `/reports/po-vs-pr${query(filters)}`, null),

@@ -714,7 +714,9 @@ public class PoByPrService {
 
         Map<String, BigDecimal> poQtyByItem = new HashMap<>();
         for (AllocRow a : finalAllocs) poQtyByItem.merge(a.itemCode(), a.qty(), BigDecimal::add);
-        DeliveryLots.validate(r.schedules(), poQtyByItem, poDate);
+        Map<String, String> uomByItem = new HashMap<>();
+        for (PlannedLine pl : plannedLines) uomByItem.put(pl.itemCode(), pl.uom());
+        DeliveryLots.validate(r.schedules(), poQtyByItem, uomByItem, poDate);
 
         Set<String> prNumbers = new LinkedHashSet<>();
         for (AllocRow a : finalAllocs) prNumbers.add(a.prNumber());

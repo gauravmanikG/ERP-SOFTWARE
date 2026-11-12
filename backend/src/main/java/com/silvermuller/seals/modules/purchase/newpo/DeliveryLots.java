@@ -2,6 +2,7 @@ package com.silvermuller.seals.modules.purchase.newpo;
 
 import com.silvermuller.seals.modules.purchase.model.PurchaseOrderDeliverySchedule;
 import com.silvermuller.seals.modules.purchase.newpo.VendorRateService.NewPoException;
+import com.silvermuller.seals.modules.purchase.service.QuantityRules;
 import org.springframework.http.HttpStatus;
 
 import java.math.BigDecimal;
@@ -28,6 +29,15 @@ public final class DeliveryLots {
      * Per item, the lots together may not exceed that item's PO quantity.
      */
     public static void validate(List<Lot> lots, Map<String, BigDecimal> poQtyByItem, LocalDate poDate) {
+        validate(lots, poQtyByItem, Map.of(), poDate);
+    }
+
+    /**
+     * As above, and a lot of an item sold in counted units (PCS, NOS, SET...) must be a whole number, with at most two
+     * decimals otherwise: the same unit rule as the PR and PO lines themselves ({@link QuantityRules}).
+     * uomByItem: item code -> unit; an item missing from it is only checked for the two-decimal limit.
+     */
+    public static void validate(List<Lot> lots, Map<String, BigDecimal> poQtyByItem, Map<String, String> uomByItem, LocalDate poDate) {
         if (lots == null || lots.isEmpty()) return;
         Map<String, BigDecimal> scheduled = new HashMap<>();
         for (Lot lot : lots) {
@@ -39,6 +49,8 @@ public final class DeliveryLots {
             if (lot.qty() == null || lot.qty().signum() <= 0) {
                 throw bad("Scheduled quantity for " + code + " must be above zero.");
             }
+            String unitProblem = QuantityRules.check(lot.qty(), uomByItem == null ? null : uomByItem.get(code), "the delivery lot of " + code, false);
+            if (unitProblem != null) throw bad(unitProblem);
             if (poDate != null && lot.date().isBefore(poDate)) {
                 throw bad("A schedule date for " + code + " is before the PO date.");
             }

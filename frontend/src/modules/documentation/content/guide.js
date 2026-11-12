@@ -411,9 +411,10 @@ export const SCREEN_GUIDE = {
     who: "Everyone in purchasing; auditors.",
     purpose: "Every purchase order, whatever created it — PO by PR, Direct PO or older flows — with column filters and a full detail view.",
     blocks: [
-      { steps: ["Open Purchase → Purchase Orders → PO Register.", "Narrow the list with the column filters.", "Open a PO to see its lines, allocations, receipts and status.", "Print a PO, or cancel a PR-based PO when allowed."] },
+      { steps: ["Open Purchase → Purchase Orders → PO Register.", "Narrow the list with the column filters.", "Open a PO to see its lines, allocations, receipts, delivery schedule and status.", "Change lots / Add delivery lots: split an item's quantity into dated lots (or change the lots set when the PO was made); Save schedule.", "Print a PO, or cancel a PR-based PO when allowed."] },
       { rules: [
         "Figures are read from the database on every refresh.",
+        "Delivery schedule: an item's lots may not add up to more than its PO quantity, a lot date cannot be before the PO date, lots of items counted in pieces must be whole numbers, and the lots must still hold what has already been received for the item. Accepted GRN quantity fills an item's lots in date order (lot 1 first), so each lot shows received, balance and status (Scheduled, Partially received, Completed). A completed or cancelled PO's schedule cannot be changed.",
         "A PO cannot be cancelled once any goods have been received against it. Cancelling a PR-based PO releases its quantity back to the PR lines in one transaction.",
         "A PO that is already cancelled cannot be cancelled again (a retry releases nothing twice)."
       ] }
@@ -436,7 +437,8 @@ export const SCREEN_GUIDE = {
         "You cannot accept more than the PO quantity still open (0% tolerance).",
         "A posted GRN can never be edited, deleted or posted again.",
         "The same PO and vendor challan cannot be posted twice.",
-        "When every line is fully accepted the PO becomes COMPLETED; otherwise PARTIALLY RECEIVED."
+        "When every line is fully accepted the PO becomes COMPLETED; otherwise PARTIALLY RECEIVED.",
+        "Scheduled POs: choosing a delivery lot only pre-fills the lines with what that lot still expects. Once the GRN is posted the server fills the item's lots with the accepted quantity in date order (lot 1 first); the lot balances are visible in the PO Register."
       ] },
       { flow: "grn-post" }
     ]

@@ -510,9 +510,10 @@ public class PurchaseProcessingService {
             lots.add(s == null ? null : new DeliveryLots.Lot(s.getItemCode(), s.getScheduledDate(), s.getScheduledQty()));
         }
         Map<String, BigDecimal> poQtyByItem = new HashMap<>();
-        jdbc.query("SELECT item_code, quantity FROM public.purchase_order_items WHERE po_number = ?",
-                rs -> { poQtyByItem.put(rs.getString("item_code"), rs.getBigDecimal("quantity")); }, poNumber);
-        DeliveryLots.validate(lots, poQtyByItem, parseIsoDate(po.get(0).get("po_date")));
+        Map<String, String> uomByItem = new HashMap<>();
+        jdbc.query("SELECT item_code, quantity, uom FROM public.purchase_order_items WHERE po_number = ?",
+                rs -> { poQtyByItem.put(rs.getString("item_code"), rs.getBigDecimal("quantity")); uomByItem.put(rs.getString("item_code"), rs.getString("uom")); }, poNumber);
+        DeliveryLots.validate(lots, poQtyByItem, uomByItem, parseIsoDate(po.get(0).get("po_date")));
 
         // An item's lots must still hold what has already been received for it.
         Map<String, BigDecimal> scheduledByItem = new HashMap<>();

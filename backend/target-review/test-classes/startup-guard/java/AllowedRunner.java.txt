@@ -1,0 +1,26 @@
+package fixture;
+
+// Fixture (not compiled): a startup runner whose risky statements are explicitly justified.
+// StartupSafetyGuardSelfTest expects no violations.
+@Component
+public class AllowedRunner implements ApplicationRunner {
+
+    private final JdbcTemplate jdbc;
+    private final SeedRegistry seeds;
+
+    @Override
+    public void run(ApplicationArguments args) {
+        // startup-guard: allow fills accepted_qty only where it is still NULL, never overwrites a value
+        jdbc.update("UPDATE public.grn_item_allocations SET accepted_qty = received_qty WHERE accepted_qty IS NULL");
+        seeds.seedOnce("item_group:FG", this::insertGroup);
+        // seed-policy: system job-work code moves stock through this department by name
+        jdbc.update("INSERT INTO public.department_master (department_name) VALUES ('Quality Hold') ON CONFLICT DO NOTHING");
+        jdbc.execute("CREATE TABLE IF NOT EXISTS public.fixture_t (id INT)");
+        jdbc.update("INSERT INTO public.app_seed_registry (seed_key, policy) VALUES ('x', 'once') ON CONFLICT DO NOTHING");
+    }
+
+    private void insertGroup() {
+        // seed-policy: once (reached only through SeedRegistry.seedOnce)
+        jdbc.update("INSERT INTO public.item_group (name) VALUES ('FG') ON CONFLICT (name) DO NOTHING");
+    }
+}

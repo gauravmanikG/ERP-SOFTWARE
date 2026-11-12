@@ -115,8 +115,10 @@ chosen on the form is used only when the item has none. Counted units must be wh
    approval step is a business decision.
 4. **Over-receipt tolerance:** none. Receipts above the PO quantity are refused. A tolerance % would need a
    configured rule.
-5. **Rejected goods:** a GRN line's `received_qty` (including rejected quantity) is what counts toward the PO,
-   as in the existing module. Rejected goods do not reduce the PO receipt.
+5. **Rejected goods:** only a GRN line's `accepted_qty` counts toward the PO, its delivery lots and the PR-line
+   attribution (`GoodsReceiptNoteService`, `syncScheduleReceipts`). Rejected and pending-inspection quantities are
+   recorded but never count as delivered; a later GRN brings the replacement or the inspected goods in. There is no
+   way yet to accept a "pending inspection" quantity without a new GRN (decision open).
 6. **Stored PR closure:** PR status does not become "Closed" on receipt. Needs a business decision.
 7. **Legacy reconciliation:** legacy POs and GRNs are identified, not reconciled. No report lists them yet.
 8. **Remaining legacy writers:** the legacy approval/clubbing paths now respect remaining quantity, but their

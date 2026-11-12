@@ -5,6 +5,7 @@ import { inp, btn, card, errorBox, th, thFor, td, money, qty } from "./ui";
 import { printPo } from "./printPo";
 import { ActivityButton } from "../activity/ActivityTrail";
 import { useColumnFilters, filterRows, FilterCells, filterInputStyle } from "./ColumnFilters";
+import DeliverySchedule, { scheduleProblem, scheduleRequest } from "./DeliverySchedule";
 
 const ORIGIN_LABEL = { PO_BY_PR: "PR based", DIRECT: "Direct", LEGACY: "Older PO" };
 
@@ -43,14 +44,50 @@ export default function PoRegisterScreen({ user, flash }) {
       .finally(() => setLoading(false));
   }, []);
 
+  // Delivery lots of the open PO: rows as the server keeps them, and the same rows as the editor's { itemCode: lots }.
+  const [lots, setLots] = useState([]);
+  const [lotEdit, setLotEdit] = useState(null); // null = viewing; { [itemCode]: [{ id, date, qty }] } while editing
+  const [lotError, setLotError] = useState("");
+  const [savingLots, setSavingLots] = useState(false);
+
   const loadDetail = useCallback((poNumber) => {
     setDetail(null);
     setDetailError("");
     setCancelError("");
+    setLots([]);
+    setLotEdit(null);
+    setLotError("");
     poRegisterApi.detail(poNumber)
       .then(setDetail)
       .catch((e) => setDetailError(e.message));
+    poRegisterApi.schedules(poNumber).then((rows) => setLots(Array.isArray(rows) ? rows : [])).catch(() => setLots([]));
   }, []);
+
+  const scheduleItems = detail ? detail.lines.map((l) => ({ itemCode: l.itemCode, itemName: l.itemName, poQty: Number(l.quantity) })) : [];
+  const lotsEditable = detail && detail.status !== "CANCELLED" && detail.status !== "COMPLETED";
+  const startLotEdit = () => {
+    const byItem = {};
+    for (const row of lots) (byItem[row.itemCode] = byItem[row.itemCode] || []).push({ id: row.id || Math.random(), date: row.scheduledDate, qty: Number(row.scheduledQty) });
+    setLotError("");
+    setLotEdit(byItem);
+  };
+  const saveLots = async () => {
+    const problem = scheduleProblem(scheduleItems, lotEdit, detail.poDate);
+    if (problem) return setLotError(problem);
+    setSavingLots(true);
+    setLotError("");
+    try {
+      const rows = scheduleRequest(scheduleItems, lotEdit).map((l) => ({ itemCode: l.itemCode, scheduledDate: l.date, scheduledQty: l.qty }));
+      await poRegisterApi.saveSchedules(detail.poNumber, rows);
+      flash(`Delivery schedule of ${detail.poNumber} saved (${rows.length} lot${rows.length === 1 ? "" : "s"}).`);
+      setLotEdit(null);
+      poRegisterApi.schedules(detail.poNumber).then((r) => setLots(Array.isArray(r) ? r : [])).catch(() => {});
+    } catch (e) {
+      setLotError(e.message); // the server's own reason: more than the PO quantity, before the PO date, below what is received...
+    } finally {
+      setSavingLots(false);
+    }
+  };
 
   useEffect(() => { loadOrders(); }, [loadOrders]);
 
@@ -223,6 +260,51 @@ export default function PoRegisterScreen({ user, flash }) {
                   </tbody>
                 </table>
               </div>
+            </div>
+
+            <div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#334155" }}>Delivery schedule</div>
+                {lotsEditable && !lotEdit && (
+                  <button type="button" style={{ ...btn(false), padding: "3px 10px", fontSize: 11 }} onClick={startLotEdit}>
+                    {lots.length ? "Change lots" : "Add delivery lots"}
+                  </button>
+                )}
+              </div>
+              {!lotEdit && (
+                <div style={{ overflowX: "auto", border: "1px solid #e2e8f0", borderRadius: 8 }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                    <thead><tr>{["Item", "Lot", "Due on", "Scheduled", "Received", "Balance", "Status"].map((h) => <th key={h} style={thFor(h)}>{h}</th>)}</tr></thead>
+                    <tbody>
+                      {lots.map((s) => (
+                        <tr key={s.id || `${s.itemCode}-${s.lotNumber}`}>
+                          <td style={td}>{s.itemCode}</td>
+                          <td style={td}>{s.lotNumber}</td>
+                          <td style={td}>{formatDisplayDate(s.scheduledDate)}</td>
+                          <td style={{ ...td, textAlign: "right" }}>{qty(s.scheduledQty)}</td>
+                          <td style={{ ...td, textAlign: "right" }}>{qty(s.receivedQty)}</td>
+                          <td style={{ ...td, textAlign: "right" }}>{qty(s.balanceQty)}</td>
+                          <td style={td}>{s.status}</td>
+                        </tr>
+                      ))}
+                      {lots.length === 0 && <tr><td colSpan={7} style={{ ...td, textAlign: "center", color: "#64748b" }}>No delivery lots: the whole quantity is due by the PO's delivery date.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {lotEdit && (
+                <div style={{ display: "grid", gap: 8 }}>
+                  <DeliverySchedule items={scheduleItems} schedules={lotEdit} onChange={setLotEdit} poDate={detail.poDate} />
+                  <div style={{ fontSize: 11, color: "#64748b" }}>
+                    Lots replace the current schedule. An item's lots must still hold what has already been received for it; accepted quantity fills lots in date order.
+                  </div>
+                  {lotError && <div style={errorBox}>{lotError}</div>}
+                  <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                    <button type="button" style={btn(false)} onClick={() => { setLotEdit(null); setLotError(""); }} disabled={savingLots}>Discard</button>
+                    <button type="button" style={btn(true)} onClick={saveLots} disabled={savingLots}>{savingLots ? "Saving…" : "Save schedule"}</button>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div style={{ border: "1px solid #e2e8f0", borderRadius: 8, padding: 12, display: "grid", gap: 8 }}>
