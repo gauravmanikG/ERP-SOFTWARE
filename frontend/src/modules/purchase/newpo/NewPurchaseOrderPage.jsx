@@ -4,7 +4,7 @@
 // To retire this flow, delete this folder, its nav entries in shared/layout/modulesData.jsx and its branch in App.jsx.
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { loadUser } from "./api";
+import { useCurrentUser } from "../../auth/AuthGate";
 import VendorRateMasterScreen from "./VendorRateMasterScreen";
 import PoRegisterScreen from "./PoRegisterScreen";
 import ReportsScreen from "./ReportsScreen";
@@ -31,7 +31,9 @@ const SCREEN_TITLES = {
 const FULL_SCREENS = new Set(["clubbed-demand", "draft-pos", "tracking"]);
 
 export function NewPurchaseOrderPage({ screen = "vendor-rates", onBackToHome, onOpenSidebar, sidebarOpen, onNavigate }) {
-  const [user] = useState(loadUser);
+  // The signed-in user; every step is recorded under this user on the server, nothing about them is sent by the screens.
+  const me = useCurrentUser();
+  const user = { name: (me && me.name) || "", role: "" };
   const [toast, setToast] = useState(null);
   const [convertDraft, setConvertDraft] = useState(null);   // draft number being converted to a PO
   const timer = useRef(null);
@@ -85,7 +87,7 @@ export function NewPurchaseOrderPage({ screen = "vendor-rates", onBackToHome, on
           <span style={{ color: "#94a3b8", fontSize: 12 }}>/ {SCREEN_TITLES[current] || SCREEN_TITLES["vendor-rates"]}</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12 }}>
-          <span style={{ color: "#94a3b8" }}>Acting as {user.name}</span>
+          <span style={{ color: "#94a3b8" }}>Signed in as <b style={{ color: "#e2e8f0" }}>{user.name}</b></span>
           <button onClick={onOpenSidebar} style={{ background: "rgba(255,255,255,0.08)", color: "#fff", border: "none", borderRadius: 6, padding: "5px 10px", fontSize: 12, cursor: "pointer" }}>{sidebarOpen ? "Hide menu" : "Menu"}</button>
           <span onClick={onBackToHome} style={{ cursor: "pointer", color: "#60a5fa", textDecoration: "underline" }}>Home</span>
         </div>

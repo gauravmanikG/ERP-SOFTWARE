@@ -3,22 +3,17 @@
 const API_ROOT = API_BASE + "/api";
 export const NPO = `${API_ROOT}/new-po`;
 
-import { getSetting } from "../../../shared/utils/settingsStore";
 import { API_BASE } from "../../../shared/api/apiBase.js";
 
-const USER_KEY = "SMS_CURRENT_USER";
-
-// The acting user is a UI setting used for the X-User-Name header; it is stored in PostgreSQL.
+// Who is acting is decided by the server from the session (RequestActor); nothing about the user is sent any more.
+// loadUser stays for the older call sites that still pass a name in a request body — the server ignores it.
 export function loadUser() {
-  const u = getSetting(USER_KEY, null);
-  if (u && u.name) return { name: u.name, role: u.role || "CREATOR" };
-  return { name: "Current User", role: "CREATOR" };
+  return { name: "", role: "" };
 }
 
-// `user` is omitted for read-only lookups, which do not need the acting-user headers.
+// `user` is accepted for compatibility with the call sites; it is not sent.
 export async function request(method, path, user, body) {
   const headers = { "Content-Type": "application/json" };
-  if (user) { headers["X-User-Name"] = user.name; headers["X-User-Role"] = user.role; }
   const res = await fetch(`${NPO}${path}`, {
     method,
     headers,
