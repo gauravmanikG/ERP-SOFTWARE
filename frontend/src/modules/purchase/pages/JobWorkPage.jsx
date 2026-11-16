@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useLayoutEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from "react";
 import * as XLSX from "xlsx";
 import DateInput from "../../../shared/components/DateInput";
 import SearchableSelect from "../../../shared/components/SearchableSelect";
@@ -2309,7 +2309,11 @@ function ReportsScreen({ user, flash }) {
 export function JobWorkPage({ screen = "dashboard", onBackToHome, onOpenSidebar, sidebarOpen }) {
   // The signed-in user and the role(s) the server gives them in Job Work (never chosen in the browser).
   const me = useCurrentUser();
-  const user = sessionActor(me, MODULES.jobWork);
+  // sessionActor() returns a new object on every call. Every screen reloads when `user` changes, and the reload
+  // re-renders this page with a new `user`, which reloads again (the flicker). Keep one object per name and roles.
+  const meName = me?.name || "";
+  const meRolesKey = JSON.stringify(me?.moduleRoles?.[MODULES.jobWork] || []);
+  const user = useMemo(() => sessionActor(me, MODULES.jobWork), [meName, meRolesKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const [current, setCurrent] = useState(screen);
   const [filter, setFilter] = useState({});
   const [toast, setToast] = useState(null);
