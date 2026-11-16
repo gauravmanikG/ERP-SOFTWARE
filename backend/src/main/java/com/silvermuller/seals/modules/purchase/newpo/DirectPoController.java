@@ -1,5 +1,6 @@
 package com.silvermuller.seals.modules.purchase.newpo;
 
+import com.silvermuller.seals.modules.admin.security.RequestActor;
 import com.silvermuller.seals.modules.purchase.newpo.DirectPoService.Created;
 import com.silvermuller.seals.modules.purchase.newpo.DirectPoService.Line;
 import com.silvermuller.seals.modules.purchase.newpo.DirectPoService.Request;
@@ -53,7 +54,7 @@ public class DirectPoController {
     @PostMapping("/purchase-orders")
     public ResponseEntity<Created> create(@RequestBody Body body,
                                           @RequestHeader(value = "X-User-Name", required = false) String user) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(directPo.create(body.toRequest(), user));
+        return ResponseEntity.status(HttpStatus.CREATED).body(directPo.create(body.toRequest(), RequestActor.nameOr(user)));
     }
 
     @GetMapping("/purchase-orders")
@@ -67,6 +68,6 @@ public class DirectPoController {
                          @RequestBody(required = false) Map<String, String> body,
                          @RequestHeader(value = "X-User-Name", required = false) String user) {
         String reason = body == null || body.get("reason") == null ? "Cancelled" : body.get("reason");
-        return purchaseProcessing.cancelPurchaseOrder(poNumber, user, reason);
+        return purchaseProcessing.cancelPurchaseOrder(poNumber, RequestActor.nameOr(user), reason);
     }
 }
