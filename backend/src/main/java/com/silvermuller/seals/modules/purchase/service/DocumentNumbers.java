@@ -32,6 +32,8 @@ public final class DocumentNumbers {
         JWO("JWO", "job_work_orders", "jwo_number", 5),
         JWC("JWC", "job_work_challans", "challan_number", 5),
         JWR("JWR", "job_work_receipts", "receipt_number", 5),
+        // Gate entry (vehicle in at the gate)
+        GE("GE", "gate_entries", "gate_entry_number", 5),
         ADJ("ADJ", "job_work_adjustments", "adjustment_number", 5);
 
         final String prefix;

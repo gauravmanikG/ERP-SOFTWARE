@@ -16,7 +16,7 @@
 //   { tip: "text" } / { warn: "text" }             call-outs
 //   { flow: "flowchart-id" }                       link to a chart in the Flowcharts section
 
-export const GUIDE_UPDATED = "2026-11-12";
+export const GUIDE_UPDATED = "2026-11-17";
 
 // ---------------------------------------------------------------- start here (not tied to a menu screen)
 
@@ -34,7 +34,8 @@ export const START_HERE = [
         ["CRM & Order Management", "Customer master", "Customer master live; sales screens planned"],
         ["Maintenance", "Machine master", "Machine master live; maintenance screens planned"],
         ["Settings", "Departments, users, roles and access control", "Live"],
-        ["Inventory, Gate, Quality, PPC, Production, Sales & Dispatch, Finance", "Planned modules", "Coming soon"]
+        ["Gate", "Expected arrivals, gate entry of delivery vehicles, unloading, quantity verification, vehicles inside, exit register, gate reports", "Server side built; screens coming soon"],
+        ["Inventory, Quality, PPC, Production, Sales & Dispatch, Finance", "Planned modules", "Coming soon"]
       ] } },
       { tip: "New here? Read 'Signing in', 'Finding your way around' and 'Roles and access' first, then the guide for the screens you will use." }
     ]
@@ -434,13 +435,15 @@ export const SCREEN_GUIDE = {
       { rules: [
         "Received = accepted + rejected + pending inspection, on every line.",
         "Only accepted quantity fulfils the PO, moves its status and is attributed to the PR lines it was ordered for. Rejected goods are retained and shown on the reports, but never count as delivered.",
-        "You cannot accept more than the PO quantity still open (0% tolerance).",
+        "You cannot accept more than the PO quantity still open plus the over-delivery tolerance (1 % by default, set in Gate Settings). For counted units (PCS, NOS, SET...) the allowance is rounded down to whole units: 100 PCS allows 101, 50 PCS allows 50. Quantity accepted above the PR lines' needs is received but not attributed to any PR line.",
         "A posted GRN can never be edited, deleted or posted again.",
-        "The same PO and vendor challan cannot be posted twice.",
+        "The same PO and vendor challan cannot be posted twice (except partial GRNs made from one gate entry, which are limited by that gate entry's accepted quantity instead).",
+        "Gate flow (coming soon, switched off today): when Gate Settings has 'GRN only from a verified gate entry' on, Pending GRN lists only quantity accepted at gate verification and not yet received, each GRN line points to its gate-entry line, and a GRN cannot receive more than that line still holds. Invoice, challan, vehicle and transporter come from the gate entry.",
         "When every line is fully accepted the PO becomes COMPLETED; otherwise PARTIALLY RECEIVED.",
         "Scheduled POs: choosing a delivery lot only pre-fills the lines with what that lot still expects. Once the GRN is posted the server fills the item's lots with the accepted quantity in date order (lot 1 first); the lot balances are visible in the PO Register."
       ] },
-      { flow: "grn-post" }
+      { flow: "grn-post" },
+      { flow: "gate-entry" }
     ]
   },
   "new-po-tracking": {

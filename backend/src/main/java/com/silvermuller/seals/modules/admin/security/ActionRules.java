@@ -199,6 +199,23 @@ public final class ActionRules {
         rule("POST", jw + "/reconciliation/adjustments/{id}/decision", "purchase.jw_recon:approve", "purchase.jw_recon:reject");
         rule("POST", jw + "/reconciliation/loss-policies", "purchase.jw_recon:approve");
 
+        // ---------------- Gate ----------------
+        String gate = "/api/gate";
+        rule("POST", gate + "/entries", "gate.entry:create");
+        rule("PUT", gate + "/entries/{id}", "gate.entry:create", "gate.entry:edit");
+        rule("POST", gate + "/entries/{id}/submit", "gate.entry:submit");
+        rule("POST", gate + "/entries/{id}/cancel", "gate.entry:cancel");
+        rule("POST", gate + "/entries/{id}/turn-back", "gate.entry:reject");
+        rule("POST", gate + "/entries/{id}/start-unloading", "gate.unloading:receive");
+        rule("POST", gate + "/entries/{id}/unloading", "gate.unloading:receive");
+        rule("POST", gate + "/entries/{id}/verify", "gate.unloading:inspect");
+        rule("POST", gate + "/lines/{id}/release-hold", "gate.quality_hold:approve");
+        rule("POST", gate + "/entries/{id}/exit", "gate.exit:post");
+        rule("POST", gate + "/attachments", "gate.entry:create", "gate.entry:edit", "gate.unloading:receive");
+        rule("POST", gate + "/gates", "gate.master:create");
+        rule("PUT", gate + "/gates/{id}", "gate.master:edit");
+        rule("PUT", gate + "/settings", "gate.master:edit");
+
         // ---------------- CRM, Maintenance, Settings ----------------
         List<String> cust = List.of("/api/crm/customers", "/api/customers");
         rule("POST", cust, "", "crm.customer:create");

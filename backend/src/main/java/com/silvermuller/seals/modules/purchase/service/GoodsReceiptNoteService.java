@@ -1,6 +1,8 @@
 package com.silvermuller.seals.modules.purchase.service;
 
 import com.silvermuller.seals.modules.admin.security.RequestActor;
+import com.silvermuller.seals.modules.gate.GateGrnLink;
+import com.silvermuller.seals.modules.gate.GateSettings;
 import com.silvermuller.seals.modules.purchase.servicepo.ServicePoService;
 import com.silvermuller.seals.modules.purchase.dto.PurchaseItemLine;
 import com.silvermuller.seals.modules.purchase.model.GoodsReceiptNote;
@@ -31,13 +33,16 @@ public class GoodsReceiptNoteService {
     private final PurchaseProcessingService purchaseProcessingService;
 
     private final com.silvermuller.seals.modules.purchase.newpo.ReceiptAttributionService receiptAttribution;
+    private final GateGrnLink gateLink;
 
     public GoodsReceiptNoteService(JdbcTemplate jdbc,
                                   com.silvermuller.seals.modules.purchase.newpo.ReceiptAttributionService receiptAttribution,
-                                  PurchaseProcessingService purchaseProcessingService) {
+                                  PurchaseProcessingService purchaseProcessingService,
+                                  GateGrnLink gateLink) {
         this.jdbc = jdbc;
         this.receiptAttribution = receiptAttribution;
         this.purchaseProcessingService = purchaseProcessingService;
+        this.gateLink = gateLink;
     }
 
     private final RowMapper<GoodsReceiptNote> grnRowMapper = (rs, rowNum) -> {
@@ -80,6 +85,8 @@ public class GoodsReceiptNoteService {
         Timestamp uat = rs.getTimestamp("updated_at");
         if (uat != null) g.setUpdatedAt(uat.toInstant().toString());
         g.setUpdatedBy(rs.getString("updated_by"));
+        long gateEntryId = rs.getLong("gate_entry_id");
+        g.setGateEntryId(rs.wasNull() ? null : gateEntryId);
 
         return g;
     };
@@ -112,6 +119,8 @@ public class GoodsReceiptNoteService {
 
         Timestamp cat = rs.getTimestamp("created_at");
         if (cat != null) it.setCreatedAt(cat.toInstant().toString());
+        long gateLineId = rs.getLong("gate_entry_line_id");
+        it.setGateEntryLineId(rs.wasNull() ? null : gateLineId);
 
         return it;
     };
@@ -159,6 +168,8 @@ public class GoodsReceiptNoteService {
      * Finds all Approved/Issued Purchase Orders that have pending balance quantity to be received.
      */
     public List<Map<String, Object>> getPendingPurchaseOrdersForReceipt() {
+        // With the gate required, only quantity accepted at gate verification and not yet received is pending.
+        if (gateLink.required()) return gateLink.pendingForGrn();
         List<PurchaseOrder> allOrders = purchaseProcessingService.getAllPurchaseOrders();
         List<Map<String, Object>> pendingList = new ArrayList<>();
 
@@ -259,7 +270,8 @@ public class GoodsReceiptNoteService {
         if (grn.getPoNumber() == null || grn.getPoNumber().trim().isEmpty()) {
             throw new IllegalArgumentException("Purchase Order reference (poNumber) is mandatory for GRN.");
         }
-        if (grn.getVendorChallanNo() == null || grn.getVendorChallanNo().trim().isEmpty()) {
+        // A GRN from a gate entry takes the challan / invoice from the gate (filled in GateGrnLink.prepare below).
+        if (grn.getGateEntryId() == null && (grn.getVendorChallanNo() == null || grn.getVendorChallanNo().trim().isEmpty())) {
             throw new IllegalArgumentException("Vendor Challan Number is mandatory.");
         }
         if (grn.getStoreLocation() == null || grn.getStoreLocation().trim().isEmpty()) {
@@ -284,6 +296,12 @@ public class GoodsReceiptNoteService {
         lockReceivablePo(grn);
         // Every GRN line must be a line of its PO (also a foreign key: goods_receipt_note_items -> purchase_order_items).
         assertLinesOnPo(grn);
+        // Gate flow: the GRN may only receive quantity accepted at gate verification and not yet received. Its gate-entry
+        // lines are locked here, after the PO row. With the gate required, a GRN without a gate entry is refused.
+        boolean gateLinked = gateLink.prepare(grn);
+        if (grn.getVendorChallanNo() == null || grn.getVendorChallanNo().trim().isEmpty()) {
+            throw new IllegalArgumentException("Vendor Challan Number is mandatory (the gate entry has no invoice or challan number).");
+        }
         // A posted GRN is a record: it cannot be edited or posted again. A draft stays with the PO it was started for.
         String storedGrnNumber = null;
         if (grn.getId() != null) {
@@ -303,7 +321,9 @@ public class GoodsReceiptNoteService {
             storedGrnNumber = (String) current.get(0).get("grn_number");
         }
         // Retry protection: one posted GRN per PO and vendor challan. A repeated submission is refused, not posted twice.
-        if (isPost) {
+        // A gate GRN is protected by its gate-entry lines instead (pending quantity checked under lock, and the database
+        // refuses more than was accepted), so several partial GRNs from one delivery (one challan) are allowed.
+        if (isPost && !gateLinked) {
             Integer dup = jdbc.queryForObject(
                 "SELECT COUNT(*) FROM goods_receipt_notes WHERE po_number = ? AND vendor_challan_no = ? AND status = 'POSTED' AND id IS DISTINCT FROM ?",
                 Integer.class, grn.getPoNumber(), grn.getVendorChallanNo().trim(), grn.getId());
@@ -331,6 +351,7 @@ public class GoodsReceiptNoteService {
         BigDecimal sumRej = BigDecimal.ZERO;
         BigDecimal sumPend = BigDecimal.ZERO;
         BigDecimal sumVal = BigDecimal.ZERO;
+        BigDecimal tolerancePct = gateLink.tolerancePct();
 
         for (GoodsReceiptNoteItem it : grn.getItems()) {
             BigDecimal ord = it.getPoOrderedQty() != null ? it.getPoOrderedQty() : BigDecimal.ZERO;
@@ -360,11 +381,15 @@ public class GoodsReceiptNoteService {
                 );
                 if (priorRec == null) priorRec = BigDecimal.ZERO;
                 it.setPriorReceivedQty(priorRec);
-                BigDecimal maxAllowed = ord.subtract(priorRec);
+                // Over-delivery tolerance (Gate Settings, default 1 %): the PO quantity plus the allowance, rounded down
+                // to whole units for counted units, is the most that may ever be accepted on the line.
+                BigDecimal tolerance = tolerancePct;
+                BigDecimal maxAllowed = GateSettings.ceilingWithTolerance(ord, serverPoUom(grn.getPoNumber(), it.getItemCode()), tolerance).subtract(priorRec);
                 if (acc.compareTo(maxAllowed) > 0) {
                     throw new IllegalArgumentException(String.format(
-                        "Accepted quantity (%s) for item '%s' exceeds the PO outstanding balance (%s). Only accepted goods fulfil a PO; over-acceptance is blocked (tolerance 0%%).",
-                        acc.toPlainString(), it.getItemCode(), maxAllowed.toPlainString()
+                        "Accepted quantity (%s) for item '%s' exceeds the PO outstanding balance (%s, including the %s%% over-delivery tolerance). Only accepted goods fulfil a PO; over-acceptance is blocked.",
+                        acc.toPlainString(), it.getItemCode(), maxAllowed.max(BigDecimal.ZERO).stripTrailingZeros().toPlainString(),
+                        tolerance.stripTrailingZeros().toPlainString()
                     ));
                 }
             }
@@ -407,8 +432,8 @@ public class GoodsReceiptNoteService {
                     "vendor_challan_no, vendor_challan_date, vendor_invoice_no, vendor_invoice_date, transporter_name, " +
                     "vehicle_number, store_location, received_by, inspected_by, status, total_ordered_qty, total_challan_qty, " +
                     "total_received_qty, total_accepted_qty, total_rejected_qty, total_pending_qty, total_value, remarks, " +
-                    "created_at, created_by, updated_at, updated_by) " +
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, NOW(), ?)",
+                    "created_at, created_by, updated_at, updated_by, gate_entry_id) " +
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, NOW(), ?, ?)",
                     Statement.RETURN_GENERATED_KEYS
                 );
                 ps.setString(1, grn.getGrnNumber());
@@ -439,6 +464,7 @@ public class GoodsReceiptNoteService {
                 ps.setString(26, grn.getRemarks());
                 ps.setString(27, grn.getCreatedBy());
                 ps.setString(28, grn.getCreatedBy());
+                if (grn.getGateEntryId() != null) ps.setLong(29, grn.getGateEntryId()); else ps.setNull(29, java.sql.Types.BIGINT);
                 return ps;
             }, keyHolder);
 
@@ -453,7 +479,7 @@ public class GoodsReceiptNoteService {
                 "grn_date = ?, vendor_challan_no = ?, vendor_challan_date = ?, vendor_invoice_no = ?, vendor_invoice_date = ?, " +
                 "transporter_name = ?, vehicle_number = ?, store_location = ?, received_by = ?, inspected_by = ?, status = ?, " +
                 "total_ordered_qty = ?, total_challan_qty = ?, total_received_qty = ?, total_accepted_qty = ?, total_rejected_qty = ?, " +
-                "total_pending_qty = ?, total_value = ?, remarks = ?, updated_at = NOW(), updated_by = ? " +
+                "total_pending_qty = ?, total_value = ?, remarks = ?, updated_at = NOW(), updated_by = ?, gate_entry_id = ? " +
                 "WHERE id = ?",
                 grn.getGrnDate() != null ? Date.valueOf(grn.getGrnDate()) : Date.valueOf(LocalDate.now()),
                 grn.getVendorChallanNo(),
@@ -475,6 +501,7 @@ public class GoodsReceiptNoteService {
                 grn.getTotalValue(),
                 grn.getRemarks(),
                 actor,
+                grn.getGateEntryId(),
                 grnId
             );
             jdbc.update("DELETE FROM goods_receipt_note_items WHERE grn_id = ?", grnId);
@@ -490,14 +517,14 @@ public class GoodsReceiptNoteService {
                 "grn_id, grn_number, po_number, item_code, item_name, description, category, uom, " +
                 "po_ordered_qty, prior_received_qty, balance_expected_qty, challan_qty, received_qty, accepted_qty, " +
                 "rejected_qty, pending_inspection_qty, rejection_reason, storage_bin, unit_rate, tax_percent, item_total, " +
-                "remarks, created_at) " +
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())",
+                "remarks, created_at, gate_entry_line_id) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?)",
                 grnId, grn.getGrnNumber(), grn.getPoNumber(), it.getItemCode(), it.getItemName(), it.getDescription(),
                 it.getCategory(), it.getUom() != null ? it.getUom() : "PCS",
                 it.getPoOrderedQty(), it.getPriorReceivedQty(), it.getBalanceExpectedQty(), it.getChallanQty(),
                 it.getReceivedQty(), it.getAcceptedQty(), it.getRejectedQty(), it.getPendingInspectionQty(),
                 it.getRejectionReason(), it.getStorageBin(), it.getUnitRate(), it.getTaxPercent(), it.getItemTotal(),
-                it.getRemarks()
+                it.getRemarks(), it.getGateEntryLineId()
             );
         }
 
@@ -513,6 +540,9 @@ public class GoodsReceiptNoteService {
         if (isPost) {
             // Receipt attribution to PR allocations is written in this same transaction (rolled back with the GRN).
             receiptAttribution.attributePostedGrn(grnId, grn.getPoNumber());
+            // Gate lines: what this GRN received is added to their GRN-posted quantity (refused by the database above
+            // the accepted quantity), in this same transaction.
+            if (gateLinked) gateLink.recordPosted(grnId, grn.getGrnNumber(), actor);
             updatePurchaseOrderStatusFromGrn(grn.getPoNumber());
             purchaseProcessingService.syncScheduleReceipts(grn.getPoNumber());
         }
@@ -632,6 +662,13 @@ public class GoodsReceiptNoteService {
                 it.setItemName(poName == null || poName.isBlank() ? it.getItemCode() : poName);
             }
         }
+    }
+
+    /** Unit of one item on the PO (for the whole-unit rounding of the tolerance). */
+    private String serverPoUom(String poNumber, String itemCode) {
+        List<String> uom = jdbc.queryForList(
+                "SELECT uom FROM public.purchase_order_items WHERE po_number = ? AND item_code = ?", String.class, poNumber, itemCode);
+        return uom.isEmpty() ? null : uom.get(0);
     }
 
     /** Ordered quantity of one item on the PO, read from its PO line (never from the client). */

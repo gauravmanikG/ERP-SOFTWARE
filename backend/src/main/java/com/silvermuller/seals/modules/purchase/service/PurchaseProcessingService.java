@@ -355,6 +355,8 @@ public class PurchaseProcessingService {
         if (posted != null && posted > 0) {
             throw new ConflictException("PO " + po.getPoNumber() + " has posted receipts and cannot be cancelled. Receipt reversal is not supported yet; it was not changed.");
         }
+        // Material for this PO still at the gate (inside, or accepted / on hold and not yet received) blocks it too.
+        com.silvermuller.seals.modules.gate.GateGrnLink.assertNoOpenGateWork(jdbc, po.getPoNumber());
         String actor = (user != null && !user.trim().isEmpty()) ? user : "Purchase Manager";
         String r = (reason != null && !reason.trim().isEmpty()) ? reason : "Order cancelled";
         String currentRemarks = (String) locked.get("remarks");

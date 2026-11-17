@@ -327,3 +327,15 @@ added AS (
 INSERT INTO public.app_seed_registry (seed_key, policy)
 SELECT 'department_master:' || s.department_name::text, 'once' FROM seed s
 ON CONFLICT (seed_key) DO NOTHING;
+
+-- seed-policy: once user-managed defaults: the first gate, so a gate entry can be made on a new database
+WITH seed (gate_code, gate_name) AS (VALUES ('MAIN', 'Main Gate')),
+added AS (
+  INSERT INTO public.gate_master (gate_code, gate_name)
+  SELECT s.gate_code, s.gate_name FROM seed s
+  WHERE NOT EXISTS (SELECT 1 FROM public.app_seed_registry r WHERE r.seed_key = 'gate_master:' || s.gate_code::text)
+  ON CONFLICT (gate_code) DO NOTHING
+)
+INSERT INTO public.app_seed_registry (seed_key, policy)
+SELECT 'gate_master:' || s.gate_code::text, 'once' FROM seed s
+ON CONFLICT (seed_key) DO NOTHING;

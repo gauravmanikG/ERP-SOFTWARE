@@ -141,6 +141,14 @@ public class GoodsReceiptNote {
     public String getRemarks() { return remarks; }
     public void setRemarks(String remarks) { this.remarks = remarks; }
 
+    /** The verified gate entry this GRN receives from (NULL on GRNs posted before the gate flow). */
+    private Long gateEntryId;
+    private String gateEntryNumber;
+    public Long getGateEntryId() { return gateEntryId; }
+    public void setGateEntryId(Long gateEntryId) { this.gateEntryId = gateEntryId; }
+    public String getGateEntryNumber() { return gateEntryNumber; }
+    public void setGateEntryNumber(String gateEntryNumber) { this.gateEntryNumber = gateEntryNumber; }
+
     public String getCreatedAt() { return createdAt; }
     public void setCreatedAt(String createdAt) { this.createdAt = createdAt; }
 

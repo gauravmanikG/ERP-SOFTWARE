@@ -116,6 +116,22 @@ public final class PermissionCatalog {
         add("Purchase", "jw_operation", "Job Work Operations Master", Kind.MASTER,
                 Action.VIEW, Action.CREATE, Action.EDIT);
 
+        // ---------------- Gate ----------------
+        // Security at the gate records the vehicle and documents; store unloads, counts and verifies; quality releases
+        // material held for inspection; security lets the vehicle out.
+        add("Gate", "entry", "Gate Entry", Kind.RECEIVING,
+                Action.VIEW, Action.CREATE, Action.EDIT, Action.SUBMIT, Action.CANCEL, Action.REJECT, Action.PRINT, Action.EXPORT);
+        add("Gate", "unloading", "Material Unloading & Quantity Verification", Kind.RECEIVING,
+                Action.VIEW, Action.RECEIVE, Action.INSPECT);
+        add("Gate", "quality_hold", "Quality Hold Release", Kind.RECEIVING,
+                Action.VIEW, Action.APPROVE);
+        add("Gate", "exit", "Vehicle Exit (Gate Out)", Kind.RECEIVING,
+                Action.VIEW, Action.POST);
+        add("Gate", "master", "Gates & Gate Settings", Kind.MASTER,
+                Action.VIEW, Action.CREATE, Action.EDIT);
+        add("Gate", "report", "Gate Reports", Kind.REPORT,
+                Action.VIEW, Action.EXPORT);
+
         // ---------------- Inventory ----------------
         add("Inventory", "category", "Item Categories", Kind.MASTER,
                 Action.VIEW, Action.CREATE, Action.DELETE);
@@ -209,7 +225,11 @@ public final class PermissionCatalog {
             case "department_user" -> (e.key().equals("pr") || e.key().equals("jw_indent"))
                     && in(a, Action.VIEW, Action.CREATE, Action.EDIT, Action.SUBMIT);
             // Physical receipt and dispatch of goods.
-            case "store_operator" -> switch (e.key()) {
+            case "store_operator" -> "Gate".equals(e.module()) ? switch (e.key()) {
+                case "unloading" -> in(a, Action.VIEW, Action.RECEIVE, Action.INSPECT);
+                case "entry", "exit", "quality_hold", "report" -> a == Action.VIEW;
+                default -> false;
+            } : switch (e.key()) {
                 case "grn" -> in(a, Action.VIEW, Action.CREATE, Action.POST);
                 case "jw_challan" -> in(a, Action.VIEW, Action.CREATE, Action.CANCEL, Action.PRINT);
                 case "jw_receipt" -> in(a, Action.VIEW, Action.CREATE);
@@ -218,7 +238,11 @@ public final class PermissionCatalog {
                 default -> false;
             };
             // Inspects received goods and job-work returns.
-            case "quality_inspector" -> switch (e.key()) {
+            case "quality_inspector" -> "Gate".equals(e.module()) ? switch (e.key()) {
+                case "quality_hold" -> in(a, Action.VIEW, Action.APPROVE);
+                case "entry", "unloading" -> a == Action.VIEW;
+                default -> false;
+            } : switch (e.key()) {
                 case "jw_receipt", "capital_po" -> in(a, Action.VIEW, Action.INSPECT);
                 case "jw_recon", "grn" -> a == Action.VIEW;
                 default -> false;

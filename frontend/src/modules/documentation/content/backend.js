@@ -175,7 +175,7 @@ export const HIGHLIGHTS = [
         title: "Duplicate-click and retry protection",
         headline: "A double-click or a network retry never creates a second document or moves material twice.",
         points: [
-          "Client request ids (idempotency keys) on Capital PO and Job Work operations: the same request is processed once.",
+          "Client request ids (idempotency keys) on Capital PO, Job Work and Gate Entry: the same request is processed once.",
           "Unique keys in the database for document numbers and business identities, so duplicates are impossible even under load."
         ],
         files: ["modules/purchase/capitalpo/CapitalPoService.java", "modules/purchase/jobwork/JobWorkService.java"]
@@ -195,9 +195,22 @@ export const HIGHLIGHTS = [
         points: [
           "On every GRN line, received = accepted + rejected + pending inspection.",
           "Accepted quantity fulfils the PO and its PR lines; rejected goods are retained and reported, never counted as delivered.",
-          "Over-acceptance beyond the open PO quantity is refused (0% tolerance)."
+          "Over-acceptance beyond the open PO quantity plus the over-delivery tolerance (1 % by default, rounded down to whole units for PCS/NOS) is refused. The tolerance is one setting used by GRN posting, PR attribution and gate verification alike."
         ],
-        files: ["modules/purchase/service/GoodsReceiptNoteService.java"]
+        files: ["modules/purchase/service/GoodsReceiptNoteService.java", "modules/gate/GateSettings.java", "modules/purchase/newpo/ReceiptAttributionService.java"]
+      },
+      {
+        title: "Gate entry before GRN (server side built)",
+        headline: "A delivery is recorded at the gate, unloaded, counted and verified before anything can be received.",
+        points: [
+          "A gate entry moves only by actions: Draft → Submit (vehicle in) → Start Unloading → Record Unloading → Verify → Gate Out, or Turn Back / Cancel. Entry, unloading, verification and exit times are the server's; every action is written to the entry's history.",
+          "On verification, unloaded = accepted + rejected + hold on every line (a database CHECK as well). Accepted is limited, with the PO rows locked, to PO qty + tolerance − posted GRNs − quantity accepted on other gate entries, so two deliveries cannot use the same balance.",
+          "Only verified accepted quantity becomes pending GRN. Each GRN line links to its gate-entry line; the GRN locks those lines after the PO row and the database refuses a GRN-posted quantity above the accepted one, so two GRNs at once cannot over-receive.",
+          "A vehicle can be inside only once at a time (unique index on vehicles inside, compared without spaces or dashes). The same vendor invoice cannot be brought in twice. POs of another vendor need the multi-vendor setting. Every security check is answered; a 'No' needs remarks.",
+          "A PO cannot be cancelled while its material is at the gate, accepted but not yet received, or on hold.",
+          "Switched off by default ('GRN only from a verified gate entry' in Gate Settings): the GRN screen works as before until the gate screens are in use."
+        ],
+        files: ["modules/gate/GateEntryService.java", "modules/gate/GateQuantities.java", "modules/gate/GateGrnLink.java", "modules/gate/GateQueryService.java", "resources/schema.sql"]
       },
       {
         title: "Tax correctness",

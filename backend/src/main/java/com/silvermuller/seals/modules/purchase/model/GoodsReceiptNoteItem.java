@@ -114,6 +114,11 @@ public class GoodsReceiptNoteItem {
     public String getRemarks() { return remarks; }
     public void setRemarks(String remarks) { this.remarks = remarks; }
 
+    /** The gate-entry line this GRN line receives from (NULL on lines posted before the gate flow). */
+    private Long gateEntryLineId;
+    public Long getGateEntryLineId() { return gateEntryLineId; }
+    public void setGateEntryLineId(Long gateEntryLineId) { this.gateEntryLineId = gateEntryLineId; }
+
     public String getCreatedAt() { return createdAt; }
     public void setCreatedAt(String createdAt) { this.createdAt = createdAt; }
 }

@@ -25,9 +25,11 @@ import java.util.Map;
 public class ReceiptAttributionService {
 
     private final JdbcTemplate jdbc;
+    private final com.silvermuller.seals.modules.gate.GateSettings gateSettings;
 
-    public ReceiptAttributionService(JdbcTemplate jdbc) {
+    public ReceiptAttributionService(JdbcTemplate jdbc, com.silvermuller.seals.modules.gate.GateSettings gateSettings) {
         this.jdbc = jdbc;
+        this.gateSettings = gateSettings;
     }
 
     /**
@@ -37,6 +39,16 @@ public class ReceiptAttributionService {
      * exceeds what is still open on the PO. Exception: an older PO (po_origin LEGACY) whose lines were linked to PR
      * lines afterwards may hold more than its PR lines needed; the excess is received unattributed, as before.
      */
+    /** The over-delivery allowance of one PO line (Gate Settings tolerance), 0 when the line is not found. */
+    private BigDecimal toleranceAllowance(String poNumber, String itemCode) {
+        List<Map<String, Object>> rows = jdbc.queryForList(
+                "SELECT quantity, uom FROM public.purchase_order_items WHERE po_number = ? AND item_code = ?", poNumber, itemCode);
+        if (rows.isEmpty()) return BigDecimal.ZERO;
+        BigDecimal ordered = new BigDecimal(String.valueOf(rows.get(0).get("quantity")));
+        String uom = rows.get(0).get("uom") == null ? null : String.valueOf(rows.get(0).get("uom"));
+        return com.silvermuller.seals.modules.gate.GateSettings.ceilingWithTolerance(ordered, uom, gateSettings.get().overDeliveryTolerancePct()).subtract(ordered);
+    }
+
     public void attributePostedGrn(long grnId, String poNumber) {
         List<Map<String, Object>> po = jdbc.queryForList(
                 "SELECT status, po_origin FROM public.purchase_orders WHERE po_number = ? FOR UPDATE", poNumber);
@@ -75,7 +87,10 @@ public class ReceiptAttributionService {
                 BigDecimal open = ((BigDecimal) a.get("net_qty")).subtract((BigDecimal) a.get("attributed_qty"));
                 if (open.signum() > 0) capacity = capacity.add(open);
             }
-            if (accepted.compareTo(capacity) > 0 && !legacy) {
+            // Quantity above the PR allocations is allowed only within the over-delivery tolerance (the GRN has already
+            // checked the PO line against PO qty + tolerance under the PO lock). That excess is received but belongs to
+            // no PR line, so it stays unattributed, like the excess on older POs.
+            if (accepted.compareTo(capacity.add(toleranceAllowance(poNumber, itemCode))) > 0 && !legacy) {
                 throw new ConflictException("Accepted quantity on PO " + poNumber + " / " + itemCode + " is "
                         + accepted.stripTrailingZeros().toPlainString() + " but only "
                         + capacity.stripTrailingZeros().toPlainString() + " is still open. The GRN was not posted.");

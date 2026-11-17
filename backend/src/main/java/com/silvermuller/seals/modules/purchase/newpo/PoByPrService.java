@@ -455,6 +455,8 @@ public class PoByPrService {
             throw new NewPoException(HttpStatus.UNPROCESSABLE_ENTITY,
                     "PO " + po + " was not raised through PO by PR, so this cancellation does not apply to it.");
         }
+        // Material for this PO still at the gate (inside, or accepted / on hold and not yet received) blocks cancellation.
+        com.silvermuller.seals.modules.gate.GateGrnLink.assertNoOpenGateWork(jdbc, po);
         // Any physical receipt (accepted or rejected) blocks cancellation: a rejected delivery is still in the store.
         BigDecimal received = jdbc.queryForObject(
                 "SELECT COALESCE(SUM(gi.received_qty), 0) FROM public.goods_receipt_note_items gi " +

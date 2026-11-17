@@ -176,20 +176,49 @@ export const FLOWCHARTS = [
     title: "Posting a GRN",
     description: "The checks applied when goods are received against a PO.",
     code: `flowchart TD
-  A["Post GRN against a PO"] --> B{"GRN already posted?"}
+  A["Post GRN against a PO"] --> D["Lock PO row"]
+  D --> GT{"From a gate entry?"}
+  GT -->|"no, and gate required"| X0["409 — record the delivery at the gate first"]
+  GT -->|yes| GL["Lock gate-entry lines<br/>(entry must be verified)"]
+  GL --> GQ{"GRN qty ≤ accepted at gate<br/>− already received?"}
+  GQ -->|no| X5["400 — more than the gate accepted"]
+  GQ -->|yes| E
+  GT -->|"no, gate not required"| B{"GRN already posted?"}
   B -->|yes| X1["409 — a posted GRN is final"]
   B -->|no| C{"Same PO + vendor challan<br/>already posted?"}
   C -->|yes| X2["409 — duplicate receipt"]
-  C -->|no| D["Lock PO row"]
-  D --> E{"Each line:<br/>received = accepted + rejected + pending?"}
+  C -->|no| E{"Each line:<br/>received = accepted + rejected + pending?"}
   E -->|no| X3["400 — quantities do not add up"]
-  E -->|yes| F{"Accepted ≤ open PO quantity?"}
-  F -->|no| X4["409 — over-acceptance refused"]
+  E -->|yes| F{"Accepted ≤ PO quantity + tolerance<br/>− already received?"}
+  F -->|no| X4["400 — over-acceptance refused"]
   F -->|yes| G["Attribute accepted qty<br/>to PR allocations"]
-  G --> H["Update delivery schedules"]
+  G --> GP["Add to gate lines' received qty<br/>(gate GRNs)"]
+  GP --> H["Update delivery schedules"]
   H --> I{"Every line fully accepted?"}
   I -->|yes| J["PO COMPLETED"]
   I -->|no| K["PO PARTIALLY RECEIVED"]`
+  },
+  {
+    id: "gate-entry",
+    group: "documents",
+    title: "Gate entry lifecycle (server side built, screens coming soon)",
+    description: "A delivery vehicle from the gate to the GRN. Stages change only through these actions; times are the server's.",
+    code: `flowchart TD
+  D["DRAFT<br/>vehicle, vendor, documents, POs, declared qty"] -->|Submit: all checks, vehicle in| G["GATE_IN"]
+  D -->|Cancel with reason| C["CANCELLED"]
+  G -->|Cancel with reason| C
+  G -->|Start unloading| U["UNLOADING"]
+  G -->|Turn back with reason| T["TURNED_BACK"]
+  U -->|Turn back with reason| T
+  U -->|Record unloaded qty| L["UNLOADED"]
+  L -->|correct the count| L
+  L -->|"Verify: accepted + rejected + hold = unloaded<br/>accepted ≤ PO qty + tolerance − received − accepted elsewhere"| V["VERIFIED"]
+  V -->|Gate out| X["EXITED"]
+  T -->|Gate out| X
+  V -.->|"accepted − already received"| P["Pending GRN"]
+  X -.->|"paperwork continues after the truck leaves"| P
+  P -->|"GRN (partial allowed)"| R["GRN posted<br/>gate line received qty grows"]
+  V -.->|"Release hold (quality)"| V`
   },
   {
     id: "quantity-model",

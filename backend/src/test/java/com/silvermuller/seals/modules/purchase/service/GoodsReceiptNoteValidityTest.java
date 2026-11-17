@@ -32,7 +32,8 @@ class GoodsReceiptNoteValidityTest {
         jdbc = mock(JdbcTemplate.class);
         purchaseService = mock(PurchaseProcessingService.class);
         grnService = new GoodsReceiptNoteService(jdbc,
-                mock(com.silvermuller.seals.modules.purchase.newpo.ReceiptAttributionService.class), purchaseService);
+                mock(com.silvermuller.seals.modules.purchase.newpo.ReceiptAttributionService.class), purchaseService,
+                mock(com.silvermuller.seals.modules.gate.GateGrnLink.class));
     }
 
     private static PurchaseOrder po(String poNumber, String validityDate) {

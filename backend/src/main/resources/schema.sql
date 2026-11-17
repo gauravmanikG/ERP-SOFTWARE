@@ -1993,3 +1993,145 @@ ALTER TABLE public.app_user ADD COLUMN IF NOT EXISTS photo TEXT;
 -- Super Admin "view password": a pgcrypto pgp_sym_encrypt copy of the password, keyed by APP_PASSWORD_VIEW_KEY.
 -- Login still verifies only the bcrypt password_hash. NULL for passwords set before this column existed.
 ALTER TABLE public.app_user ADD COLUMN IF NOT EXISTS password_enc BYTEA;
+
+-- =============================================================================
+-- Gate Entry (purchase inward at the gate). A delivery is recorded at the gate, unloaded, counted and verified; only
+-- verified accepted quantity becomes available for GRN. See docs/gate-entry-plan.md.
+-- Additive only: existing PO and GRN rows are not changed. A GRN posted before the gate keeps gate_entry_id NULL.
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS public.gate_master (
+  id           BIGSERIAL PRIMARY KEY,
+  gate_code    VARCHAR(30) NOT NULL UNIQUE,
+  gate_name    VARCHAR(120) NOT NULL,
+  status       VARCHAR(10) NOT NULL DEFAULT 'ACTIVE',
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT ck_gate_master_status CHECK (status IN ('ACTIVE', 'INACTIVE'))
+);
+
+CREATE TABLE IF NOT EXISTS public.gate_entries (
+  id                    BIGSERIAL PRIMARY KEY,
+  gate_entry_number     VARCHAR(30) NOT NULL UNIQUE,
+  client_request_id     VARCHAR(100) UNIQUE,                 -- a retried "create" returns the same entry
+  entry_type            VARCHAR(30) NOT NULL DEFAULT 'PURCHASE_INWARD',
+  gate_code             VARCHAR(30) NOT NULL REFERENCES public.gate_master(gate_code),
+  stage                 VARCHAR(20) NOT NULL DEFAULT 'DRAFT',
+  vehicle_number        VARCHAR(20) NOT NULL,                -- stored normalised: upper case, letters and digits only
+  vehicle_type          VARCHAR(40),
+  driver_name           VARCHAR(120),
+  driver_mobile         VARCHAR(20),
+  transporter           VARCHAR(150),
+  vendor_code           VARCHAR(50),
+  multi_vendor          BOOLEAN NOT NULL DEFAULT FALSE,
+  invoice_no            VARCHAR(100),
+  invoice_date          DATE,
+  challan_no            VARCHAR(100),
+  challan_date          DATE,
+  eway_bill_no          VARCHAR(30),
+  lr_no                 VARCHAR(60),
+  check_vehicle         VARCHAR(3),
+  check_driver          VARCHAR(3),
+  check_vendor          VARCHAR(3),
+  check_po              VARCHAR(3),
+  check_invoice         VARCHAR(3),
+  check_challan         VARCHAR(3),
+  check_documents       VARCHAR(3),
+  security_remarks      TEXT,
+  remarks               TEXT,
+  entry_at              TIMESTAMPTZ,                          -- server time of Submit (vehicle in)
+  unloading_started_at  TIMESTAMPTZ,
+  unloaded_at           TIMESTAMPTZ,
+  verified_at           TIMESTAMPTZ,
+  exit_at               TIMESTAMPTZ,                          -- server time of Gate Out
+  turned_back_reason    TEXT,
+  cancel_reason         TEXT,
+  version               INT NOT NULL DEFAULT 0,
+  created_by            VARCHAR(150) NOT NULL,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  submitted_by          VARCHAR(150),
+  unloaded_by           VARCHAR(150),
+  verified_by           VARCHAR(150),
+  exited_by             VARCHAR(150),
+  modified_by           VARCHAR(150),
+  modified_at           TIMESTAMPTZ,
+  CONSTRAINT ck_gate_entry_stage CHECK (stage IN ('DRAFT', 'GATE_IN', 'UNLOADING', 'UNLOADED', 'VERIFIED', 'TURNED_BACK', 'EXITED', 'CANCELLED')),
+  CONSTRAINT ck_gate_entry_type CHECK (entry_type IN ('PURCHASE_INWARD')),
+  CONSTRAINT ck_gate_entry_checks CHECK (
+    COALESCE(check_vehicle, 'YES') IN ('YES', 'NO') AND COALESCE(check_driver, 'YES') IN ('YES', 'NO')
+    AND COALESCE(check_vendor, 'YES') IN ('YES', 'NO') AND COALESCE(check_po, 'YES') IN ('YES', 'NO')
+    AND COALESCE(check_invoice, 'YES') IN ('YES', 'NO') AND COALESCE(check_challan, 'YES') IN ('YES', 'NO')
+    AND COALESCE(check_documents, 'YES') IN ('YES', 'NO')),
+  CONSTRAINT ck_gate_entry_exit_after_entry CHECK (exit_at IS NULL OR entry_at IS NULL OR exit_at >= entry_at)
+);
+CREATE INDEX IF NOT EXISTS idx_gate_entries_stage ON public.gate_entries(stage);
+CREATE INDEX IF NOT EXISTS idx_gate_entries_vendor ON public.gate_entries(vendor_code);
+CREATE INDEX IF NOT EXISTS idx_gate_entries_entry_at ON public.gate_entries(entry_at);
+CREATE INDEX IF NOT EXISTS idx_gate_entries_vehicle ON public.gate_entries(vehicle_number);
+-- One vehicle can be inside only once at a time. The database enforces it, so two simultaneous submits cannot both win.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_gate_entry_vehicle_inside ON public.gate_entries(vehicle_number)
+  WHERE stage IN ('GATE_IN', 'UNLOADING', 'UNLOADED', 'VERIFIED', 'TURNED_BACK');
+
+CREATE TABLE IF NOT EXISTS public.gate_entry_lines (
+  id                      BIGSERIAL PRIMARY KEY,
+  gate_entry_id           BIGINT NOT NULL REFERENCES public.gate_entries(id) ON DELETE CASCADE,
+  line_no                 INT NOT NULL,
+  po_number               VARCHAR(50) NOT NULL,
+  item_code               VARCHAR(100) NOT NULL,
+  item_name               TEXT,
+  uom                     VARCHAR(50),
+  vendor_code             VARCHAR(50) NOT NULL,
+  po_ordered_qty          NUMERIC(15,2) NOT NULL DEFAULT 0,  -- snapshots taken at Submit, for the report
+  prior_grn_qty           NUMERIC(15,2) NOT NULL DEFAULT 0,
+  remaining_at_entry_qty  NUMERIC(15,2) NOT NULL DEFAULT 0,
+  declared_qty            NUMERIC(15,2) NOT NULL DEFAULT 0,
+  unloaded_qty            NUMERIC(15,2),
+  accepted_qty            NUMERIC(15,2) NOT NULL DEFAULT 0,
+  rejected_qty            NUMERIC(15,2) NOT NULL DEFAULT 0,
+  hold_qty                NUMERIC(15,2) NOT NULL DEFAULT 0,
+  grn_posted_qty          NUMERIC(15,2) NOT NULL DEFAULT 0,  -- kept in step by GRN posting, in the same transaction
+  verified                BOOLEAN NOT NULL DEFAULT FALSE,
+  reject_reason           TEXT,
+  hold_reason             TEXT,
+  remarks                 TEXT,
+  CONSTRAINT fk_gate_line_po_line FOREIGN KEY (po_number, item_code) REFERENCES public.purchase_order_items(po_number, item_code),
+  CONSTRAINT uq_gate_line_po_item UNIQUE (gate_entry_id, po_number, item_code),
+  CONSTRAINT uq_gate_line_no UNIQUE (gate_entry_id, line_no),
+  CONSTRAINT ck_gate_line_qty CHECK (declared_qty >= 0 AND COALESCE(unloaded_qty, 0) >= 0 AND accepted_qty >= 0
+    AND rejected_qty >= 0 AND hold_qty >= 0 AND grn_posted_qty >= 0),
+  CONSTRAINT ck_gate_line_split CHECK (NOT verified OR unloaded_qty = accepted_qty + rejected_qty + hold_qty),
+  CONSTRAINT ck_gate_line_grn CHECK (grn_posted_qty <= accepted_qty)
+);
+CREATE INDEX IF NOT EXISTS idx_gate_lines_po_item ON public.gate_entry_lines(po_number, item_code);
+CREATE INDEX IF NOT EXISTS idx_gate_lines_entry ON public.gate_entry_lines(gate_entry_id);
+
+-- Activity history of every gate entry: who did which action, from which stage to which, at database time.
+-- The service only inserts into it.
+CREATE TABLE IF NOT EXISTS public.gate_entry_events (
+  id             BIGSERIAL PRIMARY KEY,
+  gate_entry_id  BIGINT NOT NULL REFERENCES public.gate_entries(id) ON DELETE CASCADE,
+  action         VARCHAR(40) NOT NULL,
+  from_stage     VARCHAR(20),
+  to_stage       VARCHAR(20),
+  actor          VARCHAR(150) NOT NULL,
+  remarks        TEXT,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
+);
+CREATE INDEX IF NOT EXISTS idx_gate_events_entry ON public.gate_entry_events(gate_entry_id);
+
+CREATE TABLE IF NOT EXISTS public.gate_entry_attachments (
+  id             BIGSERIAL PRIMARY KEY,
+  gate_entry_id  BIGINT NOT NULL REFERENCES public.gate_entries(id) ON DELETE CASCADE,
+  doc_type       VARCHAR(30) NOT NULL DEFAULT 'OTHER',
+  file_name      VARCHAR(255) NOT NULL,
+  content_type   VARCHAR(100) NOT NULL,
+  size_bytes     INT NOT NULL,
+  content        BYTEA NOT NULL,
+  uploaded_by    VARCHAR(150) NOT NULL,
+  uploaded_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_gate_attachments_entry ON public.gate_entry_attachments(gate_entry_id);
+
+-- A GRN made from a gate entry points to it, and each GRN line points to its gate-entry line. NULL on older GRNs.
+ALTER TABLE public.goods_receipt_notes ADD COLUMN IF NOT EXISTS gate_entry_id BIGINT REFERENCES public.gate_entries(id);
+ALTER TABLE public.goods_receipt_note_items ADD COLUMN IF NOT EXISTS gate_entry_line_id BIGINT REFERENCES public.gate_entry_lines(id);
+CREATE INDEX IF NOT EXISTS idx_grn_gate_entry ON public.goods_receipt_notes(gate_entry_id);
+CREATE INDEX IF NOT EXISTS idx_grni_gate_line ON public.goods_receipt_note_items(gate_entry_line_id);
